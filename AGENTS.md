@@ -126,8 +126,10 @@ binaries or assume other contributors use them.
 
 Claude Code has an IDA MCP (Hex-Rays), an x64dbg MCP, a Frida MCP and
 `sigscan.py`; the user-level `reversing` skill describes them. This file's
-rules come first. Reversing is for a later milestone (entries inside the
-game's own menus, the AA/DLSS option lockout).
+rules come first. Reversing comes early: the native menu depends on it
+(decisions.md item 7), and it also serves the AA/DLSS option lockout. The
+private database is `local\ida\mhw421810\mhw.i64` (from a copy of the
+decoded image, hash checked).
 
 - **IDA:** open only a private database under this repository's `local\ida\`,
   never anything in `ai\glavenus`. Ask through the MCP's `execute_python`.
@@ -151,8 +153,10 @@ game's own menus, the AA/DLSS option lockout).
   explicit sizes and versions. No STL types, C++ classes or exceptions
   cross it. That holds for CMFM's own published interface too: every table
   starts with `uint32_t size` and `version`, and minor versions only add.
-- Menu technology for v1: Dear ImGui (MIT), pinned and vendored with its
-  licence, themed close to MHW's look (decisions.md).
+- Menu technology: native, inside the game's own menu, if the reversing
+  study shows it can be done; otherwise Dear ImGui (MIT, pinned and
+  vendored with its licence, themed close to MHW's look). decisions.md
+  item 7. The plugin interface stays independent of the front end.
 - Fail closed and visibly:
   - a plugin's bad schema, a failed callback or a missing AL service is
     logged and skipped, and the user can see why (status page or popup);
