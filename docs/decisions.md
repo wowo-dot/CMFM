@@ -22,3 +22,7 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
    AL repository into `D:\mh world modding\CMFM`, with its own sessions,
    like the DLSS mod. AL is read-only from here; CMFM's needs from AL go
    into `docs/al-requests.md`.
+6. **Distribution: a separate mod** (the user's call, 2026-10-11). CMFM
+   ships as its own download, not inside AL's package. This supersedes AL
+   item 11's "bundled first-party plugin" wording. Players install it next
+   to AL (`<game>\AsteraLoader\plugins\cmfm\cmfm.dll`, or its own MO2 mod).
