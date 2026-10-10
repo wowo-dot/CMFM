@@ -8,12 +8,18 @@ measured) or **hypothesis**. Addresses are RVAs from image base
 
 ## Databases (2026-10-11)
 
-- **IDA:** `local/ida/mhw421810/mhw.i64`, from a copy of the decoded image
-  (SHA-256 `d78611731e4a5f214e306d1d577d4782b59adaf1c75de54d2983caa45074884c`,
-  hash checked after copying). Auto-analysis with IDA 9.4, about 5 minutes.
-  IDA asked Microsoft's symbol server for `World300.pdb` on the first load
-  (default behaviour, nothing found). Turn that lookup off for any future
-  fresh analysis.
+- **Clean image and IDA:** `local/ida/mhw421810/mhw.exe` (SHA-256
+  `a78ea69b0566414a42f16d0f8ff7d729e095041e2ae76a34cc02dbe0939f1d80`), a
+  read-only memory copy of the tested exe at the title screen with no mods
+  (run `local/runs/20261011-clean-dump`, tool `tools/re/dump_image.py`).
+  Its code section is identical to Fexty's dump (`tools/re/diff_dumps.py`).
+  `mhw.i64` next to it: IDA 9.4 auto-analysis with `-Opdb:off`, about
+  4 minutes.
+- **The first database** came from the old decoded image
+  (`ai\glavenus\MonsterHunterWorld_decrypted.exe`, d786…845c) and is kept in
+  `local/ida/old-dump-20261011/`. On that first load IDA asked Microsoft's
+  symbol server for `World300.pdb` (its default; nothing found), hence
+  `-Opdb:off` since.
 - **Fexty's Ghidra database:** `MonsterHunterWorld_15.23_Fexty_20241219.gzf`
   (the user's copy, `D:\reverse engine jank\fexty ghidra`, read only).
   Imported headless into `local/ghidra/project` (Ghidra 12.0.2) and exported
@@ -22,19 +28,25 @@ measured) or **hypothesis**. Addresses are RVAs from image base
   2,430 comments.
 - **Same build, confirmed:** both record PDB `World300.pdb`, GUID
   `7c554b32-2b94-41f7-8e81-dc3593003b74`, age 1, and the same sections.
-  53,039 of 53,040 named functions have identical first 16 bytes in our
-  image. Fexty's names therefore apply at the same addresses.
+  53,039 of 53,040 named functions had identical first 16 bytes in the old
+  image (the one exception was a hook in the old image), and the clean
+  image's code is identical to Fexty's. Fexty's names apply at the same
+  addresses.
 - **Imported into IDA** with `tools/re/ida/import_ghidra_export.py`:
   100,804 names and 2,430 comments (`[Fexty …]` prefix); places IDA had
   already named were kept.
 
 ### Caveats
 
-- **The decoded image is not pristine.** `Monster::generateFilePaths`
-  (RVA 0x1ccf6c0) starts with `E9 …` (a jump out of the image) in our image
-  and with the original prologue `48 89 5C 24 08 …` in Fexty's. The image
-  was dumped from a running game with some mod's hook in place. Signatures
-  over that function must use the original bytes.
+- **The old decoded image is not pristine (confirmed).** Against Fexty's
+  dump its code differs in 29 places: 22 functions start with a jump out of
+  the image (`Monster::generateFilePaths` at 0x1ccf6c0 among them), NOPs in
+  `uWeapon::calcBloatedRaw`, two conditional jumps made unconditional, two
+  redirected calls. It was dumped with mods loaded. The clean image has none
+  of these (0 code differences from Fexty's), so Fexty's dump is clean too.
+  The full list is `local/ghidra/diff_ours_vs_fexty.json`. AL's and the DLSS
+  mod's pattern checks give the same results on both images (no site is
+  among the 29), and all 182 DLSS code gates match the clean image.
 - **Folded stubs carry one arbitrary name.** The linker merged identical
   small functions, so a name like `ActivateModifier::createUi` (0x14023d440)
   or `switchD_142af6b01::caseD_0` (0x140240720) in a vtable is a shared

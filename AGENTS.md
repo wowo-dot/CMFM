@@ -49,11 +49,18 @@ AL header `third_party/al/al_plugin.h` and AL's plugin guide
 - IDA 9.4: `C:\Program Files\IDA Professional 9.4\ida.exe` (the Hex-Rays
   IDA MCP needs 9.4). Make a private database under this repository's
   `local\ida\` when the game's own menu is reversed.
-- Decoded game image (read in place):
-  `D:\mh world modding\ai\glavenus\MonsterHunterWorld_decrypted.exe`, SHA-256
-  `d78611731e4a5f214e306d1d577d4782b59adaf1c75de54d2983caa45074884c`, decoded
-  from the tested exe. The exe on disk has SteamStub-encrypted code, so
-  offline signature checks run on this image.
+- Clean game image: `local\ida\mhw421810\mhw.exe`, SHA-256
+  `a78ea69b0566414a42f16d0f8ff7d729e095041e2ae76a34cc02dbe0939f1d80`, a
+  read-only memory copy of the tested exe taken at the title screen with no
+  mods loaded (run `local/runs/20261011-clean-dump`); its code section is
+  identical to Fexty's 15.23 dump. The exe on disk has SteamStub-encrypted
+  code, so offline signature checks run on this image. Do not use the old
+  `ai\glavenus\MonsterHunterWorld_decrypted.exe` (d786…845c): it was dumped
+  with mods loaded and has hooks or patches in 29 places.
+- Fexty's annotated Ghidra database (MHW 15.23, same build): the user's
+  `D:\reverse engine jank\fexty ghidra\*.gzf`, read only. Our headless
+  project is `local\ghidra\project`, its export `local\ghidra\export`
+  (Ghidra 12.0.2: `D:\reverse engine jank\ghidra_12.0.2_PUBLIC`).
 - Claude Code reversing tools: `C:\Users\akifs\.claude\re-tools\` (Python
   3.12: `py -3.12 -B`); x64dbg: `D:\reverse engine jank\x64dbg\release\x96dbg.exe`.
 - Python 3.10: `C:\Users\akifs\AppData\Local\Programs\Python\Python310\python.exe` (run with `-B`)
@@ -128,13 +135,14 @@ Claude Code has an IDA MCP (Hex-Rays), an x64dbg MCP, a Frida MCP and
 `sigscan.py`; the user-level `reversing` skill describes them. This file's
 rules come first. Reversing comes early: the native menu depends on it
 (decisions.md item 7), and it also serves the AA/DLSS option lockout. The
-private database is `local\ida\mhw421810\mhw.i64` (from a copy of the
-decoded image, hash checked).
+private database is `local\ida\mhw421810\mhw.i64`, built from the clean
+image with Fexty's names applied (`tools/re/`). Open fresh binaries in IDA
+with `-Opdb:off`, so it does not ask Microsoft's symbol server.
 
 - **IDA:** open only a private database under this repository's `local\ida\`,
   never anything in `ai\glavenus`. Ask through the MCP's `execute_python`.
   Exports go to `local\`.
-- **Signatures:** `sigscan.py audit|make|scan` on the decoded image. A
+- **Signatures:** `sigscan.py audit|make|scan` on the clean image. A
   pattern the code searches for must match exactly once. Record the
   pattern, RVA and exe hash in the design doc.
 - **x64dbg and Frida on the running game:** the user says OK in the session
