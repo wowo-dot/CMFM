@@ -54,7 +54,10 @@ AL header `third_party/al/al_plugin.h` and AL's plugin guide
   read-only memory copy of the tested exe taken at the title screen with no
   mods loaded (run `local/runs/20261011-clean-dump`); its code section is
   identical to Fexty's 15.23 dump. The exe on disk has SteamStub-encrypted
-  code, so offline signature checks run on this image. Do not use the old
+  code, so offline signature checks run on this image. Other projects read
+  the same bytes from `local\runs\20261011-clean-dump\dump\image.exe`
+  (`docs/handoff-clean-image-20261011.md`, the reversing skill): never move
+  or delete that copy. Do not use the old
   `ai\glavenus\MonsterHunterWorld_decrypted.exe` (d786…845c): it was dumped
   with mods loaded and has hooks or patches in 29 places.
 - Fexty's annotated Ghidra database (MHW 15.23, same build): the user's
