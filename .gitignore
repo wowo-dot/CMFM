@@ -1,0 +1,38 @@
+# Build trees, runs, private databases and anything machine-local
+/local/
+/build/
+/out/
+/.vs/
+/.vscode/
+
+# Build output and runtime files
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.log
+*.dmp
+*.mdmp
+
+# IDA databases
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+*.idb
+
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Archives and game packages
+*.zip
+*.7z
+*.rar
+*.pak
+*.arc
