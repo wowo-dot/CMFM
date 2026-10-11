@@ -104,7 +104,7 @@ typedef uint32_t cmfm_flags_t;
 #define CMFM_FLAG_LIST 0x2u
 #define CMFM_FLAG_ARROWS 0x4u
 
-/* Limits of CMFM 1.0's native menu. Pages beyond them are refused with the
+/* Limits of CMFM's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */
 #define CMFM_MAX_SETTINGS 24u /* per page */
 #define CMFM_MAX_CHOICES 32u  /* CHOICE names (and INT/FLOAT values in 1.0) */
@@ -208,7 +208,7 @@ typedef struct cmfm_menu_t {
     uint32_t version; /* CMFM_MENU_VERSION of this CMFM */
     /* Adds a page. Returns its handle, or 0 if CMFM refused it; the reason
      * then goes into `why` (`why_size` bytes including the NUL; `why` may be
-     * NULL), CMFM's log and its status page. */
+     * NULL), CMFM's log and its Overview. */
     uint32_t(CMFM_CALL* add_page)(const cmfm_page_t* page, char* why, uint32_t why_size);
 } cmfm_menu_t;
 

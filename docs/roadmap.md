@@ -58,7 +58,9 @@ The first draft is complete.
 ## Next
 
 - Choice lists longer than 14 entries: a scrolling pick list (arrows today).
-- The author guide and the handoff to the DLSS mod (its five settings).
+- The author guide and the handoff to the DLSS mod: written 2026-10-12
+  (`docs/author-guide.md`, `docs/handoff-dlss-mod-20261012.md`); `cmfm.menu`
+  1.1 frozen (decisions item 11). Waiting for the DLSS session's feedback.
 - Popups and notifications for plugins (text, severity, "don't show again"),
   designed with a mockup first; the game's Yes/No dialog is the way in.
 - Status pages with live values (the DLSS mod: render size to output size,

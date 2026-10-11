@@ -74,3 +74,9 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     never unmodified Capcom files or bulk extracts; ask the user before
     pushing them to a public remote. How the game would load them (loose
     files through AL or MO2) is part of the layout study.
+11. **`cmfm.menu` 1.1 is the first published interface** (2026-10-12, with
+    the author guide and the DLSS-mod handoff). CMFM 1.0 never shipped; its
+    struct sizes stay accepted. From the handoff on, 1.1 is frozen: clients
+    copy `include/cmfm/cmfm.h` and build against it. Anything new (popups
+    and notifications first) goes into 1.2, additive as the header's rules
+    say; comments may still be corrected.
