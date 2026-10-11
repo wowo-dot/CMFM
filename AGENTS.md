@@ -117,6 +117,10 @@ binaries or assume other contributors use them.
 
 - The user launches the game, always through MO2's "Astera Loader" entry.
   Never launch MHW or the launcher through Steam, a script or computer-use.
+  One exception, the user's call each time: a plain start with no AL and
+  no mods (for example from Steam) when a reference copy of the game's
+  memory is needed, as for `local/runs/20261011-clean-dump`. Nothing of
+  ours runs in such a start; only read-only tools look at it.
 - Before every launch, prepare a run folder (`local/runs/<name>`) and the
   installed build, and say what the launch should answer. After the game
   closes, seal the folder with a short result file.
