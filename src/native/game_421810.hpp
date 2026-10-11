@@ -336,6 +336,7 @@ inline constexpr std::size_t kRowSlider = 40;      // the row template's slider 
 inline constexpr std::size_t kRowSliderText = 64;  // msg_slider_00: the value next to the bar
 inline constexpr std::size_t kRowSliderEnd = 72;   // msg_slider_01 (a fixed game text)
 inline constexpr std::size_t kRowValueObject = 32; // text_config_L
+inline constexpr std::size_t kRowInstance = 24;    // the list row (cGUIInstance)
 inline constexpr std::size_t kRowIsSlider = 84;    // byte: the game drives the row's slider every frame
 // The slider instance: track ends, knob, steps, input mode, active, dragging.
 inline constexpr std::size_t kSliderOrientation = 1640;  // 0 horizontal (knob +160), 1 vertical (knob +164)
@@ -460,6 +461,16 @@ inline constexpr std::uintptr_t kRvaEnterPanel = 0x1E89C40;
 inline constexpr std::size_t kEnterPanelSlot = 8;
 inline constexpr std::uintptr_t kRvaLeavePanel = 0x1E89AB0;
 inline constexpr std::size_t kLeavePanelSlot = 9;
+// A tab object's cursor handler (tab, list, row), slot 10 (RVA 0x1E89CB0), the
+// panel list's cursor callback: the tab refresh, the row looks, the arrows
+// moved to the row (52 px per row) and the row's help line.
+inline constexpr std::uintptr_t kRvaTabCursor = 0x1E89CB0;
+inline constexpr std::size_t kTabCursorSlot = 10;
+// The option rows' text filler(row, label object, value object, entry) at RVA
+// 0xEEA680: the row filler (RVA 0x1E8D890) passes the label (`msg_config`)
+// and writes both texts; the tab refresh passes none and rewrites only the
+// values. The panel window writes moved rows' labels through it.
+inline constexpr char kRowTextPattern[] = "48 83 EC 38 48 C7 44 24 20 00 00 00 00 E8 0E 00 00 00 48 83 C4 38 C3";
 inline constexpr std::size_t kTabWindow = 48;  // a_window_<tab>: the panel, as the page's update hit-tests it
 inline constexpr char kOptionPageClassName[] = "uGUIOption";
 inline constexpr std::uint32_t kOptionPageClassId = 0x165BDEB6;  // (~crc32(name)) & 0x7FFFFFFF
@@ -498,5 +509,12 @@ inline constexpr std::size_t kScrollRatio = 0x238;       // float: position 0 (t
 inline constexpr std::size_t kScrollTextures = 0x248;    // 3 pointers: the thumb's parts (null: no draw)
 inline constexpr std::size_t kScrollFullLength = 0x260;  // byte: drawn full length (the track)
 inline constexpr std::size_t kScrollWheel = 0x262;       // byte: its mouse update takes the wheel
+inline constexpr std::size_t kScrollDragging = 0x261;    // byte: the thumb is held (no update meanwhile)
+// cGUIInstScrollBar::updateMouse(bar) at RVA 0xB89670, not virtual; pages call
+// it every frame: a left click on the thumb starts a drag, moving the mouse
+// moves it (position written to +0x238; a click on the track does nothing),
+// and with +0x262 set the wheel anywhere on the page. True while it moved.
+inline constexpr char kScrollMousePattern[] =
+    "40 57 48 81 EC A0 00 00 00 48 83 B9 50 02 00 00 00 48 8B F9 0F 84 ?? ?? ?? ?? 48 83 B9 48 02 00 00 00";
 
 }  // namespace cmfm::native::game

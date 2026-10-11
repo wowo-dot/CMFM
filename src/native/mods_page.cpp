@@ -46,6 +46,9 @@ using EnabledCheckFn = std::uint8_t (*)(const GameOptionRow* row, std::int32_t* 
 using TabRefreshFn = std::uint64_t (*)(void* tab);
 using YesNoDialogFn = void (*)(void* manager, void* request);
 using DefaultAnswerFn = void (*)(void* const* capture, std::uint32_t unknown, std::int32_t answer);
+using RowTextFn = void (*)(void* row, void* label, void* value, const GameOptionRow* entry);
+using ScrollMouseFn = std::uint8_t (*)(void* bar);
+using TabCursorFn = std::uint64_t (*)(void* tab, void* list, std::int32_t row);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -118,10 +121,13 @@ enum Hook {
     kHookCount
 };
 std::uint32_t g_hooks[kHookCount] = {};
-// The panel window's cursor steps (optional: without them a long tab shows
-// all its rows, past the bottom of the screen).
+// The panel window's cursor steps and the rows' text filler (optional:
+// without them a long tab shows all its rows, past the bottom of the screen).
 std::uint32_t g_step_hooks[2] = {};
 bool g_panel_window_on = false;
+RowTextFn g_row_text = nullptr;
+// The scroll bars' mouse (optional: without it the bars only show).
+ScrollMouseFn g_scroll_mouse = nullptr;
 
 // The split panel's window over the highlighted tab's rows
 // (native/panel_window.hpp): the rows the panel holds (the game keeps
@@ -134,11 +140,12 @@ std::size_t g_panel_top = 0;    // the first of them in the window
 
 // The scrollbars of CMFM's layout (track and bar, the game's own), found by
 // name on the page: one for the mod list, one for the panel. Shown only while
-// their list scrolls; display only (the keys and the wheel scroll the lists).
+// their list scrolls; the thumb can be dragged.
 struct ScrollBar {
     void* root = nullptr;
     void* track = nullptr;
     void* bar = nullptr;
+    bool shown = false;
 };
 ScrollBar g_list_bar;
 ScrollBar g_panel_bar;
@@ -308,6 +315,9 @@ void update_sliders(void* unit);
 void end_sliders(void* unit, bool all = false);
 void show_pick_list(void* unit, const GameOptionRow& entry);
 void update_scrollbars();
+void drag_scrollbars(void* unit);
+bool scroll_dragging();
+void fill_split_panel(void* unit);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -515,7 +525,10 @@ void track_mouse(void* unit) {
 std::uint64_t page_update(void* unit) {
     if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
         keep_panel_cursor(unit);
-        track_mouse(unit);
+        drag_scrollbars(unit);
+        if (!scroll_dragging()) {
+            track_mouse(unit);  // the pointer may cross the mod list while it holds a thumb
+        }
         const std::uint32_t revision = menu::service_restart_revision();
         if (revision != g_restart_seen) {
             g_restart_seen = revision;
@@ -718,6 +731,18 @@ void scroll_panel(void* unit, std::size_t top, bool refresh) {
         field<std::uint8_t>(tab + (r + 1) * game::kRowObjectSize, game::kRowOpensList) = 0;
     }
     load_panel_rows(top);
+    // The game's refresh rewrites only the values: the labels the way the
+    // row filler writes them.
+    for (std::size_t r = 0; r < panel_visible(); ++r) {
+        char* row_object = tab + (r + 1) * game::kRowObjectSize;
+        void* row = field<void*>(row_object, game::kRowInstance);
+        void* value = field<void*>(row_object, game::kRowValueObject);
+        void* root = row != nullptr ? field<void*>(row, game::kInstRoot) : nullptr;
+        void* label = root != nullptr ? gui_get_object(root, game::kRowLabelText) : nullptr;
+        if (label != nullptr && value != nullptr) {
+            g_row_text(row, label, value, &g_panel_rows[r]);
+        }
+    }
     if (refresh && g_tab_refresh != nullptr) {
         g_tab_refresh(tab);
         decorate_panel(unit);
@@ -816,16 +841,119 @@ bool find_scroll(void* unit, const char* name, ScrollBar& out) {
 
 // Shows the bar for `visible` of `total` rows from `top`, or hides it when
 // everything fits (setPlay acts only on a change).
-void show_scroll(const ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top) {
+void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top) {
     if (b.root == nullptr) {
         return;
     }
-    const bool on = visible > 0 && total > visible;
-    gui_set_play(b.root, on);
-    if (on) {
+    b.shown = visible > 0 && total > visible;
+    gui_set_play(b.root, b.shown);
+    if (b.shown) {
         field<float>(b.bar, game::kScrollTotal) = static_cast<float>(total);
         field<float>(b.bar, game::kScrollVisible) = static_cast<float>(visible);
-        field<float>(b.bar, game::kScrollRatio) = static_cast<float>(top) / static_cast<float>(total - visible);
+        if (field<std::uint8_t>(b.bar, game::kScrollDragging) == 0) {  // a held thumb stays under the mouse
+            field<float>(b.bar, game::kScrollRatio) = static_cast<float>(top) / static_cast<float>(total - visible);
+        }
+    }
+}
+
+bool scroll_dragging() {
+    for (const ScrollBar* b : {&g_list_bar, &g_panel_bar}) {
+        if (b->shown && field<std::uint8_t>(b->bar, game::kScrollDragging) != 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The window's first row for the thumb's position.
+std::size_t scroll_top(const ScrollBar& b, std::size_t total, std::size_t visible) {
+    const float ratio = field<float>(b.bar, game::kScrollRatio);
+    const float rows = static_cast<float>(total - visible);
+    const float top = ratio <= 0.0f ? 0.0f : ratio >= 1.0f ? rows : ratio * rows + 0.5f;
+    return static_cast<std::size_t>(top);
+}
+
+// The mod list's window dragged to `top`: the highlighted mod stays inside
+// it (the nearest one in the window), so the panel follows when it changes.
+void drag_mod_list(void* unit, std::size_t top) {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    g_mod_top = top;
+    std::size_t selected = g_selected.load(std::memory_order_relaxed);
+    selected = selected < top ? top : selected >= top + visible ? top + visible - 1 : selected;
+    if (selected == g_selected.load(std::memory_order_relaxed)) {
+        show_mod_list();
+        return;
+    }
+    if (field<std::int32_t>(unit, game::kOptFocus) == 1) {
+        char* tab = tab_object(unit, game::kSplitPanel);
+        if (PanelFocusFn leave = focus_function(tab, game::kLeavePanelSlot, game::kRvaLeavePanel, "a panel's Back")) {
+            leave(tab, 0);
+        }
+    }
+    g_selected.store(selected, std::memory_order_relaxed);
+    show_mod_list();
+    fill_split_panel(unit);
+}
+
+// The panel's window dragged to `top`: the cursor keeps its row (on the
+// nearest selectable one if that is now a heading); with the panel's focus
+// the game's cursor handler then refreshes the rows and gives the row's help
+// line, otherwise only the rows are refreshed (the help line keeps the mod's).
+void drag_panel(void* unit, std::size_t top) {
+    scroll_panel(unit, top, false);
+    char* tab = tab_object(unit, game::kSplitPanel);
+    void* list = panel_list(unit);
+    const std::size_t visible = panel_visible();
+    std::size_t cursor = field<std::uint32_t>(list, game::kListCursor);
+    cursor = cursor < visible ? cursor : visible - 1;
+    for (std::size_t d = 1; d < visible && !g_panel_selectable[top + cursor]; ++d) {
+        if (cursor + d < visible && g_panel_selectable[top + cursor + d]) {
+            cursor += d;
+        } else if (cursor >= d && g_panel_selectable[top + cursor - d]) {
+            cursor -= d;
+        }
+    }
+    field<std::int32_t>(list, game::kListCursor) = static_cast<std::int32_t>(cursor);
+    void* const* vtable = field<void* const*>(tab, 0);
+    const bool handler_ok = vtable != nullptr && reinterpret_cast<std::uintptr_t>(vtable[game::kTabCursorSlot]) ==
+                                                     g_env.base + game::kRvaTabCursor;
+    if (field<std::int32_t>(unit, game::kOptFocus) == 1 && handler_ok) {
+        reinterpret_cast<TabCursorFn>(vtable[game::kTabCursorSlot])(tab, list, static_cast<std::int32_t>(cursor));
+    } else if (g_tab_refresh != nullptr) {
+        g_tab_refresh(tab);
+        decorate_panel(unit);
+    }
+}
+
+// Every frame while the page shows CMFM's menu: the bars' mouse (a drag on a
+// thumb moves its list's window); otherwise the thumbs sit on whole rows.
+void drag_scrollbars(void* unit) {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    if (g_scroll_mouse == nullptr || list == nullptr) {
+        return;
+    }
+    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
+    const std::size_t list_visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    if (g_list_bar.shown) {
+        if (g_scroll_mouse(g_list_bar.bar) != 0) {
+            const std::size_t top = scroll_top(g_list_bar, entries, list_visible);
+            if (top != g_mod_top) {
+                drag_mod_list(unit, top);
+            }
+        } else {
+            show_scroll(g_list_bar, entries, list_visible, g_mod_top);
+        }
+    }
+    if (g_panel_bar.shown) {
+        if (g_scroll_mouse(g_panel_bar.bar) != 0) {
+            const std::size_t top = scroll_top(g_panel_bar, g_panel_count, panel_visible());
+            if (top != g_panel_top) {
+                drag_panel(unit, top);
+            }
+        } else {
+            show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
+        }
     }
 }
 
@@ -1227,6 +1355,12 @@ std::uint64_t page_close(void* unit) {
     g_pick_filled = -1;
     g_pending_button = -1;
     g_bars_unit = nullptr;  // looked up again on the next open
+    for (ScrollBar* b : {&g_list_bar, &g_panel_bar}) {
+        if (b->bar != nullptr) {
+            field<std::uint8_t>(b->bar, game::kScrollDragging) = 0;  // a drag does not survive a reopen
+        }
+        b->shown = false;
+    }
     options_view_sliders(false);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
@@ -1578,7 +1712,12 @@ bool mods_page_register(const Env& env, std::string& why) {
         {"CMFM:cGUIInstButtonList::stepUp", game::kListStepUpPattern, reinterpret_cast<void*>(&step_up_detour),
          reinterpret_cast<void**>(&g_step_up_next)},
     };
-    g_panel_window_on = true;
+    std::string window_why;
+    g_panel_window_on = find_game_function(env, "row text filler", game::kRowTextPattern,
+                                           reinterpret_cast<void**>(&g_row_text), window_why);
+    if (!g_panel_window_on) {
+        logf(AL_LOG_WARNING, "Mods page: %s; long pages show all their rows", window_why.c_str());
+    }
     for (int i = 0; i < 2 && g_panel_window_on; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
         h.name = steps[i].name;
@@ -1593,6 +1732,11 @@ bool mods_page_register(const Env& env, std::string& why) {
             g_panel_window_on = false;
             logf(AL_LOG_WARNING, "Mods page: the hook %s was refused; long pages show all their rows", steps[i].name);
         }
+    }
+    std::string bar_why;
+    if (!find_game_function(env, "scroll bar mouse", game::kScrollMousePattern,
+                            reinterpret_cast<void**>(&g_scroll_mouse), bar_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; the scrollbars only show", bar_why.c_str());
     }
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
