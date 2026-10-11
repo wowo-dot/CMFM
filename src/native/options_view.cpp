@@ -219,7 +219,6 @@ bool options_view_enter() {
         }
     }
     g_view.store(true, std::memory_order_release);
-    menu::service_opened();
     logf(AL_LOG_INFO, "options view: on");
     return true;
 }

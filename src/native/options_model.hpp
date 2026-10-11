@@ -38,6 +38,9 @@ inline constexpr std::int32_t kHelpCategory = 18;
 inline constexpr std::uint32_t kLabelIdFirst = 9100;  // file 12
 inline constexpr std::uint32_t kHelpIdFirst = 9002;   // file 18
 inline constexpr std::uint32_t kTextIdLimit = 10000;  // GetGameMessage sends larger ids to file 23
+// Rows' help ids stay below this; file 18 ids 9996-9999 are the Mods page's
+// own help lines (native/mods_page.cpp).
+inline constexpr std::uint32_t kHelpIdLimit = 9996;
 
 inline constexpr std::size_t kTabCount = 5;        // the in-game Options page has 5 fixed tabs
 inline constexpr std::size_t kMaxTabs = 25;        // the title page scrolls through more

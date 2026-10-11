@@ -306,7 +306,19 @@ inline constexpr char kTitleText[] = "msg_sub_title";
 // A panel row's parts (the row filler, RVA 0x1E8D890): the label text and the
 // star icon the title page never shows (CMFM's restart mark).
 inline constexpr char kRowLabelText[] = "msg_config";
+inline constexpr char kRowValueText[] = "text_config_L";  // the value box
 inline constexpr char kRowStar[] = "null_star";
+// The help line: showCategory asks for it with sub_141AE0E60(sMhGUI, unit,
+// message id, file 18, 0.0f, 0) at RVA 0x1AE0E60; this is that call (the
+// manager at +6, rel32 at +9; the call at +33). The help bar keeps its text
+// while the id stays the same, and in split mode every mod's help is the
+// audio panel's id (783), so CMFM asks with ids of its own, alternating.
+inline constexpr char kHelpRequestPattern[] =
+    "8B 55 08 0F 57 C0 48 8B 0D ?? ?? ?? ?? 41 B9 12 00 00 00 C6 44 24 28 00 45 8B C7 F3 0F 11 44 24 20 E8 ?? ?? ?? ??";
+inline constexpr std::size_t kHelpRequestManager = 6;  // 48 8B 0D rel32: sMhGUI::Instance (RVA 0x51C4640)
+inline constexpr std::size_t kHelpRequestCall = 33;    // E8 rel32
+inline constexpr std::uint32_t kHelpFile = 18;
+inline constexpr std::uint32_t kSplitHelpIds[2] = {9996, 9997};
 
 // The mouse on uGUIOption (docs/research/native-menu.md, "Split mode and the
 // mouse"). sub_141E8A510 at RVA 0x1E8A510 asks whether a part of the page was

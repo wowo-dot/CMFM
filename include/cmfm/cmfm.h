@@ -136,7 +136,7 @@ typedef cmfm_result_t(CMFM_CALL* cmfm_set_fn)(void* user, uint32_t id, const cmf
 
 /* TEXT settings: writes the line's text into `text` (`text_size` bytes
  * including the NUL; longer texts are cut). CMFM asks when a Mods page
- * opens. */
+ * opens, right after CMFM_EVENT_OPENED. */
 typedef void(CMFM_CALL* cmfm_get_text_fn)(void* user, uint32_t id, char* text, uint32_t text_size);
 
 typedef uint32_t cmfm_event_t;

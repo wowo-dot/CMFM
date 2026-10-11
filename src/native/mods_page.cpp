@@ -29,6 +29,8 @@ using MousePositionFn = void* (*)(void* gui, float* out, void* list);
 using MouseHitFn = std::uint8_t (*)(void* gui, void* instance, const float* position, std::int32_t* index);
 using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
+using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
+                               std::uint8_t flag);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -47,6 +49,11 @@ MouseFlagFn g_mouse_click = nullptr;
 MouseFlagFn g_mouse_moved = nullptr;
 bool g_mouse_off = false;       // a focus function was not where expected (logged once)
 bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
+// The help line request (optional: without it the help line may keep the
+// previous mod's text).
+HelpRequestFn g_help_request = nullptr;
+void* const* g_gui_manager = nullptr;
+std::uint32_t g_help_flip = 0;
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
@@ -207,6 +214,7 @@ bool split_view();
 void select_tab(void* unit, std::size_t index);
 void decorate_panel(void* unit);
 void show_restart_line(void* unit);
+void request_split_help(void* unit);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -551,6 +559,20 @@ void fill_split_panel(void* unit) {
     show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
                          static_cast<std::int32_t>(game::kSplitPanel));
     decorate_panel(unit);
+    request_split_help(unit);
+}
+
+// The help line for the highlighted mod, with one of CMFM's two ids in turn
+// (mods_page_text answers both with the mod's description): the help bar
+// redraws only when the id changes.
+void request_split_help(void* unit) {
+    void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+    if (g_help_request == nullptr || manager == nullptr) {
+        return;
+    }
+    g_help_flip ^= 1;
+    g_help_request(manager, unit, static_cast<std::int32_t>(game::kSplitHelpIds[g_help_flip]),
+                   static_cast<std::int32_t>(game::kHelpFile), 0.0f, 0);
 }
 
 // What the game's row filler does not know about CMFM's rows, after every
@@ -586,6 +608,9 @@ void decorate_panel(void* unit) {
         void* root = field<void*>(row, game::kInstRoot);
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
             gui_set_hidden(star, !menu::service_restart_pending(id));
+        }
+        if (void* value = root != nullptr ? gui_get_object(root, game::kRowValueText) : nullptr) {
+            gui_set_hidden(value, section);  // a heading has no value box
         }
     }
     if (first >= 0) {
@@ -719,7 +744,6 @@ bool enter_view(void* unit) {
         start_window(unit, categories);
     }
     set_header(unit, model->header());
-    menu::service_opened();
     logf(AL_LOG_INFO, "Mods page: on (%zu categories, %zu rows)", entries, model->row_count());
     return true;
 }
@@ -740,6 +764,7 @@ std::uint64_t page_open(void* unit) {
         g_restart_seen = menu::service_restart_revision();
         decorate_panel(unit);
         show_restart_line(unit);
+        request_split_help(unit);
     }
     if (!on) {
         logf(AL_LOG_WARNING, "Mods page: CMFM's page could not be filled; closing it");
@@ -827,6 +852,18 @@ bool find_mouse(const Env& env, std::string& why) {
     return true;
 }
 
+// The help line request and the GUI manager, from showCategory's call.
+bool find_help_request(const Env& env, std::string& why) {
+    void* match = nullptr;
+    if (!find_game_function(env, "showCategory help request", game::kHelpRequestPattern, &match, why)) {
+        return false;
+    }
+    const auto* code = static_cast<const std::uint8_t*>(match);
+    g_gui_manager = reinterpret_cast<void* const*>(rip_target(code, game::kHelpRequestManager + 7));
+    g_help_request = reinterpret_cast<HelpRequestFn>(rip_target(code, game::kHelpRequestCall + 5));
+    return true;
+}
+
 }  // namespace
 
 bool mods_page_register(const Env& env, std::string& why) {
@@ -870,6 +907,10 @@ bool mods_page_register(const Env& env, std::string& why) {
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
+    }
+    std::string help_why;
+    if (!find_help_request(env, help_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; the help line may keep the previous mod's text", help_why.c_str());
     }
     // The wheel scrolls a long category list; without al.input it does not.
     if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {
@@ -1004,6 +1045,9 @@ const char* mods_page_text(void* message_file_ptr, std::uint32_t id) {
             if (id == game::kTitleCategoryHelpIds[t]) {
                 return menu::service_model().tab_help(menu_tab(t));
             }
+        }
+        if (id == game::kSplitHelpIds[0] || id == game::kSplitHelpIds[1]) {
+            return menu::service_model().tab_help(g_selected.load(std::memory_order_relaxed));
         }
     }
     return nullptr;

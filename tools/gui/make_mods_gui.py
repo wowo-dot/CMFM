@@ -11,7 +11,9 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
   screen; CMFM keeps its cursor on the audio panel, which shows the
   highlighted mod's settings;
 - the camera panel's title text moves above the mod list: CMFM's line for
-  changes that wait for a game restart (empty otherwise).
+  changes that wait for a game restart (empty otherwise);
+- the split panel's title, that line and the rows' star icon (CMFM's
+  restart mark) are switched on.
 
     py -3.12 -B tools/gui/make_mods_gui.py "<extract>/chunk/ui/title/options.gui"
 """
@@ -59,6 +61,16 @@ class Build:
         self.expect(name, param, expected)
         self.s.point_at_value(self.s.param(self.i(name), param), new)
         print("  %s %s: %r -> %r" % (name, param, expected, self.value(name, param)))
+
+    def switch_on(self, label, k, source):
+        """Parameter k, a Visible flag (type 3, one byte in the pool at slot
+        0x178) that is 0, takes `source`'s value, a Visible flag that is 1."""
+        for p, want in ((k, 0), (source, 1)):
+            kind, slot = self.g.param_record(p)
+            if kind != 3 or self.g.d[self.g.off[0x178] + slot] != want:
+                raise ValueError("%s: Visible flag %d is not type 3 with value %d" % (label, p, want))
+        self.s.point_at(k, source)
+        print("  %s Visible: 0 -> 1" % label)
 
     def links(self, name, next_name, child_name):
         want = (self.i(next_name) if next_name else -1, self.i(child_name) if child_name else -1)
@@ -111,6 +123,13 @@ def build(gui):
         raise ValueError("the tree lost or gained instances")
     b.number("a_title_menu_camera", "PosX", 408.0, 200.0)
     b.number("a_title_menu_camera", "PosY", 6.0, -90.0)
+    print("switched on (the game ships them with Visible 0; run 20261011-design-1b showed none of them):")
+    print("the split panel's title, the restart line, and the rows' star (the row filler hides it per row)")
+    on = b.s.param(b.i("a_title_options"), "Visible")
+    b.switch_on("a_title_menu_audio", b.s.param(b.i("a_title_menu_audio"), "Visible"), on)
+    b.switch_on("a_title_menu_camera", b.s.param(b.i("a_title_menu_camera"), "Visible"), on)
+    b.switch_on("menu_config/null_star", gui.param("menu_config", "null_star", "Visible"),
+                gui.param("menu_config", "coladj_star", "Visible"))
 
 
 def main():

@@ -18,14 +18,13 @@ namespace cmfm::menu {
 bool service_publish(const al_api_t* api, al_plugin_t* self, const char* version, std::string& why);
 
 // Game thread, when a Mods page is about to open (no page open): takes in the
-// pages added since, rebuilds the layout if needed, asks TEXT rows for their
-// texts and turns CMFM's row texts on. nullptr (logged) if no usable model.
+// pages added since, rebuilds the layout if needed, sends CMFM_EVENT_OPENED,
+// asks TEXT rows for their texts and turns CMFM's row texts on. nullptr
+// (logged) if no usable model.
 const native::OptionsModel* service_prepare();
-// The page is open: CMFM_EVENT_OPENED to the plugins.
-void service_opened();
 // The page closed: texts off, CMFM_EVENT_CLOSED.
 void service_closed();
-// Opening failed after service_prepare: texts off, no events.
+// Opening failed after service_prepare: the same (the plugins heard OPENED).
 void service_abort();
 
 // CMFM's row texts are on (a Mods page is opening, open or closing).

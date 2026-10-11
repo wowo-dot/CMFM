@@ -150,15 +150,11 @@ const native::OptionsModel* service_prepare() {
     if (!g_model_ok) {
         return nullptr;
     }
+    // Opened first: a plugin may update what its TEXT rows say.
+    g_menu->send(CMFM_EVENT_OPENED);
     g_menu->refresh();
     g_texts.store(true, std::memory_order_release);
     return &g_model;
-}
-
-void service_opened() {
-    if (g_menu && g_model_ok) {
-        g_menu->send(CMFM_EVENT_OPENED);
-    }
 }
 
 void service_closed() {
@@ -171,7 +167,7 @@ void service_closed() {
 }
 
 void service_abort() {
-    g_texts.store(false, std::memory_order_release);
+    service_closed();
 }
 
 bool service_texts_on() {

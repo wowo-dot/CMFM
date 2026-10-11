@@ -62,7 +62,7 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
     std::size_t row = 0;
     const auto add = [&](const RowSpec& s, std::size_t tab, std::int32_t source) {
         // Label then its values in file 12; help then one per value in file 18.
-        if (label + 1 + s.value_count > kTextIdLimit || help + 1 + s.value_count > kTextIdLimit) {
+        if (label + 1 + s.value_count > kTextIdLimit || help + 1 + s.value_count > kHelpIdLimit) {
             return false;
         }
         specs_[row] = s;
