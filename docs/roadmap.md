@@ -61,8 +61,10 @@ Chosen with the user, MCM (Skyrim's and Fallout 4's Mod Configuration Menu)
 as inspiration: its success confirms what authors reach for. Not every MCM
 feature; the ones MHW mods need. Built in this order, each tested in game:
 
-1. **Conditional rows.** `CMFM_FLAG_HIDE_LOCKED`: while a row is locked it
-   is hidden instead of greyed. One upscaler choice shows only that
+1. **Conditional rows.** Done (tag `hide-rows-1`, runs `hide-1` to `-3`;
+   it also fixed the arrows starting from a stale value on CMFM's rows).
+   `CMFM_FLAG_HIDE_LOCKED`: while a row is locked it is hidden instead of
+   greyed. One upscaler choice shows only that
    upscaler's settings; "Advanced" shows its section. Uses the `locked`
    callback authors already write (MCM: hidden flag, display conditions).
 2. **Reset to defaults per mod.** A "Reset to defaults" row CMFM adds at the

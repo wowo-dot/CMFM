@@ -1063,6 +1063,25 @@ each fill, on open and when a restart state changes.
   number, which is kept with the value it meant so the game does not set it
   again every frame.
 
+**Rows that hide, and the arrows' own value (runs `hide-1` to `-3`):**
+- The arrows over the cursor row (`num_input`, cGUIInstChangeNumInput, tab
+  +72) keep a value of their own (+576, count +580); a press sends it plus or
+  minus one through the tab's callback (`sub_141E89E00`, which does nothing
+  while the tab byte +2400 is set) to the row's arrow handler
+  (`sub_141E89EA0`: the option setter, then a tab refresh). The row looks set
+  the count from the row (`sub_140B82900`) but the value (`sub_140B82890`)
+  only for the game's kind-1 ids below 32, inside +2400 = 1. CMFM's rows
+  kept a stale value (hide-1: after a refill, index 0 was never reached).
+- `sub_140B82890` sets +576 = -1 before the new value, so it always reports
+  a change to the arrows' callback: called without +2400 it ran the setter
+  and a refresh whose row looks called CMFM again (hide-2: stack overflow).
+  CMFM now sets the value for its rows after every row-looks pass, under
+  +2400 as the game does.
+- The page's focus setter (`sub_141E8CDD0`, focus 1) closes the pick list's
+  parts and activates the tab under the category cursor (tab slot 6); no
+  sound, no cursor move. CMFM calls it after refilling the panel for rows
+  that came or went, then puts the cursor back on its setting.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
