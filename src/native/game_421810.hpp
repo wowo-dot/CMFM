@@ -124,12 +124,16 @@ inline constexpr char kTitleDecidedPattern[] =
 inline constexpr char kTitleOptionsOpenPattern[] =
     "48 89 5C 24 18 55 56 57 41 56 41 57 48 8D 6C 24 C9 48 81 EC E0 00 00 00 48 8B F9";
 inline constexpr char kTitleOptionsClosePattern[] = "40 55 53 57 41 57 48 8D 6C 24 98 48 81 EC 68 01 00 00 48 8B F9";
-// uGUIOption's tab refresh(tab) at RVA 0x1E8EB40: re-writes every row's
-// label and value through the row text filler (RVA 0xEEA6A0, which un-hides
-// the value box) and replays the rows' looks. The tab's cursor handler (tab
-// slot 10) calls it on every cursor move; value changes and the page's open
-// too. Hooked: CMFM redoes its row touches right after it.
-inline constexpr char kTabRefreshPattern[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B F1 48 8D 59 78";
+// uGUIOption's row looks(tab, cursor row) at RVA 0x1E8E600: replays every
+// row's look, shows the arrows or not for the cursor row, and shows the pick
+// list only while the cursor row is a language row (+86), hiding it
+// otherwise. It ends every change of the panel's rows: the tab refresh
+// (RVA 0x1E8EB40, after re-writing each row through the row text filler,
+// which un-hides the value box), the tab's cursor handler (again after the
+// refresh), the row fill and the category show. Hooked: CMFM redoes its row
+// touches right after it.
+inline constexpr char kRowLooksPattern[] =
+    "48 89 5C 24 20 55 48 83 EC 20 48 8B 41 20 48 8B D9 8B EA F6 40 58 01 0F 84";
 // uGUIOption's showCategory(categories, category) at RVA 0x1E8C8F0: shows the
 // category's rows and help line, and the VRAM panel for category 1 (Display).
 inline constexpr char kTitleShowCategoryPattern[] =
@@ -353,6 +357,7 @@ inline constexpr char kSetScaleYPattern[] = "0F 2E 89 C4 00 00 00 74 0F 81 49 58
 inline constexpr char kSetCurrentFramePattern[] = "40 56 48 83 EC 40 0F 28 D1 48 8B F1 41 80 F8 01 74 17 45 84 C0";
 inline constexpr std::size_t kOptSelect = 27376;     // the select object
 inline constexpr std::size_t kSelectList = 24;       // btnlist_select
+inline constexpr std::size_t kSelectShown = 32;      // what the row looks play while a row's list shows
 inline constexpr std::size_t kSelectChecks = 40;     // 14 check marks the language rows use (left empty)
 inline constexpr std::size_t kSelectSetting = 152;   // the setting id it holds
 inline constexpr std::size_t kSelectWindow = 160;    // a_window_select, scaled to the rows

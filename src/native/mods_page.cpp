@@ -19,7 +19,7 @@ namespace {
 // Hooked.
 using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
 using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
-using TabRefreshFn = std::uint64_t (*)(void* tab);
+using RowLooksFn = std::uint64_t (*)(void* tab, std::uint32_t cursor);
 // Called.
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
@@ -42,7 +42,7 @@ using SetCurrentFrameFn = void (*)(void* object, float frame, bool apply);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
-TabRefreshFn g_tab_refresh_next = nullptr;
+RowLooksFn g_row_looks_next = nullptr;
 RowDecideFn g_row_decide_next = nullptr;
 SelectDecideFn g_select_decide_next = nullptr;
 InitCategoryFn g_init_category = nullptr;
@@ -85,10 +85,11 @@ SetScaleYFn g_set_scale_y = nullptr;
 SetCurrentFrameFn g_set_current_frame = nullptr;
 void* g_pick_checks[game::kSelectRows] = {};
 std::uint32_t g_pick_count = 0;
+std::int32_t g_pick_filled = -1;  // the setting the pick list holds
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
-enum Hook { kShowCategory, kListMove, kTabRefresh, kRowDecide, kSelectDecide, kHookCount };
+enum Hook { kShowCategory, kListMove, kRowLooks, kRowDecide, kSelectDecide, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -247,6 +248,7 @@ void decorate_panel(void* unit);
 void show_restart_line(void* unit);
 void request_split_help(void* unit);
 void update_sliders(void* unit);
+void show_pick_list(void* unit, const GameOptionRow& entry);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -490,7 +492,7 @@ std::uint64_t page_update(void* unit) {
     // setActive (RVA 0x1E8C530) hides the rows' stars again by the game's own
     // rule; keys, clicks and the mouse above all change the focus before this
     // point, so the marks are back before the frame is drawn. (The value
-    // boxes come back through the tab refresh, handled in its hook.)
+    // boxes come back through the row looks, handled in their hook.)
     if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
         const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
         if (focus != g_decorated_focus) {
@@ -756,13 +758,18 @@ void decorate_panel(void* unit) {
         }
         field<std::int32_t>(list, game::kListStartRow) = first;
     }
-    // The row look's rule for the cursor row (sub_141E8E600), which ran before
-    // the pick rows were flagged on a fresh fill: Confirm on, arrows off.
+    // The row looks' rule for a cursor row that opens a list (sub_141E8E600;
+    // on a fresh fill they ran before the pick rows were flagged): Confirm on,
+    // arrows off, and its list shown while the panel or the list has the focus.
     const std::uint32_t cursor = field<std::uint32_t>(list, game::kListCursor);
     if (cursor < known && field<std::uint8_t>(tab + (cursor + 1) * game::kRowObjectSize, game::kRowOpensList) != 0) {
         field<std::uint8_t>(list, game::kListTakesConfirm) = 1;
         if (void* arrows = field<void*>(tab, game::kTabNumInput)) {
             gui_set_play(arrows, false);
+        }
+        const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+        if (focus == 1 || focus == game::kFocusPickList) {
+            show_pick_list(unit, rows[cursor]);
         }
     }
 }
@@ -873,6 +880,8 @@ bool enter_view(void* unit) {
         // input itself.
         field<std::uint8_t>(mod_list, game::kListInactive) = 1;
         options_view_sliders(g_slider_from_setting != nullptr);  // number rows as sliders
+        g_pick_count = 0;
+        g_pick_filled = -1;
         const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
         if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
             g_mod_top = g_selected.load(std::memory_order_relaxed) - visible + 1;
@@ -922,6 +931,7 @@ std::uint64_t page_close(void* unit) {
     g_mod_list.store(nullptr, std::memory_order_release);
     g_slider_count = 0;
     g_pick_count = 0;
+    g_pick_filled = -1;
     options_view_sliders(false);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
@@ -953,11 +963,13 @@ std::uint64_t show_category_detour(void* categories, std::int32_t category) {
     return result;
 }
 
-// The tab refresh re-writes every row and so shows the value boxes again
-// (every cursor move in the panel runs it): on the split panel of CMFM's page
-// the headings and restart marks are redone before anything is drawn.
-std::uint64_t tab_refresh_detour(void* tab) {
-    const std::uint64_t result = g_tab_refresh_next(tab);
+// The row looks end every change of the panel's rows (after the tab refresh
+// has shown the value boxes again, and they hide the pick list of any row
+// that is not a language row): on the split panel of CMFM's page the
+// headings, marks, sliders and the pick list are redone before anything is
+// drawn.
+std::uint64_t row_looks_detour(void* tab, std::uint32_t cursor) {
+    const std::uint64_t result = g_row_looks_next(tab, cursor);
     void* unit = g_view_unit.load(std::memory_order_acquire);
     if (unit != nullptr && split_view() && tab == tab_object(unit, game::kSplitPanel)) {
         decorate_panel(unit);
@@ -967,46 +979,79 @@ std::uint64_t tab_refresh_detour(void* tab) {
 
 // The pick list for a CHOICE row of CMFM's page, filled as the language fill
 // (RVA 0x1E8CFA0) fills it: the rows, their texts, the window and its line
-// sized to them; then the focus on it, the cursor and the check mark on the
-// current choice. False if the row has no pick list.
-bool open_pick_list(void* unit, const GameOptionRow& entry) {
+// sized to them; the check mark on the current choice. Filled again only for
+// another row. Returns the current choice, or -1 if the row has no pick list.
+std::int32_t fill_pick_list(void* unit, const GameOptionRow& entry) {
     const auto id = static_cast<std::uint32_t>(entry.setting_id);
     const std::uint32_t n = menu::service_list_choices(id);
     char* select = static_cast<char*>(unit) + game::kOptSelect;
     void* list = field<void*>(select, game::kSelectList);
     if (n == 0 || n > game::kSelectRows || list == nullptr || g_set_focus == nullptr) {
-        return false;
+        return -1;
     }
     const auto current = static_cast<std::uint32_t>(menu::service_get(id));
-    field<std::int32_t>(select, game::kSelectSetting) = static_cast<std::int32_t>(id);
-    cursor_to_top(list);
-    gui_set_row_count(list, n);
-    if (void* window = field<void*>(select, game::kSelectWindow)) {
-        g_set_scale_y(window, static_cast<float>(n) * game::kWindowRowScale);
-    }
-    if (void* line = field<void*>(select, game::kSelectLine)) {
-        g_set_current_frame(line, static_cast<float>(n), true);
-    }
-    std::memset(select + game::kSelectChecks, 0, game::kSelectRows * sizeof(void*));
-    const OptionsModel& model = menu::service_model();
-    for (std::uint32_t r = 0; r < n; ++r) {
-        void* row = list_row(list, r);
-        void* root = row != nullptr ? field<void*>(row, game::kInstRoot) : nullptr;
-        if (void* text = root != nullptr ? gui_get_object(root, game::kPickText) : nullptr) {
-            const char* label = model.label_text(static_cast<std::uint32_t>(entry.label_id) + 1 + r);
-            gui_format_text(text, label != nullptr ? label : "");
+    if (g_pick_filled != static_cast<std::int32_t>(id) || field<std::uint32_t>(list, game::kListRowCount) != n) {
+        field<std::int32_t>(select, game::kSelectSetting) = static_cast<std::int32_t>(id);
+        cursor_to_top(list);
+        gui_set_row_count(list, n);
+        if (void* window = field<void*>(select, game::kSelectWindow)) {
+            g_set_scale_y(window, static_cast<float>(n) * game::kWindowRowScale);
         }
-        g_pick_checks[r] = root != nullptr ? gui_get_object(root, game::kPickCheck) : nullptr;
+        if (void* line = field<void*>(select, game::kSelectLine)) {
+            g_set_current_frame(line, static_cast<float>(n), true);
+        }
+        std::memset(select + game::kSelectChecks, 0, game::kSelectRows * sizeof(void*));
+        const OptionsModel& model = menu::service_model();
+        for (std::uint32_t r = 0; r < n; ++r) {
+            void* row = list_row(list, r);
+            void* root = row != nullptr ? field<void*>(row, game::kInstRoot) : nullptr;
+            if (void* text = root != nullptr ? gui_get_object(root, game::kPickText) : nullptr) {
+                const char* label = model.label_text(static_cast<std::uint32_t>(entry.label_id) + 1 + r);
+                gui_format_text(text, label != nullptr ? label : "");
+            }
+            g_pick_checks[r] = root != nullptr ? gui_get_object(root, game::kPickCheck) : nullptr;
+        }
+        g_pick_count = n;
+        g_pick_filled = static_cast<std::int32_t>(id);
+    }
+    for (std::uint32_t r = 0; r < g_pick_count; ++r) {
         if (g_pick_checks[r] != nullptr) {
             gui_set_hidden(g_pick_checks[r], r != current);
         }
     }
-    g_pick_count = n;
-    g_set_focus(unit, game::kFocusPickList);  // puts the cursor on row 0
-    if (current < n) {
-        gui_set_cursor(list, current);
+    return static_cast<std::int32_t>(current);
+}
+
+// Confirm on a pick row: the focus on its list (shown already while the
+// cursor is on the row), the cursor on the current choice.
+bool open_pick_list(void* unit, const GameOptionRow& entry) {
+    const std::int32_t current = fill_pick_list(unit, entry);
+    if (current < 0) {
+        return false;
     }
+    g_set_focus(unit, game::kFocusPickList);  // puts the cursor on row 0
+    void* list = field<void*>(static_cast<char*>(unit) + game::kOptSelect, game::kSelectList);
+    if (static_cast<std::uint32_t>(current) < g_pick_count) {
+        gui_set_cursor(list, static_cast<std::uint32_t>(current));
+    }
+    logf(AL_LOG_INFO, "Mods page: pick list opened (setting %d, %u choices)", entry.setting_id, g_pick_count);
     return true;
+}
+
+// While the panel's cursor is on a pick row its list shows next to the panel,
+// as the game's language rows show theirs (the row looks play the same two
+// parts for a language row); Confirm then gives it the focus.
+void show_pick_list(void* unit, const GameOptionRow& entry) {
+    if (fill_pick_list(unit, entry) < 0) {
+        return;
+    }
+    char* select = static_cast<char*>(unit) + game::kOptSelect;
+    if (void* shown = field<void*>(select, game::kSelectShown)) {
+        gui_set_play(shown, true);
+    }
+    if (void* list = field<void*>(select, game::kSelectList)) {
+        gui_set_play(list, true);
+    }
 }
 
 // Confirm on a panel row: the pick list for CMFM's long CHOICE rows (the
@@ -1027,6 +1072,7 @@ std::uint64_t select_decide_detour(void* select, std::uint32_t index) {
     const std::int32_t id = field<std::int32_t>(select, game::kSelectSetting);
     if (g_view.load(std::memory_order_acquire) && id >= 0 &&
         is_cmfm_row(kCmfmRowKind, static_cast<std::uint32_t>(id)) && index < g_pick_count) {
+        logf(AL_LOG_INFO, "Mods page: picked choice %u for setting %d", index, id);
         menu::service_set(static_cast<std::uint32_t>(id), static_cast<std::int32_t>(index));
         for (std::uint32_t r = 0; r < g_pick_count; ++r) {
             if (g_pick_checks[r] != nullptr) {
@@ -1127,8 +1173,8 @@ bool mods_page_register(const Env& env, std::string& why) {
          reinterpret_cast<void*>(&show_category_detour), reinterpret_cast<void**>(&g_show_category_next)},
         {"CMFM:cGUIInstButtonList::moveCursor", game::kListMovePattern, reinterpret_cast<void*>(&list_move_detour),
          reinterpret_cast<void**>(&g_list_move_next)},
-        {"CMFM:uGUIOption::refreshTab", game::kTabRefreshPattern, reinterpret_cast<void*>(&tab_refresh_detour),
-         reinterpret_cast<void**>(&g_tab_refresh_next)},
+        {"CMFM:uGUIOption::rowLooks", game::kRowLooksPattern, reinterpret_cast<void*>(&row_looks_detour),
+         reinterpret_cast<void**>(&g_row_looks_next)},
         {"CMFM:uGUIOption::decideRow", game::kRowDecidePattern, reinterpret_cast<void*>(&row_decide_detour),
          reinterpret_cast<void**>(&g_row_decide_next)},
         {"CMFM:uGUIOption::decidePick", game::kSelectDecidePattern, reinterpret_cast<void*>(&select_decide_detour),
@@ -1150,7 +1196,7 @@ bool mods_page_register(const Env& env, std::string& why) {
         }
     }
     logf(AL_LOG_INFO,
-         "Mods page: hooks registered (Options show category; list cursor moves; tab refresh; row and pick decide)");
+         "Mods page: hooks registered (Options show category; list cursor moves; row looks; row and pick decide)");
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
