@@ -317,6 +317,7 @@ void show_pick_list(void* unit, const GameOptionRow& entry);
 void update_scrollbars();
 void drag_scrollbars(void* unit);
 bool scroll_dragging();
+void wheel_split(void* unit, int steps);
 void fill_split_panel(void* unit);
 
 bool scrolling() {
@@ -404,7 +405,9 @@ std::uint64_t list_move_detour(void* list, std::int32_t row) {
 }
 
 // The mouse wheel (window thread): kept for the page's next update while the
-// category list has the focus.
+// category list has the focus, and in split mode while the mod list or the
+// panel has it (the game does not scroll a panel with the wheel; run
+// 20261011-scrollbar-2).
 std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t message, std::uintptr_t wparam,
                                        std::intptr_t, void*) {
     constexpr std::uint32_t kMouseWheel = 0x020A;  // WM_MOUSEWHEEL
@@ -412,8 +415,9 @@ std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t messag
         return 0;
     }
     void* unit = g_view_unit.load(std::memory_order_acquire);
-    if (unit == nullptr || field<std::int32_t>(unit, game::kOptFocus) != 0) {
-        return 0;  // inside a tab: the game handles the wheel
+    const std::int32_t focus = unit != nullptr ? field<std::int32_t>(unit, game::kOptFocus) : -1;
+    if (focus != 0 && !(focus == 1 && split_view())) {
+        return 0;  // inside a tab (or the pick list): the game handles the wheel
     }
     g_wheel.fetch_add(static_cast<std::int16_t>((wparam >> 16) & 0xFFFF), std::memory_order_relaxed);
     return 1;
@@ -561,11 +565,7 @@ std::uint64_t page_update(void* unit) {
         const int steps = delta / kNotch;
         g_wheel_rest = delta % kNotch;
         if (steps != 0 && split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
-            // Wheel up (positive) selects earlier tabs; no wrap.
-            std::int64_t next = static_cast<std::int64_t>(g_selected.load(std::memory_order_relaxed)) - steps;
-            const std::int64_t last = static_cast<std::int64_t>(g_entries.load(std::memory_order_relaxed)) - 1;
-            next = next < 0 ? 0 : next > last ? last : next;
-            select_tab(unit, static_cast<std::size_t>(next));
+            wheel_split(unit, steps);
         } else if (steps != 0 && scrolling() && unit == g_view_unit.load(std::memory_order_acquire)) {
             const std::size_t top = g_top.load(std::memory_order_relaxed);
             const std::size_t last_top = g_entries.load(std::memory_order_relaxed) - game::kTitleViewTabs;
@@ -955,6 +955,60 @@ void drag_scrollbars(void* unit) {
             show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
         }
     }
+}
+
+// The wheel in split mode (wheel up, positive, goes towards the top; no
+// wrap): for the list under the pointer (the panel's window or a mod row),
+// else for the one with the focus. A long panel scrolls its rows as a drag
+// on its thumb does (a panel that fits has nothing to scroll); the mod list
+// selects an earlier or later mod, leaving the panel first if it had the
+// focus (as the mouse over a mod row does).
+void wheel_split(void* unit, int steps) {
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    bool panel = focus == 1;
+    if (g_mouse_position != nullptr && g_mouse_hit != nullptr && list != nullptr) {
+        alignas(16) float position[4] = {};
+        g_mouse_position(unit, position, nullptr);
+        void* window = field<void*>(tab_object(unit, game::kSplitPanel), game::kTabWindow);
+        if (window != nullptr && g_mouse_hit(unit, window, position, nullptr) != 0) {
+            panel = true;
+        } else {
+            const std::uint32_t rows = field<std::uint32_t>(list, game::kListRowCount);
+            for (std::uint32_t r = 0; r < rows; ++r) {
+                void* row = list_row(list, r);
+                if (row != nullptr && g_mouse_hit(unit, row, position, nullptr) != 0) {
+                    panel = false;
+                    break;
+                }
+            }
+        }
+    }
+    if (panel) {
+        const std::size_t visible = panel_visible();
+        if (g_panel_count > visible) {
+            const std::int64_t last = static_cast<std::int64_t>(g_panel_count - visible);
+            std::int64_t next = static_cast<std::int64_t>(g_panel_top) - steps;
+            next = next < 0 ? 0 : next > last ? last : next;
+            if (static_cast<std::size_t>(next) != g_panel_top) {
+                drag_panel(unit, static_cast<std::size_t>(next));
+            }
+        }
+        return;
+    }
+    std::int64_t next = static_cast<std::int64_t>(g_selected.load(std::memory_order_relaxed)) - steps;
+    const std::int64_t last = static_cast<std::int64_t>(g_entries.load(std::memory_order_relaxed)) - 1;
+    next = next < 0 ? 0 : next > last ? last : next;
+    if (static_cast<std::size_t>(next) == g_selected.load(std::memory_order_relaxed)) {
+        return;
+    }
+    if (focus == 1) {
+        char* tab = tab_object(unit, game::kSplitPanel);
+        if (PanelFocusFn leave = focus_function(tab, game::kLeavePanelSlot, game::kRvaLeavePanel, "a panel's Back")) {
+            leave(tab, 0);
+        }
+    }
+    select_tab(unit, static_cast<std::size_t>(next));
 }
 
 // Both bars as the mod list's and the panel's windows stand (after any
