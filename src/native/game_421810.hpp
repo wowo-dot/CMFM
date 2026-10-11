@@ -349,6 +349,9 @@ inline constexpr std::size_t kSliderMode = 1664;   // 2 as the row filler leaves
 inline constexpr std::size_t kSliderMin = 1672;    // float
 inline constexpr std::size_t kSliderMax = 1676;    // float
 inline constexpr std::size_t kSliderSteps = 1696;  // positions snap to steps + 1 places
+// int: the step the knob is on; set by set-position, moved by the keys (one
+// step at a time from here), not by a drag.
+inline constexpr std::size_t kSliderStep = 1704;
 inline constexpr std::size_t kSliderActive = 1708;  // byte: takes keys, active look (the row look sets it)
 inline constexpr std::size_t kSliderDragging = 1728;  // byte: the mouse holds the knob
 // The slider from a setting(slider, value text or nullptr, row entry) at RVA
@@ -425,8 +428,10 @@ inline constexpr std::size_t kYesNoAnswer = 0x48;   // std::function storage: vt
 inline constexpr std::size_t kYesNoAnswerImpl = 0x80;  // -> the storage
 inline constexpr std::uint32_t kYesNoKindYesNo = 2;
 
-// The slider's position(slider, float 0..1) at RVA 0xB8ABC0, snapped to the
-// slider's steps.
+// The slider's position(slider, float 0..1) at RVA 0xB8ABC0: the knob goes on
+// step floor(steps * position) (rounded down: index / steps in float can land a
+// hair below a step, so callers pass the middle of the step). The game's own
+// slider-from-setting passes getter * 0.01 (99 * 0.01 -> step 98 of 100).
 inline constexpr char kSliderSetPositionPattern[] =
     "F3 0F 10 99 88 06 00 00 0F 28 C1 F3 0F 10 91 8C 06 00 00 F3 0F 5C D3";
 // The help line: showCategory asks for it with sub_141AE0E60(sMhGUI, unit,

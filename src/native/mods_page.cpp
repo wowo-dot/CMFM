@@ -1074,6 +1074,8 @@ void request_split_help(void* unit) {
 // CMFM's value label goes into the slider's text; the row's value box stays
 // hidden. False if the row is no slider (not a number row, sliders off, or
 // the panel's rows have none).
+void place_knob(void* slider, std::uint32_t index, std::uint32_t steps);
+
 bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, bool active) {
     const auto id = static_cast<std::uint32_t>(entry.setting_id);
     const std::uint32_t steps = menu::service_slider_steps(id);
@@ -1094,6 +1096,12 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
     }
     const auto index = static_cast<std::uint32_t>(menu::service_get(id));
     g_slider_rows[g_slider_count++] = SliderRow{r, steps, index};
+    // The game set the knob from the getter, rounding down (a step low for
+    // some values with 100 steps, run 20261011-fineslider-1: 99 fell to 98,
+    // then 97); it goes on its value before the game's sync reads it.
+    if (field<std::uint8_t>(slider, game::kSliderDragging) == 0) {
+        place_knob(slider, index, steps);
+    }
     if (void* end = field<void*>(row_object, game::kRowSliderEnd)) {
         gui_set_hidden(end, true);
     }
@@ -1163,6 +1171,19 @@ bool mods_page_slider_index(std::uint32_t setting_id, std::uint32_t steps, std::
 
 namespace {
 
+// The knob exactly on value `index` of `steps`, its step counter with it (the
+// keys move from the counter; a drag leaves it behind). The game's
+// set-position rounds steps * position down, so the middle of the step goes
+// in. Only when the knob is off its value or the counter is stale.
+void place_knob(void* slider, std::uint32_t index, std::uint32_t steps) {
+    const float exact = static_cast<float>(index) / static_cast<float>(steps);
+    const float off = slider_position(slider) - exact;
+    const float slack = 0.25f / static_cast<float>(steps);
+    if (off > slack || off < -slack || field<std::int32_t>(slider, game::kSliderStep) != static_cast<std::int32_t>(index)) {
+        g_slider_set_position(slider, (static_cast<float>(index) + 0.5f) / static_cast<float>(steps));
+    }
+}
+
 // The slider's knob as a fraction of its track (sub_140B8A190).
 float slider_position(void* slider) {
     const float min = field<float>(slider, game::kSliderMin);
@@ -1195,11 +1216,7 @@ void update_sliders(void* unit) {
             field<std::uint8_t>(slider, game::kSliderDragging) != 0) {
             continue;
         }
-        const float target = static_cast<float>(s.index) / static_cast<float>(s.steps);
-        const float off = slider_position(slider) - target;
-        if (off > 0.002f || off < -0.002f) {
-            g_slider_set_position(slider, target);
-        }
+        place_knob(slider, s.index, s.steps);  // after a drag: on the value it stands for
     }
 }
 
