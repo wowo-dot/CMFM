@@ -84,6 +84,78 @@ The exe names 436 GUI classes (MT Framework DTI names: `uGUI*` are units,
 - DTI registration at 0x140200790, size 0x2CA0, parent `uMhGUI`.
 - Constructor 0x141E7FCB0; vtable `uGUIMenuOption::vft` 0x14347BF78.
 
+## Which class is which (confirmed, static)
+
+Each GUI class names its layout file in a small virtual function (slot 71),
+and the class name string sits next to the path in `.rdata`.
+
+| Layout | Class | What it is |
+|---|---|---|
+| `ui\title\options` | `uGUIOption` | **title screen** Options; tabs `settings`, `display`, `audio`, `display_G`, `controls`, `camera`, `language` (the 7 sub-objects, hypothesis) |
+| `ui\start_menu\option_hud` | `uGUIMenuOption` | in-game page with `btnlist_slider` (HUD settings, hypothesis) |
+| `ui\start_menu\option_camera` | `uGUIViewModeOption` | in-game camera page |
+| `ui\start_menu\option_sound` | `uGUISoundSetting` | in-game sound page |
+| `ui\start_menu\option_C_Support` | (class at 0x140AA5A60's owner) | colour support page |
+| `ui\start_menu\graphic` | `uGUIGraphicsSetting` | in-game graphics page |
+| `ui\pc\graphic_option` | `uGUIGraphicsOption` | PC graphics options |
+| `ui\start_menu\start_menu` | `uGUIStartMenu` | the Start menu itself |
+
+So each in-game settings page is its own class and layout.
+
+## How a settings page works (confirmed, static, from uGUIMenuOption)
+
+The page classes fill the same `uGUI`/`uMhGUI` virtual slots:
+
+| Slot | uGUIMenuOption | Does |
+|---|---|---|
+| 71 | 0x141E82160 `getGuiPath` | returns the layout path |
+| 74 | 0x141E812F0 `setupInstances` | takes layout elements from the instance table (`this+0x2A0`), attaches the page's callbacks to its lists, writes row labels |
+| 90 | 0x141E80E50 `open` | reads the current settings through getters (0x140441F20, 0x140442CF0, 0x140442310, 0x140441490, 0x140442C00) into the page (`+11328..+11344`) and writes texts |
+| 91 | 0x141E80D40 `close` | writes the page's values back through setters (0x140444D10, 0x140445A80, 0x140444220, 0x1404453F0) |
+| 76 | 0x141E82590 `update` | per frame; shows the selected row's help text (`sMhGUI` 0x141AE0E60 with a text id) |
+| 73 | 0x141E80CF0 `release` | frees a buffer |
+
+Layout elements can also be found by name: `uGUI::getInstanceFromName(gui,
+"btnlist_select")`, and inside a row `cGUIObjRoot::getObjectFromName(row,
+"msg_language")`.
+
+## Lists, rows and text (confirmed, static)
+
+- **Lists** are `cGUIInstButtonList` (on `cGUIInstButtonTree`, on
+  `cGUIInstInput`). Rows: count at `+0x1D8`, array at `+0x1E8`. Field names
+  come from each class's `populatePropertyList` (MT Framework keeps them):
+  button list `Type`, `InputLoop`, `DuplicateNum` (+0x298), `DuplicateSpace`
+  (+0x29C, float), `DuplicateButtonSize`, `PrevArrowInstID`,
+  `NextArrowInstID`; slider `MoveType`, `CursorID`, `MinPos`, `MaxPos`;
+  scroll bar `ScrollType`, `MaxFixFrame`, `BarMinPos`, `BarMaxPos`.
+- **Rows can be added at runtime.** The layout defines a template row;
+  `cGUIInstButtonList::rebuildRows` (0x140B7FEF0) removes the old copies and
+  makes `count` new ones. `setRowCount` (0x140B7FED0) calls it and
+  refreshes the list. The game calls `setRowCount` from 48 places, with fixed
+  and runtime counts (the language list sizes itself to the number of
+  languages).
+- **Callbacks** on a list are plain function pointers: owner `+0x120`,
+  callbacks at `+0x128`, `+0x130`, `+0x138` (`cGUIInstInput`) and `+0x210`
+  (`cGUIInstButtonTree`). Which one is decide, cancel or cursor move is not
+  known yet.
+- **Text:** `cGUIObjSizeAdjustMessage::formatText(obj, const char*)` takes a
+  plain zero-terminated string, so a row can show **our own text**. The
+  game's texts come from 24 loaded message files: `GetGameMessage(category,
+  id)` picks one of the `rGUIMessage` globals at 0x145012DC0… and
+  `rGUIMessage::getMessage` indexes its string table (`+0xF8`, count
+  `+0xD8`). uGUIMenuOption's row labels are category 12 (qword_145012E20),
+  ids 426 + row. Encoding not verified yet (MT Framework uses UTF-8).
+
+## Answers so far
+
+1. **Can CMFM add a row or a page?** Rows: yes in principle; the game resizes
+   lists at runtime. A page: not answered yet (how pages are opened, and
+   whether a page class of our own can reuse a game layout).
+2. **Can CMFM show its own text?** Yes in principle: `formatText` takes any
+   string.
+3. **Can CMFM see value changes?** Probably, through the list callbacks; not
+   traced yet.
+
 ## Open questions
 
 1. How `uGUIOption` builds its rows: where the item list comes from (a
