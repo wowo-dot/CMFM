@@ -82,8 +82,13 @@ binaries or assume other contributors use them.
     Never hook D3D12 or DXGI itself;
   - input: `al.input` hotkeys and capture. Never hook input itself;
   - game-thread work: `al.frame`;
-  - any game-function hook (later, for the game's own menus): `al.hooks`,
-    at signature-verified sites only.
+  - any game-function hook (the game's own menus): `al.hooks`, at
+    signature-verified sites only;
+  - writes to the game's read-only data (prototype only, decisions.md
+    item 9): a small CMFM helper that checks the expected old bytes first,
+    logs every change and restores it on unload. Once the menu is confirmed
+    in game, the helper becomes a request in `docs/al-requests.md` and CMFM
+    switches to AL's service.
 - `third_party/al/al_plugin.h` is AL's header, copied unchanged; its
   README records the AL commit. Update by copying a newer header and
   recording the commit.

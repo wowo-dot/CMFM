@@ -55,3 +55,10 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
    in-game System tab first, then the title screen. Fallback if a hook site
    proves unsafe: a "Mods" row inside the Options page (a data-only table
    swap, `docs/research/native-menu.md`).
+9. **Prototype first, AL requests after** (the user's call, 2026-10-11).
+   CMFM builds the native menu with what AL already offers (`al.hooks` for
+   game functions) and confirms it in game before asking AL for anything
+   new. The one missing piece, writing the game's read-only data (the System
+   tab's table pointers), is a small CMFM helper during the prototype: it
+   checks the expected old bytes, logs the change and restores it on unload.
+   When the menu works, what was actually used becomes the AL request.
