@@ -23,6 +23,8 @@ enum {
     ID_QUALITY, ID_RESET
 };
 
+#define DEMO_VERSION "0.1.0" /* the plugin's version: Astera Loader's info and the page's header */
+
 static const al_api_t* g_api;
 static al_plugin_t* g_self;
 static wchar_t g_ini[1024];
@@ -334,6 +336,7 @@ static void add_page(void) {
     page.size = sizeof page;
     page.plugin = "cmfm_demo";
     page.title = "Demo";
+    page.version = DEMO_VERSION; /* since 1.1: shown in the page's header */
     page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
     page.settings = s;
     page.setting_count = 11;
@@ -362,7 +365,7 @@ static const al_plugin_info_t kInfo = {
     AL_API_VERSION,
     "cmfm_demo",
     "CMFM demo",
-    "0.1.0",
+    DEMO_VERSION,
     0,    /* no phases */
     0,    /* order */
     NULL, /* load_after: CMFM starts earlier (order -100) */

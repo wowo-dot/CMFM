@@ -322,6 +322,10 @@ inline constexpr std::size_t kSplitPanel = 2;
 // CMFM's restart line: the camera panel's title, moved above the mod list
 // and switched on in CMFM's layout (panel titles are off in the game's).
 inline constexpr char kRestartLineName[] = "a_title_menu_camera";
+// The mod's header: the shown (audio) panel's title, moved above the panel and
+// switched on in CMFM's layout. Only initCategory writes the panel titles'
+// text (on every fill), so CMFM writes it after each fill.
+inline constexpr char kPanelHeaderName[] = "a_title_menu_audio";
 inline constexpr char kTitleText[] = "msg_sub_title";
 // A panel row's parts (the row filler, RVA 0x1E8D890): the label text and the
 // star icon the title page never shows (CMFM's restart mark).

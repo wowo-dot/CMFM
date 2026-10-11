@@ -26,6 +26,7 @@ inline constexpr std::uint32_t kMaxHelp = 200;   // the help line's space
 inline constexpr std::uint32_t kMaxChoice = 32;
 inline constexpr std::uint32_t kMaxUnit = 8;
 inline constexpr std::uint32_t kMaxPlugin = 64;
+inline constexpr std::uint32_t kMaxVersion = 24;  // the page's version in its header
 inline constexpr std::uint32_t kArrowChoices = 5;     // more open the pick list
 inline constexpr std::uint32_t kMaxListChoices = 14;  // the pick list's rows (btnlist_select)
 
@@ -60,6 +61,7 @@ struct Page {
     std::string plugin;
     std::string title;
     std::string help;
+    std::string version;  // since 1.1; may be empty
     std::vector<Setting> settings;
     void* user = nullptr;
     cmfm_get_fn get = nullptr;
@@ -131,6 +133,12 @@ public:
     bool is_locked(std::uint32_t setting_id) const;
     std::uint32_t lock_revision() const { return lock_revision_; }
 
+    // Tab t's header above its rows: "Overview", or the page's title, its
+    // version ("v" added before a leading digit) and "Restart needed" while
+    // a change waits for a restart; empty for unused tabs. Valid until the
+    // next call.
+    const char* tab_header(std::size_t tab);
+
 private:
     struct Entry {
         bool page;          // a page (index into pages_) or a refusal
@@ -183,6 +191,7 @@ private:
     std::size_t tab_count_ = native::kTabCount;
     std::string tab_names_[native::kMaxTabs];
     std::string tab_helps_[native::kMaxTabs];
+    std::string header_;  // the last tab_header
 };
 
 }  // namespace cmfm::menu

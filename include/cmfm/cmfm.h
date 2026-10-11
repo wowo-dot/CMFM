@@ -41,7 +41,10 @@
  * the order pages were added (24 at most; further pages are listed as not
  * shown on the Overview). The highlighted entry's settings show next to the
  * list, one row each: the label on the left, the value on the right, the
- * help line at the bottom. SECTION rows group the rows below them.
+ * help line at the bottom. SECTION rows group the rows below them. Above the
+ * rows, the page's header: its title, its version (since 1.1) and "Restart
+ * needed" while one of its changes waits for a game restart. A page with
+ * more rows than fit (14) scrolls; keep the important settings near the top.
  */
 #ifndef CMFM_H
 #define CMFM_H
@@ -194,6 +197,7 @@ typedef struct cmfm_page_t {
     /* Since 1.1 (read when `size` covers them). */
     cmfm_press_fn press;   /* required if a setting is BUTTON */
     cmfm_locked_fn locked; /* may be NULL: nothing is ever locked */
+    const char* version;   /* shown in the page's header, e.g. "0.15.0"; may be NULL */
 } cmfm_page_t;
 
 typedef struct cmfm_menu_t {

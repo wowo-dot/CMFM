@@ -309,6 +309,7 @@ void select_tab(void* unit, std::size_t index);
 // moved cursor only after its cursor callback); -1: the list's.
 void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
 void show_restart_line(void* unit);
+void show_panel_header(void* unit);
 void request_split_help(void* unit);
 void update_sliders(void* unit);
 // all: every slider row (the window moves), not only the locked ones.
@@ -538,6 +539,7 @@ std::uint64_t page_update(void* unit) {
             g_restart_seen = revision;
             decorate_panel(unit);
             show_restart_line(unit);
+            show_panel_header(unit);
         }
         // A lock changed (after any change CMFM made): rows that stop being
         // sliders (a locked number row shows its value as text) become plain
@@ -1048,6 +1050,7 @@ void fill_split_panel(void* unit) {
     show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
                          static_cast<std::int32_t>(game::kSplitPanel));
     decorate_panel(unit);
+    show_panel_header(unit);
     request_split_help(unit);
 }
 
@@ -1257,6 +1260,13 @@ void show_restart_line(void* unit) {
     set_instance_text(unit, game::kRestartLineName, game::kTitleText, g_restart_line);
 }
 
+// The line above the panel: the highlighted mod's title, version and "Restart
+// needed" while one of its changes waits (menu::Menu::tab_header).
+void show_panel_header(void* unit) {
+    set_instance_text(unit, game::kPanelHeaderName, game::kTitleText,
+                      menu::service_tab_header(g_selected.load(std::memory_order_relaxed)));
+}
+
 void select_tab(void* unit, std::size_t index) {
     void* list = g_mod_list.load(std::memory_order_acquire);
     const std::size_t entries = g_entries.load(std::memory_order_relaxed);
@@ -1388,6 +1398,7 @@ std::uint64_t page_open(void* unit) {
         g_decorated_focus = field<std::int32_t>(unit, game::kOptFocus);
         decorate_panel(unit);
         show_restart_line(unit);
+        show_panel_header(unit);
         request_split_help(unit);
     }
     if (!on) {

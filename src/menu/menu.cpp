@@ -276,6 +276,12 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         why = "get_text callback needed for TEXT settings";
         return false;
     }
+    const char* version =
+        page->size >= offsetof(cmfm_page_t, version) + sizeof page->version ? page->version : nullptr;
+    if (!text_ok(version, kMaxVersion, true, out.version)) {
+        why = "version longer than 24 bytes";
+        return false;
+    }
     const cmfm_press_fn press = page->size >= offsetof(cmfm_page_t, press) + sizeof page->press ? page->press : nullptr;
     const cmfm_locked_fn locked =
         page->size >= offsetof(cmfm_page_t, locked) + sizeof page->locked ? page->locked : nullptr;
@@ -624,6 +630,27 @@ bool Menu::tab_restart_pending(std::size_t tab) const {
         }
     }
     return false;
+}
+
+const char* Menu::tab_header(std::size_t tab) {
+    header_.clear();
+    if (tab == 0) {
+        header_ = "Overview";
+    } else if (tab - 1 < shown_) {
+        const Page& p = pages_[tab - 1];
+        header_ = p.title;
+        if (!p.version.empty()) {
+            header_ += " \xC2\xB7 ";  // middle dot
+            if (p.version[0] >= '0' && p.version[0] <= '9') {
+                header_ += 'v';
+            }
+            header_ += p.version;
+        }
+        if (tab_restart_pending(tab)) {
+            header_ += " \xC2\xB7 <STYL MOJI_YELLOW_DEFAULT>Restart needed</STYL>";
+        }
+    }
+    return header_.c_str();
 }
 
 std::uint32_t Menu::slider_steps(std::uint32_t setting_id) const {

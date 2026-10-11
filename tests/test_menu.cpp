@@ -717,6 +717,42 @@ void reads_the_start_value_before_a_first_change() {
     check(m.set(id(restart), 0) && m.restart_pending(id(restart)), "a real change waits");
 }
 
+void shows_page_headers() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo a = demo_page(&f, "DLSS");
+    a.page.version = "0.15.0";
+    Demo b = demo_page(&f, "Other");
+    b.page.version = "beta 2";
+    Demo c = demo_page(&f, "Plain");
+    add(m, page_of(a));
+    add(m, page_of(b));
+    add(m, page_of(c));
+    std::string why;
+    m.build(model, why);
+    check(same(m.tab_header(0), "Overview"), "the Overview's header");
+    check(same(m.tab_header(1), "DLSS \xC2\xB7 v0.15.0"), "title and version (v before a digit)");
+    check(same(m.tab_header(2), "Other \xC2\xB7 beta 2"), "a version without a leading digit as written");
+    check(same(m.tab_header(3), "Plain"), "no version: the title only");
+    check(same(m.tab_header(4), ""), "an unused tab has none");
+    const native::GameOptionRow* restart = find(model, 1, "Restart thing");
+    m.get(id(restart));
+    check(m.set(id(restart), 1) &&
+              same(m.tab_header(1), "DLSS \xC2\xB7 v0.15.0 \xC2\xB7 <STYL MOJI_YELLOW_DEFAULT>Restart needed</STYL>"),
+          "a waiting change shows in the header");
+    check(same(m.tab_header(2), "Other \xC2\xB7 beta 2"), "only on its own page");
+
+    Demo d = demo_page(&f);
+    d.page.version = "0123456789012345678901234";  // 25 bytes
+    check(refused(page_of(d), "version"), "a version longer than 24 bytes is refused");
+    Demo e = demo_page(&f);
+    e.page.version = "1.0";
+    e.page.size = offsetof(cmfm_page_t, version);  // built before the field existed
+    Page copy;
+    check(copy_page(&page_of(e), copy, why) && copy.version.empty(), "a page without the field has no version");
+}
+
 }  // namespace
 
 int main() {
@@ -738,6 +774,7 @@ int main() {
     presses_buttons();
     locks_rows();
     accepts_1_0_sizes();
+    shows_page_headers();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

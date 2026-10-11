@@ -215,6 +215,10 @@ std::size_t service_restart_count() {
     return g_menu && g_model_ok ? g_menu->restart_count() : 0;
 }
 
+const char* service_tab_header(std::size_t tab) {
+    return g_menu && g_model_ok ? g_menu->tab_header(tab) : "";
+}
+
 std::uint32_t service_restart_revision() {
     return g_menu ? g_menu->restart_revision() : 0;
 }

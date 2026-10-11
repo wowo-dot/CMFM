@@ -13,7 +13,10 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
 - the camera panel's title text moves above the mod list: CMFM's line for
   changes that wait for a game restart (empty otherwise);
 - that line and the rows' star icon (CMFM's restart mark) are switched on;
-  the panel titles stay off, as in the game;
+  the other panel titles stay off, as in the game;
+- the audio panel's title (the panel CMFM shows) becomes the mod's header:
+  switched on and moved above the panel, level with the restart line; the
+  panels' title text is twice as wide (600 px);
 - two scrollbars, the game's own (the PC graphics settings' pair, a track
   and a bar drawing ui\\common\\scrollbar, docs/research/scrollbar.md): one
   right of the mod list, one right of the settings panel. Adding parts
@@ -137,10 +140,12 @@ def build(gui):
     b.number("a_title_menu_camera", "PosX", 408.0, 200.0)
     b.number("a_title_menu_camera", "PosY", 6.0, -90.0)
     print("switched on (the game ships them with Visible 0; run 20261011-design-1b showed none of them):")
-    print("the restart line and the rows' star (the row filler hides it per row); the panel titles stay")
-    print("off (run 20261011-design-2: the title sits on the first row's line, under its value box)")
+    print("the restart line and the rows' star (the row filler hides it per row); the other panel titles")
+    print("stay off (run 20261011-design-2: a title sits on the first row's line, under its value box)")
     on = b.s.param(b.i("a_title_options"), "Visible")
     b.switch_on("a_title_menu_camera", b.s.param(b.i("a_title_menu_camera"), "Visible"), on)
+    print("the shown panel's title becomes the mod's header (placed when the file grows)")
+    b.switch_on("a_title_menu_audio", b.s.param(b.i("a_title_menu_audio"), "Visible"), on)
     b.switch_on("menu_config/null_star", gui.param("menu_config", "null_star", "Visible"),
                 gui.param("menu_config", "coladj_star", "Visible"))
 
@@ -181,10 +186,60 @@ def set_param(g, instance, name, expected, new):
     print("  %s %s: %r -> %r" % (instance, name, expected, new))
 
 
+# The mod's header: the audio panel's title, whose text (title_menu/msg_sub_title,
+# shared by every panel title and the restart line) is centred on the instance
+# (top-centre control point) in a 300 x 50 box, its line in the middle. Centred
+# over the panel (null_prog_color1 at 576, 212; the panel 806 px wide from
+# about -19) and level with the restart line (its text centred at y 185): top
+# at 160, i.e. PosY -52.
+HEADER = ("a_title_menu_audio", 403.0, -52.0)
+TITLE_TEXT_SIZE = (600.0, 50.0, 0.0, 0.0)
+
+VALUE_FORMAT = {1: "<i", 2: "<f", 4: "<4f", 0xB: "<i", 0xD: "<i"}
+
+
+def own_value(g, p, label, expected, new):
+    """Parameter record p takes a pool entry of its own holding `new` (no other
+    parameter that shared the old entry changes)."""
+    fmt = VALUE_FORMAT[p[0]]
+    pool = VALUE_POOL[p[0]]
+    found = struct.unpack_from(fmt, g.pools[pool], rd(p, 24, "<Q"))
+    rounded = tuple(round(v, 4) for v in found)
+    want = expected if isinstance(expected, tuple) else (expected,)
+    if rounded != want:
+        raise ValueError("%s is %r, expected %r" % (label, found, expected))
+    new = new if isinstance(new, tuple) else (new,)
+    struct.pack_into("<Q", p, 24, g.append_pool(pool, struct.pack(fmt, *new)))
+    print("  %s: %r -> %r" % (label, expected, new if len(new) > 1 else new[0]))
+
+
+def object_param(g, name, param):
+    """A layout part's (cGUIObj*) parameter; the part's name must be unique."""
+    hits = [r for r in g.tables["object"] if g.string(rd(r, 16)) == name]
+    if len(hits) != 1:
+        raise ValueError("%d parts named %r" % (len(hits), name))
+    first, count = rd(hits[0], 32), hits[0][4]
+    for k in range(first, first + count):
+        if g.string(rd(g.tables["initparam"][k], 16)) == param:
+            return g.tables["initparam"][k]
+    raise KeyError("%s has no parameter %s" % (name, param))
+
+
+def place_header(g):
+    name, x, y = HEADER
+    print("the mod's header: %s above the panel" % name)
+    own_value(g, init_param(g, name, "PosX"), name + " PosX", 408.0, x)
+    own_value(g, init_param(g, name, "PosY"), name + " PosY", 6.0, y)
+    own_value(g, object_param(g, "msg_sub_title", "Size"), "title_menu/msg_sub_title Size", (300.0, 50.0, 0.0, 0.0),
+              TITLE_TEXT_SIZE)
+
+
 def add_scrollbars(data, source):
-    """CMFM's layout with the two scrollbars grafted in (the file grows)."""
+    """CMFM's layout with the mod's header placed and the two scrollbars
+    grafted in (the file grows)."""
     g = Gui.parse(data)
     src = Gui.parse(source)
+    place_header(g)
     for name, parent, x, y, length in SCROLLBARS:
         print("scrollbar %s under %s" % (name, parent))
         graft(g, src, "null_scrollbar_root", parent, entries_like="btnlist_camera", log=lambda m: print("  " + m),
