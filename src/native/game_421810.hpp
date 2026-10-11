@@ -95,6 +95,10 @@ inline constexpr char kTitleDecidedPattern[] =
 inline constexpr char kTitleOptionsOpenPattern[] =
     "48 89 5C 24 18 55 56 57 41 56 41 57 48 8D 6C 24 C9 48 81 EC E0 00 00 00 48 8B F9";
 inline constexpr char kTitleOptionsClosePattern[] = "40 55 53 57 41 57 48 8D 6C 24 98 48 81 EC 68 01 00 00 48 8B F9";
+// uGUIOption's showCategory(categories, category) at RVA 0x1E8C8F0: shows the
+// category's rows and help line, and the VRAM panel for category 1 (Display).
+inline constexpr char kTitleShowCategoryPattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 54 41 55 41 56 41 57 48 83 EC 30 44 8B F2";
 
 // Game functions CMFM calls (found with al.scanner, not hooked).
 // cGUIInstButtonList::setRowCount(list, count) at RVA 0xB7FED0: rebuilds the
@@ -159,6 +163,8 @@ inline constexpr std::uint32_t kInstFlagEnabled = 0x10;  // cleared for greyed-o
 
 // uGUIOption fields.
 inline constexpr std::size_t kOptCategories = 0x28F8;    // object with buildCategories in slot 5
+inline constexpr std::size_t kCategoriesUnit = 8;        // categories object -> its uGUIOption
+inline constexpr std::size_t kOptVramPanel = 0x7230;     // null_vram, shown only by showCategory
 inline constexpr std::size_t kOptCategoryList = 0x2910;  // btnlist_menu (categories + 24)
 inline constexpr std::size_t kOptTabs = 0x2918;          // 7 tab objects
 inline constexpr std::size_t kOptTabSize = 0x968;

@@ -587,7 +587,14 @@ range, so the view stays off unless every hook is active (as now).
   Options afterwards shows the game's page again. No crash (the exit report
   was the Stracker baseline).
 - With the cursor on a category the help line showed the game's category
-  description (852 etc.); fixed afterwards by answering those ids.
+  description (852 etc.); fixed afterwards by answering those ids (run
+  `-m3b`: correct).
+- Run `-m3b` showed the game's "VRAM Usage" panel on the second category:
+  `sub_141E8C8F0` (showCategory) plays `unit+0x7230` (`null_vram`) for
+  category 1, its only switch. A sixth title hook hides it after
+  showCategory while the Mods page is on.
+- Back to the title from the game (a new uGUITitle unit): the Mods row and
+  page work again (run `-m3b`).
 
 ## Answers so far
 

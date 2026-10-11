@@ -19,6 +19,7 @@ using TitleCursorFn = std::uint64_t (*)(void* title, void* list, std::int32_t ro
 using TitleDecidedFn = void (*)(void* title, std::int32_t row);
 using OptionsOpenFn = std::uint64_t (*)(void* unit);
 using OptionsCloseFn = std::uint64_t (*)(void* unit);
+using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
 // Called.
 using SetRowCountFn = void (*)(void* list, std::uint64_t count);
 using SetCursorFn = std::uint64_t (*)(void* list, std::uint32_t row);
@@ -33,6 +34,7 @@ TitleCursorFn g_cursor_next = nullptr;
 TitleDecidedFn g_decided_next = nullptr;
 OptionsOpenFn g_open_next = nullptr;
 OptionsCloseFn g_close_next = nullptr;
+ShowCategoryFn g_show_category_next = nullptr;
 SetRowCountFn g_set_row_count = nullptr;
 SetCursorFn g_set_cursor = nullptr;
 GetObjectFn g_get_object = nullptr;
@@ -40,7 +42,7 @@ FormatTextFn g_format_text = nullptr;
 GetInstanceFn g_get_instance = nullptr;
 SetPlayFn g_set_play = nullptr;
 
-enum Hook { kPlay, kCursor, kDecided, kOpen, kClose, kHookCount };
+enum Hook { kPlay, kCursor, kDecided, kOpen, kClose, kShowCategory, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -346,6 +348,20 @@ std::uint64_t close_detour(void* unit) {
     return result;
 }
 
+// The game shows its VRAM panel with the Display category (category 1); the
+// Mods page has no use for it.
+std::uint64_t show_category_detour(void* categories, std::int32_t category) {
+    const std::uint64_t result = g_show_category_next(categories, category);
+    if (g_view.load(std::memory_order_acquire)) {
+        void* unit = field<void*>(categories, game::kCategoriesUnit);
+        void* vram = unit != nullptr ? field<void*>(unit, game::kOptVramPanel) : nullptr;
+        if (vram != nullptr) {
+            g_set_play(vram, false);
+        }
+    }
+    return result;
+}
+
 bool find(const char* name, const char* pattern, void** out, std::string& why) {
     void* match = nullptr;
     if (g_env.scanner == nullptr ||
@@ -387,6 +403,8 @@ bool title_menu_register(const Env& env, std::string& why) {
          reinterpret_cast<void**>(&g_open_next)},
         {"CMFM:uGUIOption::close", game::kTitleOptionsClosePattern, reinterpret_cast<void*>(&close_detour),
          reinterpret_cast<void**>(&g_close_next)},
+        {"CMFM:uGUIOption::showCategory", game::kTitleShowCategoryPattern,
+         reinterpret_cast<void*>(&show_category_detour), reinterpret_cast<void**>(&g_show_category_next)},
     };
     for (int i = 0; i < kHookCount; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
@@ -403,7 +421,8 @@ bool title_menu_register(const Env& env, std::string& why) {
             return false;
         }
     }
-    logf(AL_LOG_INFO, "title: hooks registered (menu play, cursor, selected; title Options open, close)");
+    logf(AL_LOG_INFO,
+         "title: hooks registered (menu play, cursor, selected; title Options open, close, show category)");
     return true;
 }
 

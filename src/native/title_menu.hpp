@@ -6,8 +6,8 @@
 // - page: when the title Options page opens after "Mods", CMFM swaps in its
 //   tab tables, rebuilds the page's lists with the game's own builder, keeps
 //   five categories (Key Config and Default, a full reset, out of reach) and
-//   renames the header and categories. The next plain open rebuilds the
-//   game's lists.
+//   renames the header and categories (and hides the Display category's
+//   VRAM panel). The next plain open rebuilds the game's lists.
 // Exe 421810 only; any unexpected value leaves the title as the game made it.
 #pragma once
 
@@ -18,7 +18,7 @@
 
 namespace cmfm::native {
 
-// al_plugin_init: registers the five hooks and finds the game functions CMFM
+// al_plugin_init: registers the six hooks and finds the game functions CMFM
 // calls. False (with `why`) if anything is missing; nothing is changed then.
 bool title_menu_register(const Env& env, std::string& why);
 // WIN_MAIN, after options_view_check: checks the hooks, the functions and the
