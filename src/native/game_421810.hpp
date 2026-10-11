@@ -298,9 +298,8 @@ inline constexpr char kGuiResourceClassName[] = "rGUI";
 // rows carry a slider part).
 inline constexpr char kModListName[] = "btnlist_camera";
 inline constexpr std::size_t kSplitPanel = 2;
-// The split panel's title (initCategory writes the tab title into it) and
-// CMFM's restart line (the camera panel's title, moved above the mod list).
-inline constexpr char kSplitPanelTitle[] = "a_title_menu_audio";
+// CMFM's restart line: the camera panel's title, moved above the mod list
+// and switched on in CMFM's layout (panel titles are off in the game's).
 inline constexpr char kRestartLineName[] = "a_title_menu_camera";
 inline constexpr char kTitleText[] = "msg_sub_title";
 // A panel row's parts (the row filler, RVA 0x1E8D890): the label text and the

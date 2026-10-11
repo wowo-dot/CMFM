@@ -12,8 +12,8 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
   highlighted mod's settings;
 - the camera panel's title text moves above the mod list: CMFM's line for
   changes that wait for a game restart (empty otherwise);
-- the split panel's title, that line and the rows' star icon (CMFM's
-  restart mark) are switched on.
+- that line and the rows' star icon (CMFM's restart mark) are switched on;
+  the panel titles stay off, as in the game.
 
     py -3.12 -B tools/gui/make_mods_gui.py "<extract>/chunk/ui/title/options.gui"
 """
@@ -124,9 +124,9 @@ def build(gui):
     b.number("a_title_menu_camera", "PosX", 408.0, 200.0)
     b.number("a_title_menu_camera", "PosY", 6.0, -90.0)
     print("switched on (the game ships them with Visible 0; run 20261011-design-1b showed none of them):")
-    print("the split panel's title, the restart line, and the rows' star (the row filler hides it per row)")
+    print("the restart line and the rows' star (the row filler hides it per row); the panel titles stay")
+    print("off (run 20261011-design-2: the title sits on the first row's line, under its value box)")
     on = b.s.param(b.i("a_title_options"), "Visible")
-    b.switch_on("a_title_menu_audio", b.s.param(b.i("a_title_menu_audio"), "Visible"), on)
     b.switch_on("a_title_menu_camera", b.s.param(b.i("a_title_menu_camera"), "Visible"), on)
     b.switch_on("menu_config/null_star", gui.param("menu_config", "null_star", "Visible"),
                 gui.param("menu_config", "coladj_star", "Visible"))

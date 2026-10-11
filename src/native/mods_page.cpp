@@ -102,7 +102,6 @@ std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
 std::size_t g_mod_top = 0;               // the first tab in the mod list's window
 std::uint32_t g_restart_seen = 0;        // the menu's restart revision the page shows
 std::int32_t g_decorated_focus = -1;     // the page's focus when the panel was last decorated
-char g_panel_title[160];
 char g_restart_line[96];
 
 // Short lines on user actions only (no allocation).
@@ -589,10 +588,10 @@ void request_split_help(void* unit) {
 }
 
 // What the game's row filler does not know about CMFM's rows, after every
-// fill of the split panel and whenever a restart state changes: section
+// fill of the split panel, focus change and restart state change: section
 // headings the cursor skips (the row's "selectable" flag off, as the list's
-// moves and hover test it), the restart mark (the row's star icon) on
-// settings waiting for a restart, and the panel's title with the note.
+// moves and hover test it) and without a value box, and the restart mark
+// (the row's star icon) on settings waiting for a restart.
 void decorate_panel(void* unit) {
     char* tab = tab_object(unit, game::kSplitPanel);
     void* list = field<void*>(tab, game::kTabList);
@@ -633,13 +632,6 @@ void decorate_panel(void* unit) {
         }
         field<std::int32_t>(list, game::kListStartRow) = first;
     }
-    const char* title = model.tab_name(selected);
-    if (menu::service_tab_restart_pending(selected)) {
-        std::snprintf(g_panel_title, sizeof g_panel_title, "%s  <STYL MOJI_YELLOW_DEFAULT>Restart needed</STYL>",
-                      title);
-        title = g_panel_title;
-    }
-    set_instance_text(unit, game::kSplitPanelTitle, game::kTitleText, title);
 }
 
 // The line above the mod list: empty unless changes wait for a restart.
