@@ -27,8 +27,8 @@ handoffs and runs use that name for the loader (AL `docs/decisions.md`
 item 11). Since 2026-10-11 CMFM has its own repository (this one). The
 first client is the sibling DLSS / Frame Generation mod.
 
-Start with `docs/handoff-20261011.md`, then `docs/decisions.md`, then the
-AL header `third_party/al/al_plugin.h` and AL's plugin guide
+Start with `docs/handoff-20261011.md`, then `docs/decisions.md` and
+`docs/roadmap.md` (the agreed plan, kept current), then the AL header `third_party/al/al_plugin.h` and AL's plugin guide
 (`D:\mh world modding\AsteraLoader\docs\plugin-guide.md`).
 
 ## Canonical Local Paths

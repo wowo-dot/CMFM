@@ -6,7 +6,7 @@
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
  * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
- * of a long list of mods).
+ * of a long list of mods); the first of them is a long page of 24 rows.
  *
  * Install: <game>\AsteraLoader\plugins\cmfm_demo\cmfm_demo.dll, next to CMFM.
  */
@@ -172,38 +172,61 @@ static void CMFM_CALL demo_event(void* user, cmfm_event_t event) {
 }
 
 /* ---- The extra test pages: one toggle each; `user` is the page number ---- */
+/* The first one is a long page instead: CMFM_MAX_SETTINGS rows (CMFM's tests
+ * of a page taller than the panel). */
+
+static int g_long[CMFM_MAX_SETTINGS];
+static const char* const kLongLabels[CMFM_MAX_SETTINGS] = {
+    "Long toggle 1",  "Long toggle 2",  "Long toggle 3",  "Long toggle 4",  "Long toggle 5",
+    "Long toggle 6",  "Long toggle 7",  "Long toggle 8",  "Long toggle 9",  "Long toggle 10",
+    "Long toggle 11", "Long toggle 12", "Long toggle 13", "Long toggle 14", "Long toggle 15",
+    "Long toggle 16", "Long toggle 17", "Long toggle 18", "Long toggle 19", "Long toggle 20",
+    "Long toggle 21", "Long toggle 22", "Long toggle 23", "Long toggle 24 (the last row)"};
 
 static cmfm_result_t CMFM_CALL extra_get(void* user, uint32_t id, cmfm_value_t* value) {
-    (void)id;
+    if ((intptr_t)user == 1) {
+        value->i = g_long[id - 1];
+        return CMFM_OK;
+    }
     value->i = g_extra[(intptr_t)user - 1];
     return CMFM_OK;
 }
 
 static cmfm_result_t CMFM_CALL extra_set(void* user, uint32_t id, const cmfm_value_t* value) {
-    (void)id;
+    if ((intptr_t)user == 1) {
+        g_long[id - 1] = value->i;
+        return CMFM_OK;
+    }
     g_extra[(intptr_t)user - 1] = value->i;
     return CMFM_OK;
 }
 
 static void add_extra_pages(const cmfm_menu_t* menu) {
-    cmfm_setting_t s;
+    cmfm_setting_t s[CMFM_MAX_SETTINGS];
     cmfm_page_t page;
     char title[24];
     char why[200];
     for (int n = 1; n <= g_extra_pages; ++n) {
-        memset(&s, 0, sizeof s);
-        s.size = sizeof s;
-        s.id = 1;
-        s.type = CMFM_TYPE_BOOL;
-        s.label = "Extra toggle";
-        s.help = "A test page for CMFM's list of mods.";
+        const uint32_t count = n == 1 ? CMFM_MAX_SETTINGS : 1;
+        memset(s, 0, sizeof s);
+        for (uint32_t i = 0; i < count; ++i) {
+            s[i].size = sizeof s[i];
+            s[i].id = i + 1;
+            s[i].type = CMFM_TYPE_BOOL;
+            s[i].label = n == 1 ? kLongLabels[i] : "Extra toggle";
+            s[i].help = n == 1 ? "A test page taller than the panel." : "A test page for CMFM's list of mods.";
+        }
         memset(&page, 0, sizeof page);
-        snprintf(title, sizeof title, "Extra %d", n);
+        if (n == 1) {
+            snprintf(title, sizeof title, "Long page");
+        } else {
+            snprintf(title, sizeof title, "Extra %d", n);
+        }
         page.size = sizeof page;
         page.plugin = "cmfm_demo";
         page.title = title;
-        page.settings = &s;
-        page.setting_count = 1;
+        page.settings = s;
+        page.setting_count = count;
         page.user = (void*)(intptr_t)n;
         page.get = extra_get;
         page.set = extra_set;
