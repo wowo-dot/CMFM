@@ -1086,7 +1086,8 @@ each fill, on open and when a restart state changes.
 - The game's "Advanced Graphics Settings" row is a label alone: no value
   box, the row itself takes Confirm. CMFM draws its reset row that way: the
   value box hidden as for headings, the label centred and light blue
-  (`<STYL MOJI_LIGHTBLUE_DEFAULT>`).
+  (`<STYL MOJI_LIGHTBLUE_DEFAULT>`). Section headings are centred the same
+  way (yellow, the cursor skips them; run `plain-2`).
 - Text parts are `cGUIObjMessage` (property list `0x14233A920`, getters and
   setters plain field accesses): +232 `FontStyleId`, +236 `Color`, +248
   `Size` (w, h floats), +328 flags (bit 0 `AutoScale`), +332 `Font`, +336
@@ -1106,8 +1107,8 @@ each fill, on open and when a restart state changes.
   `ControlPoint` 4 (left-middle), box 340 x 40, `Layout` 0x10. Centred:
   `Layout` 0x11 and a box 786 wide (to x 796), so the text centres on x 403
   like the mod's header. Row objects are reused as the panel scrolls, so
-  `decorate_panel` sets every label back (left, 340) unless it is a plain
-  button's, and requests the re-layout only when it changed something.
+  `decorate_panel` sets every label back (left, 340) unless it is a
+  heading's or a plain button's, and requests the re-layout only when it changed something.
 
 ## Answers so far
 

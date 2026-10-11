@@ -102,7 +102,7 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 | `CMFM_TYPE_INT` | `value.i` from `min` to `max` in steps of `step` | 3 or more values: the game's slider with the value beside it (`unit` after the number); keys move one step, the mouse drags. Up to 101 values, so 0 to 100 in steps of 1 works |
 | `CMFM_TYPE_FLOAT` | `value.f`, as INT; `decimals` 0 to 3 | as INT |
 | `CMFM_TYPE_TEXT` | none; `get_text` writes the line | a read-only line: label left, your text right |
-| `CMFM_TYPE_SECTION` | none; only `id` and `label` | a heading over the rows below it; the cursor skips it |
+| `CMFM_TYPE_SECTION` | none; only `id` and `label` | a heading over the rows below it, centred and yellow; the cursor skips it |
 | `CMFM_TYPE_BUTTON` | none | a row whose value box shows `button` ("Run" if NULL); Confirm calls `press`, after the game's Yes/No question when `confirm` is set |
 
 ### Flags

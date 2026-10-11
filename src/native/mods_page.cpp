@@ -1359,9 +1359,9 @@ void update_sliders(void* unit) {
 // What the game's row filler does not know about CMFM's rows, after every
 // fill of the split panel, focus change and restart state change: section
 // headings the cursor skips (the row's "selectable" flag off, as the list's
-// moves and hover test it) and without a value box, plain buttons (the label
-// centred, no value box), and the restart mark (the row's star icon) on
-// settings waiting for a restart.
+// moves and hover test it), centred and without a value box, plain buttons
+// (the same look, but selectable), and the restart mark (the row's star icon)
+// on settings waiting for a restart.
 void decorate_panel(void* unit, std::int32_t looks_cursor) {
     char* tab = tab_object(unit, game::kSplitPanel);
     void* list = field<void*>(tab, game::kTabList);
@@ -1407,7 +1407,7 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
             gui_set_hidden(value, section || slider || plain);  // a heading has no value box, a slider its own text
         }
         if (void* label = root != nullptr ? gui_get_object(root, game::kRowLabelText) : nullptr) {
-            centre_label(label, plain);  // row objects are reused as the panel scrolls
+            centre_label(label, section || plain);  // row objects are reused as the panel scrolls
         }
     }
     if (first >= 0) {
@@ -1449,8 +1449,9 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
     update_scrollbars();
 }
 
-// A row label left in its box, or centred over the row (plain buttons, like
-// the game's "Advanced Graphics Settings"): its layout and box width, then the
+// A row label left in its box, or centred over the row (headings, and plain
+// buttons like the game's "Advanced Graphics Settings"): its layout and box
+// width, then the
 // request to lay the text out again. A label that is neither is left alone.
 void centre_label(void* label, bool centred) {
     std::uint8_t& layout = field<std::uint8_t>(label, game::kMessageLayout);
