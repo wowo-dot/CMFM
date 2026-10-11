@@ -50,9 +50,32 @@ std::uintptr_t tab_slot(std::size_t tab) {
     return g_env.base + game::kRvaOptionTabTables + 8 * tab;
 }
 
+// Slider rows (CMFM's page): the game reads and writes them on the slider's
+// 0-100 scale (sub_140EEB860 every frame: the knob's position * 100 against
+// the getter, the setter when they differ). The last value the slider set is
+// kept, so a knob between two steps reads back what it set and the game does
+// not set it again every frame. -1: none.
+std::int16_t g_slider_raw[kSettingIdLimit - kSettingIdFirst];
+
+std::uint32_t slider_index(std::int32_t raw, std::uint32_t steps) {
+    raw = raw < 0 ? 0 : raw > 100 ? 100 : raw;
+    return (static_cast<std::uint32_t>(raw) * steps + 50) / 100;
+}
+
+std::int32_t slider_raw(std::uint32_t index, std::uint32_t steps) {
+    return static_cast<std::int32_t>((index * 100 + steps / 2) / steps);
+}
+
 std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
     if (is_cmfm_row(kind, id)) {
-        return menu::service_get(id);
+        const std::uint64_t index = menu::service_get(id);
+        if (const std::uint32_t steps = menu::service_slider_steps(id)) {
+            const std::int16_t raw = g_slider_raw[id - kSettingIdFirst];
+            return raw >= 0 && slider_index(raw, steps) == index ? static_cast<std::uint64_t>(raw)
+                                                                   : static_cast<std::uint64_t>(slider_raw(
+                                                                         static_cast<std::uint32_t>(index), steps));
+        }
+        return index;
     }
     return g_get_next(kind, id);
 }
@@ -60,6 +83,14 @@ std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
 std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value) {
     if (is_cmfm_row(kind, id)) {
         // Never reaches the game's setter: it would write sUserData out of range.
+        if (const std::uint32_t steps = menu::service_slider_steps(id)) {
+            g_slider_raw[id - kSettingIdFirst] = static_cast<std::int16_t>(value < 0 ? 0 : value > 100 ? 100 : value);
+            const std::uint32_t index = slider_index(value, steps);
+            if (index != menu::service_get(id)) {
+                menu::service_set(id, static_cast<std::int32_t>(index));
+            }
+            return 0;
+        }
         menu::service_set(id, value);
         return 0;
     }
@@ -192,6 +223,13 @@ bool options_view_check(const Env& env, std::string& why) {
 }
 
 bool options_view_ready() { return g_ready; }
+
+void options_view_sliders(bool on) {
+    for (std::int16_t& raw : g_slider_raw) {
+        raw = -1;
+    }
+    menu::service_set_sliders(on);
+}
 
 bool options_view_enter() {
     if (!g_ready) {

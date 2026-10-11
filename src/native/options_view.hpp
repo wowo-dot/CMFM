@@ -28,6 +28,10 @@ void options_view_exit();   // puts the game's tables back (no-op when off)
 // From the text hook: CMFM's texts, or nullptr to let the game answer.
 const char* options_view_text(void* message_file, std::uint32_t id);
 
+// CMFM's own page: its number rows become sliders while it shows the menu;
+// the getter and setter hooks then answer them on the slider's 0-100 scale.
+void options_view_sliders(bool on);
+
 // SHUTDOWN.
 void options_view_restore(const Env& env);
 

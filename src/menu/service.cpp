@@ -43,6 +43,7 @@ std::optional<Menu> g_menu;
 native::OptionsModel g_model;
 bool g_model_ok = false;
 std::atomic<bool> g_texts{false};
+bool g_sliders = false;
 
 void log_line(int level, const char* line) {
     g_api->log(g_self, level != 0 ? AL_LOG_WARNING : AL_LOG_INFO, line);
@@ -216,6 +217,18 @@ std::size_t service_restart_count() {
 
 std::uint32_t service_restart_revision() {
     return g_menu ? g_menu->restart_revision() : 0;
+}
+
+void service_set_sliders(bool on) {
+    g_sliders = on;
+}
+
+std::uint32_t service_slider_steps(std::uint32_t setting_id) {
+    return g_sliders && g_menu && g_model_ok ? g_menu->slider_steps(setting_id) : 0;
+}
+
+std::uint32_t service_value_revision() {
+    return g_menu ? g_menu->value_revision() : 0;
 }
 
 }  // namespace cmfm::menu

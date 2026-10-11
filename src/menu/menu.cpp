@@ -498,6 +498,16 @@ bool Menu::tab_restart_pending(std::size_t tab) const {
     return false;
 }
 
+std::uint32_t Menu::slider_steps(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return 0;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    const bool number = s.type == CMFM_TYPE_INT || s.type == CMFM_TYPE_FLOAT;
+    return number && s.value_count >= 3 ? s.value_count - 1 : 0;
+}
+
 std::size_t Menu::restart_count() const {
     std::size_t n = 0;
     for (std::size_t p = 0; p < shown_; ++p) {
@@ -590,6 +600,7 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     set_help(*r, r->base_help.c_str());
     logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name);
+    ++value_revision_;
     note_value(*r, static_cast<std::uint32_t>(index));
     return true;
 }
@@ -619,6 +630,7 @@ void Menu::reset_defaults() {
             continue;
         }
         set_help(r, r.base_help.c_str());
+        ++value_revision_;
         note_value(r, index);
         ++done;
     }

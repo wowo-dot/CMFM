@@ -70,6 +70,8 @@ typedef uint32_t cmfm_result_t;
 typedef uint32_t cmfm_type_t;
 #define CMFM_TYPE_BOOL 1u   /* Off / On: value.i is 0 or 1 */
 #define CMFM_TYPE_CHOICE 2u /* one of `choices`: value.i is its index */
+/* INT and FLOAT with 3 or more values show as the game's slider on the Mods
+ * page (the value next to the bar), with arrows elsewhere. */
 #define CMFM_TYPE_INT 3u    /* value.i from min to max in steps of `step` */
 #define CMFM_TYPE_FLOAT 4u  /* value.f from min to max in steps of `step` */
 #define CMFM_TYPE_TEXT 5u   /* a read-only line: the label and a text from get_text */

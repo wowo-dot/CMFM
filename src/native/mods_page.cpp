@@ -32,6 +32,8 @@ using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
                                std::uint8_t flag);
+using SliderFromSettingFn = void (*)(void* slider, void* text, const GameOptionRow* row);
+using SliderSetPositionFn = void (*)(void* slider, float position);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -56,6 +58,18 @@ bool g_cursor_warned = false;   // the category cursor left the panel (logged on
 HelpRequestFn g_help_request = nullptr;
 void* const* g_gui_manager = nullptr;
 std::uint32_t g_help_flip = 0;
+// Sliders for number rows (optional: without these the rows keep arrows).
+SliderFromSettingFn g_slider_from_setting = nullptr;
+SliderSetPositionFn g_slider_set_position = nullptr;
+// The split panel's slider rows as the last decoration found them.
+struct SliderRow {
+    std::uint32_t row;
+    std::uint32_t steps;
+    std::uint32_t index;  // the value shown
+};
+SliderRow g_slider_rows[game::kTabRowObjects];
+std::size_t g_slider_count = 0;
+std::uint32_t g_value_seen = 0;  // the menu's value revision the sliders show
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
@@ -217,6 +231,7 @@ void select_tab(void* unit, std::size_t index);
 void decorate_panel(void* unit);
 void show_restart_line(void* unit);
 void request_split_help(void* unit);
+void update_sliders(void* unit);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -467,6 +482,7 @@ std::uint64_t page_update(void* unit) {
             g_decorated_focus = focus;
             decorate_panel(unit);
         }
+        update_sliders(unit);  // the game moved them in this update (keys, mouse, setter)
     }
     return result;
 }
@@ -590,6 +606,81 @@ void request_split_help(void* unit) {
                    static_cast<std::int32_t>(game::kHelpFile), 0.0f, 0);
 }
 
+// A number row of the split panel as a slider, the way the row filler makes
+// the game's own volume rows one (sub_141E8E410): steps set first, the row
+// marked so the game drives the slider every frame (keys, mouse, the setter
+// through CMFM's hook on the 0-100 scale), the knob placed from the getter.
+// CMFM's value label goes into the slider's text; the row's value box stays
+// hidden. False if the row is no slider (not a number row, sliders off, or
+// the panel's rows have none).
+bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r) {
+    const auto id = static_cast<std::uint32_t>(entry.setting_id);
+    const std::uint32_t steps = menu::service_slider_steps(id);
+    void* slider = field<void*>(row_object, game::kRowSlider);
+    if (steps == 0 || slider == nullptr || g_slider_from_setting == nullptr) {
+        return false;
+    }
+    if (field<std::uint8_t>(row_object, game::kRowIsSlider) == 0) {
+        field<std::int32_t>(slider, game::kSliderSteps) = static_cast<std::int32_t>(steps);
+        field<std::uint8_t>(row_object, game::kRowIsSlider) = 1;
+        g_slider_from_setting(slider, nullptr, &entry);
+        field<std::uint32_t>(slider, game::kSliderMode) = 2;
+        gui_set_play(slider, true);
+    }
+    const auto index = static_cast<std::uint32_t>(menu::service_get(id));
+    g_slider_rows[g_slider_count++] = SliderRow{r, steps, index};
+    if (void* end = field<void*>(row_object, game::kRowSliderEnd)) {
+        gui_set_hidden(end, true);
+    }
+    if (void* text = field<void*>(row_object, game::kRowSliderText)) {
+        const char* label =
+            menu::service_model().label_text(static_cast<std::uint32_t>(entry.label_id) + 1 + index);
+        gui_format_text(text, label != nullptr ? label : "");
+        gui_set_hidden(text, false);
+    }
+    return true;
+}
+
+// The slider's knob as a fraction of its track (sub_140B8A190).
+float slider_position(void* slider) {
+    const float min = field<float>(slider, game::kSliderMin);
+    const float range = field<float>(slider, game::kSliderMax) - min;
+    const char* knob = field<const char*>(slider, game::kSliderKnob);
+    if (!(range > 1e-6f) || knob == nullptr) {
+        return 0.0f;
+    }
+    const float at = field<std::int32_t>(slider, game::kSliderOrientation) == 0 ? *reinterpret_cast<const float*>(knob + 160)
+                                                                                 : *reinterpret_cast<const float*>(knob + 164);
+    return (at - min) / range;
+}
+
+// After the value changed (labels follow) and after the mouse lets go of a
+// knob between two steps (it snaps to the value it set; the keys move it by
+// steps already).
+void update_sliders(void* unit) {
+    if (g_slider_count == 0) {
+        return;
+    }
+    if (menu::service_value_revision() != g_value_seen) {
+        decorate_panel(unit);
+    }
+    char* tab = tab_object(unit, game::kSplitPanel);
+    for (std::size_t i = 0; i < g_slider_count; ++i) {
+        const SliderRow& s = g_slider_rows[i];
+        char* row_object = tab + (s.row + 1) * game::kRowObjectSize;
+        void* slider = field<void*>(row_object, game::kRowSlider);
+        if (slider == nullptr || field<std::uint8_t>(row_object, game::kRowIsSlider) == 0 ||
+            field<std::uint8_t>(slider, game::kSliderDragging) != 0) {
+            continue;
+        }
+        const float target = static_cast<float>(s.index) / static_cast<float>(s.steps);
+        const float off = slider_position(slider) - target;
+        if (off > 0.002f || off < -0.002f) {
+            g_slider_set_position(slider, target);
+        }
+    }
+}
+
 // What the game's row filler does not know about CMFM's rows, after every
 // fill of the split panel, focus change and restart state change: section
 // headings the cursor skips (the row's "selectable" flag off, as the list's
@@ -607,6 +698,8 @@ void decorate_panel(void* unit) {
     const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
     std::int32_t first = -1;  // the first row the cursor may take
     std::uint32_t known = 0;  // rows with a table entry
+    g_slider_count = 0;
+    g_value_seen = menu::service_value_revision();
     for (std::uint32_t r = 0; r < count && rows[r].kind != kRowTableEnd; ++r) {
         known = r + 1;
         void* row = list_row(list, r);
@@ -620,12 +713,13 @@ void decorate_panel(void* unit) {
         if (!section && first < 0) {
             first = static_cast<std::int32_t>(r);
         }
+        const bool slider = show_slider(tab + (r + 1) * game::kRowObjectSize, rows[r], r);
         void* root = field<void*>(row, game::kInstRoot);
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
             gui_set_hidden(star, !menu::service_restart_pending(id));
         }
         if (void* value = root != nullptr ? gui_get_object(root, game::kRowValueText) : nullptr) {
-            gui_set_hidden(value, section);  // a heading has no value box
+            gui_set_hidden(value, section || slider);  // a heading has no value box, a slider its own text
         }
     }
     if (first >= 0) {
@@ -742,6 +836,7 @@ bool enter_view(void* unit) {
         // mouse in track_mouse); the game never set it up, so it must not take
         // input itself.
         field<std::uint8_t>(mod_list, game::kListInactive) = 1;
+        options_view_sliders(g_slider_from_setting != nullptr);  // number rows as sliders
         const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
         if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
             g_mod_top = g_selected.load(std::memory_order_relaxed) - visible + 1;
@@ -789,6 +884,8 @@ std::uint64_t page_close(void* unit) {
     const std::uint64_t result = page_next(game::kSlotClose)(unit);
     g_hold_player.store(false, std::memory_order_relaxed);  // slot 81 stops running here too
     g_mod_list.store(nullptr, std::memory_order_release);
+    g_slider_count = 0;
+    options_view_sliders(false);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
         logf(AL_LOG_INFO, "Mods page: closed");
@@ -873,6 +970,19 @@ bool find_mouse(const Env& env, std::string& why) {
     return true;
 }
 
+// The two slider functions CMFM calls; both or neither.
+bool find_sliders(const Env& env, std::string& why) {
+    if (!find_game_function(env, "slider from setting", game::kSliderFromSettingPattern,
+                            reinterpret_cast<void**>(&g_slider_from_setting), why) ||
+        !find_game_function(env, "slider position", game::kSliderSetPositionPattern,
+                            reinterpret_cast<void**>(&g_slider_set_position), why)) {
+        g_slider_from_setting = nullptr;
+        g_slider_set_position = nullptr;
+        return false;
+    }
+    return true;
+}
+
 // The help line request and the GUI manager, from showCategory's call.
 bool find_help_request(const Env& env, std::string& why) {
     void* match = nullptr;
@@ -934,6 +1044,10 @@ bool mods_page_register(const Env& env, std::string& why) {
     std::string help_why;
     if (!find_help_request(env, help_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the help line may keep the previous mod's text", help_why.c_str());
+    }
+    std::string slider_why;
+    if (!find_sliders(env, slider_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; number rows keep their arrows", slider_why.c_str());
     }
     // The wheel scrolls a long category list; without al.input it does not.
     if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {

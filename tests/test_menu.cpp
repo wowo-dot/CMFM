@@ -524,6 +524,24 @@ void tracks_restart_changes() {
           "kept across a rebuild");
 }
 
+void picks_slider_rows() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo d = demo_page(&f);
+    d.settings[3].max = 1.0;  // Scale 0.5..1.0 in 0.25 steps: 3 values
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    check(m.slider_steps(id(find(model, 1, "Percent"))) == 10, "percent: 11 values, a slider of 10 steps");
+    check(m.slider_steps(id(find(model, 1, "Scale"))) == 2, "3 values: still a slider");
+    check(m.slider_steps(id(find(model, 1, "Toggle"))) == 0 && m.slider_steps(id(find(model, 1, "Choice"))) == 0 &&
+              m.slider_steps(id(find(model, 1, "Status"))) == 0,
+          "toggles, choices and text lines are no sliders");
+    const std::uint32_t v0 = m.value_revision();
+    check(m.set(id(find(model, 1, "Percent")), 3) && m.value_revision() != v0, "a set changes the value revision");
+}
+
 void reads_the_start_value_before_a_first_change() {
     static OptionsModel model;
     Fake f;
@@ -554,6 +572,7 @@ int main() {
     shows_sections();
     tracks_restart_changes();
     reads_the_start_value_before_a_first_change();
+    picks_slider_rows();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

@@ -313,6 +313,31 @@ inline constexpr char kTitleText[] = "msg_sub_title";
 inline constexpr char kRowLabelText[] = "msg_config";
 inline constexpr char kRowValueText[] = "text_config_L";  // the value box
 inline constexpr char kRowStar[] = "null_star";
+
+// Sliders (docs/research/native-menu.md, "Sliders"). A panel row object (96
+// bytes, tab + 96 * (row + 1)) as the row filler (RVA 0x1E8D890) fills it.
+inline constexpr std::size_t kRowDef = 16;         // GameOptionRow*
+inline constexpr std::size_t kRowSlider = 40;      // the row template's slider (audio panel: slider_audio)
+inline constexpr std::size_t kRowSliderText = 64;  // msg_slider_00: the value next to the bar
+inline constexpr std::size_t kRowSliderEnd = 72;   // msg_slider_01 (a fixed game text)
+inline constexpr std::size_t kRowValueObject = 32; // text_config_L
+inline constexpr std::size_t kRowIsSlider = 84;    // byte: the game drives the row's slider every frame
+// The slider instance: track ends, knob, steps, input mode, active, dragging.
+inline constexpr std::size_t kSliderOrientation = 1640;  // 0 horizontal (knob +160), 1 vertical (knob +164)
+inline constexpr std::size_t kSliderKnob = 1656;
+inline constexpr std::size_t kSliderMode = 1664;   // 2 as the row filler leaves it (keys move it)
+inline constexpr std::size_t kSliderMin = 1672;    // float
+inline constexpr std::size_t kSliderMax = 1676;    // float
+inline constexpr std::size_t kSliderSteps = 1696;  // positions snap to steps + 1 places
+inline constexpr std::size_t kSliderDragging = 1728;  // byte: the mouse holds the knob
+// The slider from a setting(slider, value text or nullptr, row entry) at RVA
+// 0xEEAD20: reads the getter, places the knob, formats the text.
+inline constexpr char kSliderFromSettingPattern[] =
+    "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 60 C7 81 80 06 00 00 20 00 00 00";
+// The slider's position(slider, float 0..1) at RVA 0xB8ABC0, snapped to the
+// slider's steps.
+inline constexpr char kSliderSetPositionPattern[] =
+    "F3 0F 10 99 88 06 00 00 0F 28 C1 F3 0F 10 91 8C 06 00 00 F3 0F 5C D3";
 // The help line: showCategory asks for it with sub_141AE0E60(sMhGUI, unit,
 // message id, file 18, 0.0f, 0) at RVA 0x1AE0E60; this is that call (the
 // manager at +6, rel32 at +9; the call at +33). The help bar keeps its text

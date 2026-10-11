@@ -100,6 +100,11 @@ public:
     std::size_t restart_count() const;
     // Changes whenever a setting's restart state does.
     std::uint32_t restart_revision() const { return restart_revision_; }
+    // Number rows shown as a slider: INT and FLOAT settings with at least 3
+    // values. The slider's steps (values - 1), or 0 for any other row.
+    std::uint32_t slider_steps(std::uint32_t setting_id) const;
+    // Changes whenever CMFM sets a value (the player, Set To Default).
+    std::uint32_t value_revision() const { return value_revision_; }
 
 private:
     struct Entry {
@@ -139,6 +144,7 @@ private:
     std::vector<Entry> entries_;
     bool dirty_ = true;
     std::uint32_t restart_revision_ = 0;
+    std::uint32_t value_revision_ = 0;
 
     // The last build.
     const native::OptionsModel* model_ = nullptr;

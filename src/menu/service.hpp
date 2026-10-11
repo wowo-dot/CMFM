@@ -43,5 +43,11 @@ bool service_restart_pending(std::uint32_t setting_id);
 bool service_tab_restart_pending(std::size_t tab);
 std::size_t service_restart_count();
 std::uint32_t service_restart_revision();
+// Sliders: on while CMFM's own page shows its menu (its number rows are game
+// sliders then, and the option hooks speak the slider's 0-100 scale for
+// them); off for the in-game Options view, whose rows keep their arrows.
+void service_set_sliders(bool on);
+std::uint32_t service_slider_steps(std::uint32_t setting_id);  // 0: not a slider (now)
+std::uint32_t service_value_revision();
 
 }  // namespace cmfm::menu
