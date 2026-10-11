@@ -77,6 +77,15 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
 11. **`cmfm.menu` 1.1 is the first published interface** (2026-10-12, with
     the author guide and the DLSS-mod handoff). CMFM 1.0 never shipped; its
     struct sizes stay accepted. From the handoff on, 1.1 is frozen: clients
-    copy `include/cmfm/cmfm.h` and build against it. Anything new (popups
-    and notifications first) goes into 1.2, additive as the header's rules
-    say; comments may still be corrected.
+    copy `include/cmfm/cmfm.h` and build against it. Anything new goes
+    into 1.2, additive as the header's rules say; comments may still be
+    corrected.
+12. **No popups for now** (the user's call, 2026-10-12). The "warning popups
+    and notifications" requirement came from AL's DLSS requirements doc
+    (2026-10-08, written for an overlay menu); its examples (frame
+    generation needs an RTX 40/50, 3x needs an RTX 50, a conflicting game
+    option, "disabled: reason") are covered in place by what 1.1 has: a
+    greyed row with its reason (`locked`, asked whenever a page opens, so it
+    follows a check made after `add_page`), a refused value with its reason
+    (`validate`), and status lines. Popups come back only for a real need a
+    client brings.

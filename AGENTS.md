@@ -7,17 +7,18 @@ Monster Hunter: World mods on PC (DirectX 12). It is a plugin of Astera
 Loader (AL), the user's open-source loader, and builds on AL's services
 only.
 
-- **For players:** one menu, opened with a hotkey, for every mod that
-  registers with it: settings, status pages, warnings and notifications.
+- **For players:** one menu, in the game's own menus, for every mod that
+  registers with it: settings, status lines, and warnings where they apply
+  (a greyed row with its reason, a refused value, a status line).
 - **For plugin authors:** a versioned C interface that CMFM publishes
   through AL (`api->publish_interface`, name `cmfm.<...>`):
   - typed settings (bool, enum, int or float range, read-only lines) with
     get, set and validate callbacks; each setting is `live` or
     `restart required`;
   - a status page per plugin, and optional debug pages;
-  - warning popups and notifications (text, severity, "don't show again");
-  - menu open and close events (the DLSS mod pauses frame generation or
-    switches Reflex while the menu holds input).
+  - locks with a reason and refusals with a reason; no popups unless a real
+    need appears (decisions.md item 12);
+  - menu open and close events.
 - **Each plugin's own config file stays the source of truth.** CMFM reads
   and writes through the plugin's callbacks and never owns another
   plugin's settings, so a broken CMFM store can never wipe them.
@@ -185,7 +186,8 @@ with `-Opdb:off`, so it does not ask Microsoft's symbol server.
   item 7. The plugin interface stays independent of the front end.
 - Fail closed and visibly:
   - a plugin's bad schema, a failed callback or a missing AL service is
-    logged and skipped, and the user can see why (status page or popup);
+    logged and skipped, and the user can see why (the Overview or a status
+    line);
   - nothing CMFM does is fatal to the game.
 - Near-zero per-frame cost with the menu closed: no per-frame allocation,
   no draw work, no per-draw hooks. Measure the cost on the present thread.

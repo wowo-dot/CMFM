@@ -61,8 +61,10 @@ The first draft is complete.
 - The author guide and the handoff to the DLSS mod: written 2026-10-12
   (`docs/author-guide.md`, `docs/handoff-dlss-mod-20261012.md`); `cmfm.menu`
   1.1 frozen (decisions item 11). Waiting for the DLSS session's feedback.
-- Popups and notifications for plugins (text, severity, "don't show again"),
-  designed with a mockup first; the game's Yes/No dialog is the way in.
+- ~~Popups and notifications~~: not for now (decisions item 12): greyed
+  rows, refusals and status lines cover the known cases. The sketch
+  (`cmfm_popups_design_v1`: the game's message window, its message log, a
+  Messages list on the Overview) stays on file in case a real need appears.
 - Status pages with live values (the DLSS mod: render size to output size,
   frame generation multiplier, Reflex, last failure); debug pages.
 - A long play session; then drop the old options view fallback and turn the

@@ -41,9 +41,14 @@ overlay menu. With the native menu:
   `validate` refusals with a reason, and `CMFM_FLAG_RESTART` (CMFM marks a
   change that waits for a restart on the row, the page's header and the
   Overview).
-- **Warning popups and notifications: not yet.** They come in `cmfm.menu`
-  1.2, designed next. Please send the list of warnings the mod wants (text,
-  severity, when, "don't show again" or not), so the design fits them.
+- **Warnings: in place, no popups** (CMFM decisions item 12). AL's
+  examples are covered by what 1.1 has: a row greyed with its reason
+  (`locked`: "Frame generation needs an RTX 40 or 50 graphics card."), a
+  value refused with its reason (`validate`: "3x and up need an RTX 50."),
+  and status lines ("Frame generation: off, <reason>"). `locked` is asked
+  whenever the page opens, so a page added at `al_plugin_init` still greys
+  rows once the worker has checked the GPU. If the mod finds a case these
+  do not cover, say so.
 - **Status page:** TEXT rows are read when the page opens (live updates
   while it stays open are on CMFM's roadmap).
 - **AA/DLSS option lockout in the game's own Options:** on CMFM's roadmap,
@@ -126,6 +131,6 @@ overlay menu. With the native menu:
 
 1. The page as built (or why it differs), and anything in 1.1 that got in
    the way.
-2. The warnings and notifications the mod wants (for the 1.2 design).
+2. Any warning the greyed rows, refusals and status lines do not cover.
 3. Which status values the mod can offer and how often they change (for
    live TEXT rows later).
