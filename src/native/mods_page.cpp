@@ -272,6 +272,7 @@ void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
 void show_restart_line(void* unit);
 void request_split_help(void* unit);
 void update_sliders(void* unit);
+void end_sliders(void* unit);
 void show_pick_list(void* unit, const GameOptionRow& entry);
 
 bool scrolling() {
@@ -487,13 +488,19 @@ std::uint64_t page_update(void* unit) {
             decorate_panel(unit);
             show_restart_line(unit);
         }
-        // A lock changed (after any change CMFM made): the rows' looks again,
-        // which grey them through the enabled check, then CMFM's touches.
+        // A lock changed (after any change CMFM made): rows that stop being
+        // sliders (a locked number row shows its value as text) become plain
+        // rows first, then the game reads and writes every row again and the
+        // row looks grey the locked ones (enabled check), then CMFM's touches.
         const std::uint32_t locks = menu::service_lock_revision();
         if (locks != g_lock_seen) {
             g_lock_seen = locks;
-            if (void* list = field<void*>(tab_object(unit, game::kSplitPanel), game::kTabList)) {
-                g_row_looks_next(tab_object(unit, game::kSplitPanel), field<std::uint32_t>(list, game::kListCursor));
+            end_sliders(unit);
+            char* tab = tab_object(unit, game::kSplitPanel);
+            if (g_tab_refresh != nullptr) {
+                g_tab_refresh(tab);
+            } else if (void* list = field<void*>(tab, game::kTabList)) {
+                g_row_looks_next(tab, field<std::uint32_t>(list, game::kListCursor));
             }
             decorate_panel(unit);
         }
@@ -682,12 +689,6 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
         field<std::uint8_t>(slider, game::kSliderActive) = active ? 1 : 0;
         gui_set_play(slider, true);
     }
-    // The row look makes the cursor row's slider take keys and the mouse
-    // whether or not the row is enabled: a locked one takes neither (run
-    // 20261011-buttons-1: the greyed slider moved and snapped back).
-    if (menu::service_locked(id)) {
-        field<std::uint8_t>(slider, game::kSliderActive) = 0;
-    }
     const auto index = static_cast<std::uint32_t>(menu::service_get(id));
     g_slider_rows[g_slider_count++] = SliderRow{r, steps, index};
     if (void* end = field<void*>(row_object, game::kRowSliderEnd)) {
@@ -700,6 +701,35 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
         gui_set_hidden(text, false);
     }
     return true;
+}
+
+// Rows of the split panel the game drives as sliders that are no slider any
+// more (locked now): plain rows again, the slider stopped (the row look then
+// keeps it stopped, and the tab refresh writes their value text).
+void end_sliders(void* unit) {
+    char* tab = tab_object(unit, game::kSplitPanel);
+    void* list = field<void*>(tab, game::kTabList);
+    if (list == nullptr) {
+        return;
+    }
+    const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
+    for (std::uint32_t r = 0; r < count && r < game::kTabRowObjects; ++r) {
+        char* row_object = tab + (r + 1) * game::kRowObjectSize;
+        const auto* entry = field<const GameOptionRow*>(row_object, game::kRowDef);
+        if (field<std::uint8_t>(row_object, game::kRowIsSlider) == 0 || entry == nullptr ||
+            !is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id)) ||
+            menu::service_slider_steps(static_cast<std::uint32_t>(entry->setting_id)) != 0) {
+            continue;
+        }
+        field<std::uint8_t>(row_object, game::kRowIsSlider) = 0;
+        if (void* slider = field<void*>(row_object, game::kRowSlider)) {
+            field<std::uint8_t>(slider, game::kSliderActive) = 0;
+            gui_set_play(slider, false);
+        }
+        if (void* text = field<void*>(row_object, game::kRowSliderText)) {
+            gui_set_hidden(text, true);
+        }
+    }
 }
 
 // The slider's knob as a fraction of its track (sub_140B8A190).

@@ -633,7 +633,9 @@ std::uint32_t Menu::slider_steps(std::uint32_t setting_id) const {
     }
     const Setting& s = pages_[r->page].settings[r->setting];
     const bool number = s.type == CMFM_TYPE_INT || s.type == CMFM_TYPE_FLOAT;
-    return number && s.value_count >= 3 ? s.value_count - 1 : 0;
+    // A locked number row shows its value as text, greyed like any locked row
+    // (a greyed slider would still be switched on by the game's row look).
+    return number && s.value_count >= 3 && !s.locked ? s.value_count - 1 : 0;
 }
 
 std::uint32_t Menu::list_choices(std::uint32_t setting_id) const {

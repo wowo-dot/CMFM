@@ -111,7 +111,8 @@ public:
     // Changes whenever a setting's restart state does.
     std::uint32_t restart_revision() const { return restart_revision_; }
     // Number rows shown as a slider: INT and FLOAT settings with at least 3
-    // values. The slider's steps (values - 1), or 0 for any other row.
+    // values, not locked. The slider's steps (values - 1), or 0 for any other
+    // row.
     std::uint32_t slider_steps(std::uint32_t setting_id) const;
     // Changes whenever CMFM sets a value (the player, Set To Default).
     std::uint32_t value_revision() const { return value_revision_; }

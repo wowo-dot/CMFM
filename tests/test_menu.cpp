@@ -672,7 +672,9 @@ void locks_rows() {
     check(same(help_text(model, scale), "Locked: needs the toggle on."), "the reason in the help line");
     check(!m.set(id(scale), 6) && f.values[slot(kScale)].f == 0.0, "a locked row refuses a change");
     const std::uint32_t l1 = m.lock_revision();
+    check(m.slider_steps(id(scale)) == 0, "a locked number row is no slider");
     check(m.set(id(toggle), 1) && !m.is_locked(id(scale)) && m.lock_revision() != l1, "unlocked by another change");
+    check(m.slider_steps(id(scale)) == 6, "a slider again once unlocked");
     check(same(help_text(model, scale), "Help."), "the help line back");
     check(m.set(id(scale), 6) && f.values[slot(kScale)].f == 2.0, "changes again");
 }
