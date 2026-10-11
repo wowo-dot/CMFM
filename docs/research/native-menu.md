@@ -330,6 +330,52 @@ registry, text injection); its own menu is an ImGui overlay. Its
 `game_functions.h` hard-codes addresses from an older game build; only the
 pattern records apply to 421810.
 
+## SPL's Start menu API (found after prototype 1)
+
+SharpPluginLoader gained `SharpPluginLoader.Core/UI/StartMenu.cs` on
+2026-09-20 (commit e92003a "Implement start menu API", Fexty), after the
+local clone (2026-09-14) we checked first; current master read at 7be2393
+(2026-10-08), MIT. `StartMenu.AddOption` takes a page, hub/quest/both,
+name, description, disabled description, visible and clickable conditions
+and a click handler. It works on the same structures we found:
+
+| SPL record | Target on 421810 | Our name |
+|---|---|---|
+| `StartMenu:AccessPages` | 0x141ECAB2D | the tab-list access in `uGUIStartMenu::hoverCategory` |
+| `StartMenu:FormatOptionName` | 0x141ED1BF0 | `uGUIStartMenu::setItemLabel` |
+| `StartMenu:SelectOption` | 0x141ECC8B0 | `uGUIStartMenu::pressButton` (slots at `gui + 0x29C8`) |
+| `StartMenu:HoverOption` | 0x141ED2300 | the help-line function |
+| `Gui:QueueCommonTextOperation` | 0x141AE0E60 | the help-text queue (SPL passes GMD 11) |
+| `StartMenu:IsOptionVisible` | 0x141ECCC00 | `uGUIStartMenu::isItemVisible`: the **"!" badge** check |
+| `StartMenu:IsOptionClickable` | 0x141ECF4D0 | `uGUIStartMenu::isItemAvailable` |
+| `StartMenu:Close` | 0x141FB55E0 | (closes the Start menu) |
+
+How SPL differs from CMFM's prototype:
+
+- It appends entries at the end of a page (hard-coded original counts 5, 8,
+  11, 11, 6); CMFM inserts after a chosen entry (after Options).
+- It extends the `cm_start_menu_<lang>` message table once, for the
+  language active then (new array from the rGUIMessage allocator); CMFM
+  answers for its own text ids in `rGUIMessage::getMessage`, so a language
+  change keeps working and the game's resource stays untouched.
+- Four hooks (badge, clickable, select, hover) against CMFM's two (text,
+  action): unknown ids are already visible and clickable, and the help line
+  resolves through `getMessage`.
+- **Its "IsOptionVisible" hook is on the badge check**, so SPL's entries show
+  the "!" notification icon (`hoverCategory` shows it when 0x141ECCC00
+  returns true; the game uses it for Receive Items, Join Requests and the
+  like). The real visibility check is 0x141ED03F0, which already accepts
+  unknown ids.
+- It writes the page pointer under `MemoryUtil.WithRwx` without checking the
+  old value; CMFM checks, swaps atomically and restores.
+
+**Compatibility to handle later:** both swap the page pointer. If an SPL
+plugin adds a System-page option after CMFM has swapped, SPL copies its
+hard-coded 6 entries from our 8-entry table (dropping Quit Game, keeping
+Mods) and replaces our pointer; CMFM's restore then refuses (value
+changed). If SPL swaps first, CMFM's check refuses and the entry stays
+hidden. A later CMFM should detect a foreign table and insert into it.
+
 ## Prototype 1 in game (runs 20261011-native-m1, -m1b)
 
 The first attempt refused its own table swap (wrong field) and changed
