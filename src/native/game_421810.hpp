@@ -205,6 +205,7 @@ inline constexpr std::size_t kListRows = 0x1E8;
 inline constexpr std::size_t kListDuplicateNum = 0x298;
 inline constexpr std::size_t kListCursor = 0x274;
 inline constexpr std::size_t kListWrap = 656;  // byte: Down on the last row goes to row 0
+inline constexpr std::size_t kListInactive = 371;  // byte: 1 = takes no input (tab setActive writes it)
 // List row (cGUIInstance) fields.
 inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
 inline constexpr std::size_t kInstFlags = 0x628;

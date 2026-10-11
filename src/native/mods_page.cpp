@@ -307,9 +307,40 @@ void hold_player(void* unit) {
     }
 }
 
+// Diagnostic for split mode (temporary): one log line whenever the page's
+// input state changes (focus, the category cursor, which lists take input,
+// their cursors).
+char g_state_line[256];
+void log_split_state(void* unit) {
+    void* categories = field<void*>(unit, game::kOptCategoryList);
+    void* mods = g_mod_list.load(std::memory_order_acquire);
+    if (categories == nullptr || mods == nullptr) {
+        return;
+    }
+    char line[256];
+    int n = std::snprintf(line, sizeof line, "focus %d | cat cur %u off %u | mods cur %u off %u |",
+                          field<std::int32_t>(unit, game::kOptFocus), field<std::uint32_t>(categories, game::kListCursor),
+                          field<std::uint8_t>(categories, game::kListInactive), field<std::uint32_t>(mods, game::kListCursor),
+                          field<std::uint8_t>(mods, game::kListInactive));
+    for (std::size_t t = 0; t < game::kTitleViewTabs && n > 0 && n < static_cast<int>(sizeof line); ++t) {
+        void* list = field<void*>(tab_object(unit, t), game::kTabList);
+        n += std::snprintf(line + n, sizeof line - n, " t%zu cur %u off %u rows %u", t,
+                           list ? field<std::uint32_t>(list, game::kListCursor) : 0u,
+                           list ? field<std::uint8_t>(list, game::kListInactive) : 9u,
+                           list ? field<std::uint32_t>(list, game::kListRowCount) : 0u);
+    }
+    if (std::strcmp(line, g_state_line) != 0) {
+        std::memcpy(g_state_line, line, sizeof line);
+        logf(AL_LOG_INFO, "Mods page state: %s", line);
+    }
+}
+
 // CMFM's page, vtable slot 81: every frame while it is open (state 2; the
 // menu's thread).
 std::uint64_t page_update(void* unit) {
+    if (split_view()) {
+        log_split_state(unit);
+    }
     if (g_hold_player.load(std::memory_order_relaxed)) {
         hold_player(unit);
     }
@@ -529,6 +560,9 @@ bool enter_view(void* unit) {
         g_view_unit.store(unit, std::memory_order_release);
         g_window_list.store(categories, std::memory_order_release);
         g_mod_list.store(mod_list, std::memory_order_release);
+        // CMFM drives the mod list; the game never set it up, so it must not
+        // take input (the page's active list gets it).
+        field<std::uint8_t>(mod_list, game::kListInactive) = 1;
         const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
         if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
             g_mod_top = g_selected.load(std::memory_order_relaxed) - visible + 1;
