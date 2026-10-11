@@ -37,7 +37,8 @@ set(CMFM_WARNINGS /W4 /WX /permissive- /utf-8)
 add_library(cmfm_core STATIC
     src/menu/menu.cpp
     src/native/system_items.cpp
-    src/native/options_model.cpp)
+    src/native/options_model.cpp
+    src/native/panel_window.cpp)
 target_include_directories(cmfm_core PUBLIC src include)
 target_compile_options(cmfm_core PRIVATE ${CMFM_WARNINGS})
 
@@ -77,3 +78,7 @@ add_executable(test_menu tests/test_menu.cpp)
 target_link_libraries(test_menu PRIVATE cmfm_core)
 target_compile_options(test_menu PRIVATE ${CMFM_WARNINGS})
 add_test(NAME menu COMMAND test_menu)
+add_executable(test_panel_window tests/test_panel_window.cpp)
+target_link_libraries(test_panel_window PRIVATE cmfm_core)
+target_compile_options(test_panel_window PRIVATE ${CMFM_WARNINGS})
+add_test(NAME panel_window COMMAND test_panel_window)

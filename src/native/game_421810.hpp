@@ -164,6 +164,17 @@ inline constexpr char kSetHiddenPattern[] = "48 83 EC 28 44 8B 41 58 41 8B C0 C1
 // the owner's cursor callback. With wrap on, Down on the last row asks for
 // row 0 and Up on row 0 for the last row.
 inline constexpr char kListMovePattern[] = "48 89 5C 24 18 57 48 83 EC 30 48 63 81 74 02 00 00 48 8B D9 48 63 FA";
+// The button list's cursor steps for keys and stick (called by its key
+// handler, vtable +232 at RVA 0xB81060, which then moves the cursor through
+// moveCursor): next(list, cursor, steps, wrap, bool* wrapped) at RVA 0xB75BD0
+// and previous at RVA 0xB75C80. Each counts `steps` selectable rows (+0x628
+// bit 0x2) from the cursor, past the end to the other end when `wrap` is set
+// (then *wrapped = 1), and returns the row (the cursor if none). The Mods page
+// hooks both for its panel window (native/panel_window.hpp).
+inline constexpr char kListStepDownPattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 8B 81 D8 01 00 00 33 ED 41 8B F0 48 8B F9";
+inline constexpr char kListStepUpPattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 8B 81 D8 01 00 00 33 ED 41 8B F0 48 8B D9";
 // uGUIOption::update (vtable slot 81) at RVA 0x1E8EF50, every frame while the
 // title Options page runs; +10480 is 0 while its category list has the focus.
 // Not hooked (confirms slot 81).

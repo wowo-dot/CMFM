@@ -7,6 +7,7 @@
 #include "native/options_model.hpp"
 #include "native/options_view.hpp"
 #include "native/page_class.hpp"
+#include "native/panel_window.hpp"
 
 #include <atomic>
 #include <cstdarg>
@@ -20,6 +21,8 @@ namespace {
 using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
 using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
 using RowLooksFn = std::uint64_t (*)(void* tab, std::uint32_t cursor);
+using ListStepFn = std::uint32_t (*)(void* list, std::int32_t cursor, std::int32_t steps, std::uint8_t wrap,
+                                     std::uint8_t* wrapped);
 // Called.
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
@@ -47,6 +50,8 @@ using DefaultAnswerFn = void (*)(void* const* capture, std::uint32_t unknown, st
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
 RowLooksFn g_row_looks_next = nullptr;
+ListStepFn g_step_down_next = nullptr;
+ListStepFn g_step_up_next = nullptr;
 RowDecideFn g_row_decide_next = nullptr;
 SelectDecideFn g_select_decide_next = nullptr;
 EnabledCheckFn g_enabled_check_next = nullptr;
@@ -113,6 +118,19 @@ enum Hook {
     kHookCount
 };
 std::uint32_t g_hooks[kHookCount] = {};
+// The panel window's cursor steps (optional: without them a long tab shows
+// all its rows, past the bottom of the screen).
+std::uint32_t g_step_hooks[2] = {};
+bool g_panel_window_on = false;
+
+// The split panel's window over the highlighted tab's rows
+// (native/panel_window.hpp): the rows the panel holds (the game keeps
+// pointers to these entries in its row objects, so a scroll rewrites them in
+// place), plus the end row; which of the tab's rows the cursor may take.
+GameOptionRow g_panel_rows[kMaxRowsPerTab + 1];
+bool g_panel_selectable[kMaxRowsPerTab];
+std::size_t g_panel_count = 0;  // the tab's rows
+std::size_t g_panel_top = 0;    // the first of them in the window
 
 Env g_env = {};
 std::atomic<bool> g_ready{false};
@@ -240,15 +258,17 @@ std::size_t menu_tab(std::size_t t) {
                                                     : g_top.load(std::memory_order_relaxed) + t;
 }
 
-// Runs `build` with TitleOptionTabTables[t] pointing at CMFM's menu_tab(t):
-// the game reads those tables only while it fills a category's rows
-// (fillCategoryRows), so the game's own Options pages never see CMFM's.
+// Runs `build` with TitleOptionTabTables[t] pointing at CMFM's menu_tab(t)
+// (in split mode at the panel window's rows): the game reads those tables
+// only while it fills a category's rows (fillCategoryRows), so the game's own
+// Options pages never see CMFM's.
 template <class Build>
 bool with_tables(const OptionsModel& model, Build build) {
     for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
         std::string why;
         const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model.table(menu_tab(t)));
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(
+            g_split.load(std::memory_order_relaxed) ? g_panel_rows : model.table(menu_tab(t)));
         if (!g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
             logf(AL_LOG_WARNING, "Mods page: could not point tab %zu at CMFM's tab %zu: %s", t, menu_tab(t),
                  why.c_str());
@@ -272,7 +292,8 @@ void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
 void show_restart_line(void* unit);
 void request_split_help(void* unit);
 void update_sliders(void* unit);
-void end_sliders(void* unit);
+// all: every slider row (the window moves), not only the locked ones.
+void end_sliders(void* unit, bool all = false);
 void show_pick_list(void* unit, const GameOptionRow& entry);
 
 bool scrolling() {
@@ -635,11 +656,111 @@ void show_mod_list() {
     }
 }
 
+// ---- Split mode: the panel's window over a long tab ----
+
+// Rows the panel holds: the whole tab, or kPanelRows of it.
+std::size_t panel_visible() {
+    return g_panel_window_on && g_panel_count > kPanelRows ? kPanelRows : g_panel_count;
+}
+
+// The panel window's rows from the highlighted tab, from row `top` on (kept
+// in range), with the end row after them.
+void load_panel_rows(std::size_t top) {
+    const GameOptionRow* rows = menu::service_model().table(g_selected.load(std::memory_order_relaxed));
+    std::size_t count = 0;
+    while (count < kMaxRowsPerTab && rows[count].kind != kRowTableEnd) {
+        g_panel_selectable[count] = !menu::service_is_section(static_cast<std::uint32_t>(rows[count].setting_id));
+        ++count;
+    }
+    g_panel_count = count;
+    const std::size_t visible = panel_visible();
+    if (top > count - visible) {
+        top = count - visible;
+    }
+    g_panel_top = top;
+    for (std::size_t r = 0; r < visible; ++r) {
+        g_panel_rows[r] = rows[top + r];
+    }
+    g_panel_rows[visible] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
+}
+
+void* panel_list(void* unit) {
+    return field<void*>(tab_object(unit, game::kSplitPanel), game::kTabList);
+}
+
+// The window moves to `top`: the rows that showed sliders or opened a list
+// become plain rows (their entries are about to change; the game would move
+// a slider's new setting to the old knob), then the window's entries are
+// rewritten in place. The next cursor change (or `refresh`) has the game
+// read and write every row again, and CMFM decorates them after the row
+// looks.
+void scroll_panel(void* unit, std::size_t top, bool refresh) {
+    if (top == g_panel_top) {
+        return;
+    }
+    end_sliders(unit, true);
+    char* tab = tab_object(unit, game::kSplitPanel);
+    for (std::size_t r = 0; r < game::kTabRowObjects; ++r) {
+        field<std::uint8_t>(tab + (r + 1) * game::kRowObjectSize, game::kRowOpensList) = 0;
+    }
+    load_panel_rows(top);
+    if (refresh && g_tab_refresh != nullptr) {
+        g_tab_refresh(tab);
+        decorate_panel(unit);
+    }
+}
+
+// The panel list's cursor steps (keys, stick): over the whole tab, the
+// window following (native/panel_window.hpp). When the window moves under a
+// cursor that keeps its row, the list is told it came from the row the old
+// setting moved to, so moveCursor makes it a real cursor change: the sound,
+// the row looks, the arrows and the help line for the new setting.
+std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cursor, std::int32_t steps,
+                         std::uint8_t wrap, std::uint8_t* wrapped) {
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    const std::size_t visible = panel_visible();
+    if (!split_view() || unit == nullptr || list != panel_list(unit) || g_panel_count <= visible || cursor < 0 ||
+        static_cast<std::size_t>(cursor) >= visible) {
+        return next(list, cursor, steps, wrap, wrapped);
+    }
+    const std::size_t old_top = g_panel_top;
+    const WindowStep step = window_step(g_panel_selectable, g_panel_count, visible, old_top,
+                                        static_cast<std::size_t>(cursor), steps > 0 ? static_cast<std::uint32_t>(steps) : 1u,
+                                        down, wrap != 0);
+    if (step.wrapped && wrapped != nullptr) {
+        *wrapped = 1;
+    }
+    if (step.top != old_top) {
+        scroll_panel(unit, step.top, false);
+        if (step.row == static_cast<std::size_t>(cursor)) {
+            const std::int64_t moved = static_cast<std::int64_t>(old_top + cursor) - static_cast<std::int64_t>(step.top);
+            std::size_t from = step.row == 0 ? 1 : step.row - 1;
+            if (moved >= 0 && static_cast<std::size_t>(moved) < visible && static_cast<std::size_t>(moved) != step.row) {
+                from = static_cast<std::size_t>(moved);
+            }
+            field<std::int32_t>(list, game::kListCursor) = static_cast<std::int32_t>(from);
+        }
+    }
+    return static_cast<std::uint32_t>(step.row);
+}
+
+std::uint32_t step_down_detour(void* list, std::int32_t cursor, std::int32_t steps, std::uint8_t wrap,
+                               std::uint8_t* wrapped) {
+    return panel_step(true, g_step_down_next, list, cursor, steps, wrap, wrapped);
+}
+
+std::uint32_t step_up_detour(void* list, std::int32_t cursor, std::int32_t steps, std::uint8_t wrap,
+                             std::uint8_t* wrapped) {
+    return panel_step(false, g_step_up_next, list, cursor, steps, wrap, wrapped);
+}
+
 // The panels show the selected tab again, the game's way (initCategory), and
-// the audio panel is shown with its help line.
+// the audio panel is shown with its help line. A tab longer than the panel
+// starts at its top.
 void fill_split_panel(void* unit) {
     const OptionsModel& model = menu::service_model();
     const std::size_t selected = g_selected.load(std::memory_order_relaxed);
+    load_panel_rows(0);
     with_tables(model, [&] {
         prepare_tab(unit, game::kSplitPanel);
         g_init_category(tab_object(unit, game::kSplitPanel), unit, static_cast<std::int32_t>(game::kSplitPanel),
@@ -704,9 +825,10 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
 }
 
 // Rows of the split panel the game drives as sliders that are no slider any
-// more (locked now): plain rows again, the slider stopped (the row look then
-// keeps it stopped, and the tab refresh writes their value text).
-void end_sliders(void* unit) {
+// more (locked now, or all of them before the panel window moves): plain rows
+// again, the slider stopped (the row look then keeps it stopped, and the tab
+// refresh writes their value text).
+void end_sliders(void* unit, bool all) {
     char* tab = tab_object(unit, game::kSplitPanel);
     void* list = field<void*>(tab, game::kTabList);
     if (list == nullptr) {
@@ -718,7 +840,7 @@ void end_sliders(void* unit) {
         const auto* entry = field<const GameOptionRow*>(row_object, game::kRowDef);
         if (field<std::uint8_t>(row_object, game::kRowIsSlider) == 0 || entry == nullptr ||
             !is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id)) ||
-            menu::service_slider_steps(static_cast<std::uint32_t>(entry->setting_id)) != 0) {
+            (!all && menu::service_slider_steps(static_cast<std::uint32_t>(entry->setting_id)) != 0)) {
             continue;
         }
         field<std::uint8_t>(row_object, game::kRowIsSlider) = 0;
@@ -787,9 +909,7 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
     // 20261011-picklist-2: the pick list showed one row off).
     const std::uint32_t cursor =
         looks_cursor >= 0 ? static_cast<std::uint32_t>(looks_cursor) : field<std::uint32_t>(list, game::kListCursor);
-    const OptionsModel& model = menu::service_model();
-    const std::size_t selected = g_selected.load(std::memory_order_relaxed);
-    const GameOptionRow* rows = model.table(selected);
+    const GameOptionRow* rows = g_panel_rows;  // the window's rows
     const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
     std::int32_t first = -1;  // the first row the cursor may take
     std::uint32_t known = 0;  // rows with a table entry
@@ -911,6 +1031,9 @@ bool enter_view(void* unit) {
         return false;
     }
     g_view.store(true, std::memory_order_release);  // the text hook answers the category labels
+    if (g_split.load(std::memory_order_relaxed)) {
+        load_panel_rows(0);  // every panel holds the highlighted tab's window
+    }
     if (!with_tables(*model, [&] { build(static_cast<char*>(unit) + game::kOptCategories, unit); })) {
         g_view.store(false, std::memory_order_release);
         menu::service_abort();
@@ -1350,6 +1473,28 @@ bool mods_page_register(const Env& env, std::string& why) {
     logf(AL_LOG_INFO,
          "Mods page: hooks registered (Options show category; list cursor moves; row looks; row and pick decide; "
          "row enabled; Default answer)");
+    const Spec steps[2] = {
+        {"CMFM:cGUIInstButtonList::stepDown", game::kListStepDownPattern, reinterpret_cast<void*>(&step_down_detour),
+         reinterpret_cast<void**>(&g_step_down_next)},
+        {"CMFM:cGUIInstButtonList::stepUp", game::kListStepUpPattern, reinterpret_cast<void*>(&step_up_detour),
+         reinterpret_cast<void**>(&g_step_up_next)},
+    };
+    g_panel_window_on = true;
+    for (int i = 0; i < 2 && g_panel_window_on; ++i) {
+        al_hook_t h = {sizeof(al_hook_t)};
+        h.name = steps[i].name;
+        h.pattern = steps[i].pattern;
+        h.detour = steps[i].detour;
+        h.next = steps[i].next;
+        g_step_hooks[i] = env.hooks->hook(env.self, &h);
+        if (g_step_hooks[i] == 0) {
+            if (i == 1) {
+                env.hooks->set_enabled(env.self, g_step_hooks[0], 0);
+            }
+            g_panel_window_on = false;
+            logf(AL_LOG_WARNING, "Mods page: the hook %s was refused; long pages show all their rows", steps[i].name);
+        }
+    }
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
