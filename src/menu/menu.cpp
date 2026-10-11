@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <utility>
@@ -11,6 +12,11 @@ namespace cmfm::menu {
 namespace {
 
 constexpr char kRestartNote[] = "Takes effect after restarting the game.";
+constexpr char kButtonText[] = "Run";
+// The structs as cmfm.menu 1.0 defined them: anything a plugin passes must be
+// at least this big; later fields are read only when `size` covers them.
+constexpr std::size_t kPageSize10 = offsetof(cmfm_page_t, press);
+constexpr std::size_t kSettingSize10 = offsetof(cmfm_setting_t, button);
 // Section headings in the game's own text colour tags (as its message files
 // write them).
 constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
@@ -92,7 +98,7 @@ cmfm_value_t value_at(const Setting& s, std::uint32_t k) {
     return v;
 }
 
-bool copy_setting(const cmfm_setting_t& in, Setting& s, std::string& why) {
+bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::string& why) {
     char b[160];
     const auto fail = [&](const char* what) {
         std::snprintf(b, sizeof b, "setting %u: %s", in.id, what);
@@ -180,6 +186,23 @@ bool copy_setting(const cmfm_setting_t& in, Setting& s, std::string& why) {
             s.value_count = 1;
             s.help.clear();
             return true;
+        case CMFM_TYPE_BUTTON: {
+            if (in.flags != 0) {
+                return fail("a BUTTON takes no flags");
+            }
+            const bool sized = size >= offsetof(cmfm_setting_t, confirm) + sizeof in.confirm;
+            if (!text_ok(sized ? in.button : nullptr, kMaxChoice, true, s.button)) {
+                return fail("button text longer than 32 bytes");
+            }
+            if (s.button.empty()) {
+                s.button = kButtonText;
+            }
+            if (!text_ok(sized ? in.confirm : nullptr, kMaxHelp, true, s.confirm)) {
+                return fail("confirm question longer than 200 bytes");
+            }
+            s.value_count = 1;
+            return true;
+        }
         default:
             return fail("unknown type");
     }
@@ -188,7 +211,7 @@ bool copy_setting(const cmfm_setting_t& in, Setting& s, std::string& why) {
 }  // namespace
 
 bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
-    if (page == nullptr || page->size < sizeof(cmfm_page_t)) {
+    if (page == nullptr || page->size < kPageSize10) {
         why = "no page, or a page smaller than cmfm.menu 1.0's";
         return false;
     }
@@ -209,13 +232,14 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         return false;
     }
     const std::uint32_t stride = page->settings[0].size;
-    if (stride < sizeof(cmfm_setting_t)) {
+    if (stride < kSettingSize10) {
         why = "settings smaller than cmfm.menu 1.0's";
         return false;
     }
     const char* base = reinterpret_cast<const char*>(page->settings);
     bool any_value = false;
     bool any_text = false;
+    bool any_button = false;
     out.settings.resize(page->setting_count);
     for (std::uint32_t i = 0; i < page->setting_count; ++i) {
         const auto* in = reinterpret_cast<const cmfm_setting_t*>(base + std::size_t{i} * stride);
@@ -223,7 +247,7 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
             why = "settings of different sizes in one array";
             return false;
         }
-        if (!copy_setting(*in, out.settings[i], why)) {
+        if (!copy_setting(*in, stride, out.settings[i], why)) {
             return false;
         }
         for (std::uint32_t j = 0; j < i; ++j) {
@@ -234,11 +258,13 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         }
         if (in->type == CMFM_TYPE_TEXT) {
             any_text = true;
+        } else if (in->type == CMFM_TYPE_BUTTON) {
+            any_button = true;
         } else if (in->type != CMFM_TYPE_SECTION) {
             any_value = true;
         }
     }
-    if (!any_value && !any_text) {
+    if (!any_value && !any_text && !any_button) {
         why = "needs a setting besides its sections";
         return false;
     }
@@ -250,12 +276,21 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         why = "get_text callback needed for TEXT settings";
         return false;
     }
+    const cmfm_press_fn press = page->size >= offsetof(cmfm_page_t, press) + sizeof page->press ? page->press : nullptr;
+    const cmfm_locked_fn locked =
+        page->size >= offsetof(cmfm_page_t, locked) + sizeof page->locked ? page->locked : nullptr;
+    if (any_button && press == nullptr) {
+        why = "press callback needed for BUTTON settings";
+        return false;
+    }
     out.user = page->user;
     out.get = page->get;
     out.set = page->set;
     out.validate = page->validate;
     out.get_text = page->get_text;
     out.on_event = page->on_event;
+    out.press = press;
+    out.locked = locked;
     return true;
 }
 
@@ -354,6 +389,9 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
                 r.value_ptrs = {kNoValue[0]};
             } else if (s.type == CMFM_TYPE_TEXT) {
                 r.value_ptrs = {r.text};
+            } else if (s.type == CMFM_TYPE_BUTTON) {
+                r.values = {s.button};
+                r.value_ptrs = {r.values[0].c_str()};
             } else if (s.type == CMFM_TYPE_BOOL) {
                 r.value_ptrs = {kOffOn[0], kOffOn[1]};
             } else {
@@ -455,7 +493,91 @@ Menu::Row* Menu::setting_row(std::uint32_t setting_id) {
         return nullptr;
     }
     const cmfm_type_t type = pages_[rows_[i].page].settings[rows_[i].setting].type;
-    return type == CMFM_TYPE_TEXT || type == CMFM_TYPE_SECTION ? nullptr : &rows_[i];
+    return type == CMFM_TYPE_TEXT || type == CMFM_TYPE_SECTION || type == CMFM_TYPE_BUTTON ? nullptr : &rows_[i];
+}
+
+bool Menu::is_button(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].type == CMFM_TYPE_BUTTON;
+}
+
+const char* Menu::button_question(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return nullptr;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    return s.type == CMFM_TYPE_BUTTON && !s.confirm.empty() ? s.confirm.c_str() : nullptr;
+}
+
+bool Menu::press(std::uint32_t setting_id) {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return false;
+    }
+    const Page& p = pages_[r->page];
+    const Setting& s = p.settings[r->setting];
+    if (s.type != CMFM_TYPE_BUTTON || p.press == nullptr) {
+        return false;
+    }
+    if (s.locked) {
+        logf(0, "%s: \"%s\" is locked: %s", p.plugin.c_str(), s.label.c_str(), s.locked_why.c_str());
+        return false;
+    }
+    const bool ok = p.press(p.user, s.id) == CMFM_OK;
+    logf(ok ? 0 : 1, "%s: \"%s\" pressed%s", p.plugin.c_str(), s.label.c_str(), ok ? "" : ": the mod reported a failure");
+    ++value_revision_;  // the mod may have changed anything
+    refresh_texts();
+    refresh_locks();
+    return ok;
+}
+
+bool Menu::is_locked(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].locked;
+}
+
+void Menu::refresh_locks() {
+    for (Row& r : rows_) {
+        if (r.status) {
+            continue;
+        }
+        Page& p = pages_[r.page];
+        Setting& s = p.settings[r.setting];
+        if (p.locked == nullptr || s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_TEXT) {
+            continue;
+        }
+        char why[kMaxHelp + 1] = {};
+        const bool locked = p.locked(p.user, s.id, why, sizeof why) != 0;
+        why[sizeof why - 1] = '\0';
+        if (locked != s.locked || (locked && s.locked_why != why)) {
+            s.locked = locked;
+            s.locked_why = locked ? why : "";
+            ++lock_revision_;
+        }
+        if (locked) {
+            char line[sizeof r.help];
+            std::snprintf(line, sizeof line, "Locked: %s", why[0] ? why : "the mod does not allow a change now.");
+            set_help(r, line);
+        } else if (std::strncmp(r.help, "Locked: ", 8) == 0) {
+            set_help(r, r.base_help.c_str());
+        }
+    }
+}
+
+void Menu::refresh_texts() {
+    for (Row& r : rows_) {
+        if (r.status) {
+            continue;
+        }
+        const Page& p = pages_[r.page];
+        const Setting& s = p.settings[r.setting];
+        if (s.type == CMFM_TYPE_TEXT) {
+            r.text[0] = '\0';
+            p.get_text(p.user, s.id, r.text, sizeof r.text);
+            r.text[sizeof r.text - 1] = '\0';
+        }
+    }
 }
 
 void Menu::note_value(Row& row, std::uint32_t index) {
@@ -540,17 +662,9 @@ void Menu::refresh() {
     for (Row& r : rows_) {
         r.get_failed = false;
         set_help(r, r.base_help.c_str());
-        if (r.status) {
-            continue;
-        }
-        const Page& p = pages_[r.page];
-        const Setting& s = p.settings[r.setting];
-        if (s.type == CMFM_TYPE_TEXT) {
-            r.text[0] = '\0';
-            p.get_text(p.user, s.id, r.text, sizeof r.text);
-            r.text[sizeof r.text - 1] = '\0';
-        }
     }
+    refresh_texts();
+    refresh_locks();
 }
 
 void Menu::send(cmfm_event_t event) {
@@ -597,6 +711,10 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     const cmfm_value_t v = value_at(s, static_cast<std::uint32_t>(index));
     const char* name = r->value_ptrs[static_cast<std::size_t>(index)];
+    if (s.locked) {
+        logf(0, "%s: \"%s\" = %s refused: locked (%s)", p.plugin.c_str(), s.label.c_str(), name, s.locked_why.c_str());
+        return false;
+    }
     if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0) {
         get(setting_id);  // the value before the first change
     }
@@ -620,6 +738,7 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name);
     ++value_revision_;
     note_value(*r, static_cast<std::uint32_t>(index));
+    refresh_locks();  // a lock may depend on this value
     return true;
 }
 
@@ -632,7 +751,11 @@ void Menu::reset_defaults() {
         }
         Page& p = pages_[r.page];
         Setting& s = p.settings[r.setting];
-        if (s.type == CMFM_TYPE_TEXT || s.type == CMFM_TYPE_SECTION) {
+        if (s.type == CMFM_TYPE_TEXT || s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_BUTTON) {
+            continue;
+        }
+        if (s.locked) {
+            ++refused;
             continue;
         }
         cmfm_value_t current = {};
@@ -652,6 +775,7 @@ void Menu::reset_defaults() {
         note_value(r, index);
         ++done;
     }
+    refresh_locks();
     logf(0, "Set To Default: %zu setting(s) back to their defaults, %zu refused", done, refused);
 }
 

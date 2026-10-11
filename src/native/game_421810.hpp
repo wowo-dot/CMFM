@@ -372,6 +372,43 @@ inline constexpr std::size_t kTabNumInput = 72;      // num_input_<tab>: the arr
 inline constexpr char kPickText[] = "msg_language";
 inline constexpr char kPickCheck[] = "checkMark";
 
+// Locked rows (docs/research/native-menu.md, "Buttons and locked rows"): the
+// option rows' enabled check(row entry, int* reason message, bool) at RVA
+// 0xEEAE80, which the row looks use to grey a row (animation 9, text colour
+// 7; Confirm refused, no arrows on the cursor row). It says enabled for
+// CMFM's ids; hooked to answer for them.
+inline constexpr char kEnabledCheckPattern[] = "40 53 48 83 EC 20 48 8B DA 48 85 C9 74 50";
+// The tab refresh(tab) at RVA 0x1E8EB40: re-reads and re-writes every row,
+// then the row looks. Called after a button press.
+inline constexpr char kTabRefreshPattern[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B F1 48 8D 59 78";
+// Buttons' Yes/No question: sMhGUI::DisplayYesNoDialog(sMhGUI, request) at
+// RVA 0x1AE2050 (it copies the request), with the request the title page's
+// Default builds (sub_141E8A890): 0x90 bytes, the answer a std::function
+// holding the Default lambda (vtable at RVA 0x347DF98: slot 0 copy at RVA
+// 0x1E893E0, slot 2 call at RVA 0x1E89600) with the categories object
+// captured. The lambda's body (capture*, ?, answer; 0 = Yes) at RVA 0x1E88AA0
+// resets every option; hooked: for CMFM's page it is a button's answer (the
+// page never shows the Default question itself).
+inline constexpr char kYesNoDialogPattern[] =
+    "48 89 5C 24 08 48 89 7C 24 10 55 48 8D AC 24 E0 FE FF FF 48 81 EC 20 02 00 00 48 8B F9";
+inline constexpr char kDefaultAnswerPattern[] =
+    "45 85 C0 0F 85 ?? ?? ?? ?? 48 8B C4 55 41 56 48 8D A8 68 FF FF FF";
+inline constexpr std::uintptr_t kRvaDefaultLambdaVtable = 0x347DF98;
+inline constexpr std::uintptr_t kRvaDefaultLambdaCopy = 0x1E893E0;
+inline constexpr std::uintptr_t kRvaDefaultLambdaCall = 0x1E89600;
+inline constexpr std::uintptr_t kRvaScreenWidth = 0x3FC0560;   // int; the request centres on half of it
+inline constexpr std::uintptr_t kRvaScreenHeight = 0x3FC0564;
+inline constexpr std::uintptr_t kRvaDialogVector = 0x503C430;  // three floats the request carries
+inline constexpr std::size_t kYesNoSize = 0x90;
+inline constexpr std::size_t kYesNoText = 0x08;     // const char*
+inline constexpr std::size_t kYesNoX = 0x10;        // int: screen width / 2
+inline constexpr std::size_t kYesNoY = 0x14;
+inline constexpr std::size_t kYesNoVector = 0x20;   // 3 floats, then 0
+inline constexpr std::size_t kYesNoKind = 0x3C;     // 2: Yes/No
+inline constexpr std::size_t kYesNoAnswer = 0x48;   // std::function storage: vtable, capture
+inline constexpr std::size_t kYesNoAnswerImpl = 0x80;  // -> the storage
+inline constexpr std::uint32_t kYesNoKindYesNo = 2;
+
 // The slider's position(slider, float 0..1) at RVA 0xB8ABC0, snapped to the
 // slider's steps.
 inline constexpr char kSliderSetPositionPattern[] =

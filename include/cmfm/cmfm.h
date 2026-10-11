@@ -82,6 +82,10 @@ typedef uint32_t cmfm_type_t;
  * SECTION. Only `id` and `label` are used (flags 0); the cursor skips it. A
  * page needs at least one setting besides its sections. */
 #define CMFM_TYPE_SECTION 6u
+/* Since 1.1: a row that runs an action. Confirm calls the page's `press`
+ * (after the game's Yes/No dialog when `confirm` is set); its value box shows
+ * `button`. Needs `press`; flags 0. */
+#define CMFM_TYPE_BUTTON 7u
 
 /* Setting flags. */
 typedef uint32_t cmfm_flags_t;
@@ -125,6 +129,11 @@ typedef struct cmfm_setting_t {
     const char* unit;  /* shown after the number, e.g. "%" or " ms"; may be NULL */
     /* BOOL, CHOICE, INT, FLOAT: what "Set To Default" restores. */
     cmfm_value_t default_value;
+    /* Since 1.1 (read when `size` covers them). BUTTON: the text in its value
+     * box, e.g. "Reset" (NULL: "Run"), and a question for the game's Yes/No
+     * dialog before pressing, e.g. "Reset every DLSS setting?" (NULL: none). */
+    const char* button;
+    const char* confirm;
 } cmfm_setting_t;
 
 /* Reads a setting's current value into *value. On CMFM_ERROR the row shows
@@ -147,6 +156,16 @@ typedef cmfm_result_t(CMFM_CALL* cmfm_set_fn)(void* user, uint32_t id, const cmf
  * including the NUL; longer texts are cut). CMFM asks when a Mods page
  * opens, right after CMFM_EVENT_OPENED. */
 typedef void(CMFM_CALL* cmfm_get_text_fn)(void* user, uint32_t id, char* text, uint32_t text_size);
+
+/* Since 1.1. A BUTTON was pressed (and the player said Yes). CMFM reads every
+ * value and text of the page again afterwards. */
+typedef cmfm_result_t(CMFM_CALL* cmfm_press_fn)(void* user, uint32_t id);
+
+/* Since 1.1. Nonzero if the setting cannot be changed now: CMFM greys the row,
+ * refuses changes and shows the reason written into `why` (`why_size` bytes
+ * including the NUL) in the help line. CMFM asks when a Mods page opens and
+ * after every change it makes, so a lock may depend on other settings. */
+typedef uint32_t(CMFM_CALL* cmfm_locked_fn)(void* user, uint32_t id, char* why, uint32_t why_size);
 
 typedef uint32_t cmfm_event_t;
 #define CMFM_EVENT_OPENED 1u /* a Mods page opened (title screen or in game) */
@@ -172,6 +191,9 @@ typedef struct cmfm_page_t {
     cmfm_validate_fn validate; /* may be NULL */
     cmfm_get_text_fn get_text; /* required if a setting is TEXT */
     cmfm_event_fn on_event;    /* may be NULL */
+    /* Since 1.1 (read when `size` covers them). */
+    cmfm_press_fn press;   /* required if a setting is BUTTON */
+    cmfm_locked_fn locked; /* may be NULL: nothing is ever locked */
 } cmfm_page_t;
 
 typedef struct cmfm_menu_t {

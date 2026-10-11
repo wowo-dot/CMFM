@@ -1,6 +1,7 @@
 // Unit tests for cmfm::menu (the cmfm.menu core) with a fake plugin.
 #include "menu/menu.hpp"
 
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -29,6 +30,7 @@ struct Fake {
     int opened = 0;
     int closed = 0;
     int texts = 0;
+    int presses = 0;
     bool fail_get = false;
 };
 
@@ -594,6 +596,111 @@ void picks_list_rows() {
     check(refused(one, "together"), "LIST and ARROWS together are refused");
 }
 
+cmfm_result_t CMFM_CALL fake_press(void* user, std::uint32_t) {
+    auto* f = static_cast<Fake*>(user);
+    ++f->presses;
+    f->values[slot(kPercent)].i = 50;  // the button resets Percent
+    return CMFM_OK;
+}
+
+// Scale is locked while the toggle is off.
+std::uint32_t CMFM_CALL fake_locked(void* user, std::uint32_t id, char* why, std::uint32_t why_size) {
+    auto* f = static_cast<Fake*>(user);
+    if (id == kScale && f->values[slot(kToggle)].i == 0) {
+        std::snprintf(why, why_size, "needs the toggle on.");
+        return 1;
+    }
+    return 0;
+}
+
+void presses_buttons() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.settings[4] = setting(kStatus, CMFM_TYPE_BUTTON, "Reset");  // replaces the TEXT row
+    d.settings[4].button = "Reset";
+    d.settings[4].confirm = "Reset the fake page?";
+    d.page.press = fake_press;
+    Menu m;
+    check(add(m, page_of(d)), "a page with a button is valid");
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* button = find(model, 1, "Reset");
+    check(button && button->value_count == 1 && same(value_text(model, button, 0), "Reset"), "the button's text");
+    check(button && m.is_button(id(button)) && same(m.button_question(id(button)), "Reset the fake page?"),
+          "a button with its question");
+    check(button && m.get(id(button)) == 0 && !m.set(id(button), 0), "a button has no value");
+    f.values[slot(kPercent)].i = 90;
+    const std::uint32_t v0 = m.value_revision();
+    check(button && m.press(id(button)) && f.presses == 1 && f.values[slot(kPercent)].i == 50 &&
+              m.value_revision() != v0,
+          "press runs the callback; values may change");
+    check(!m.press(id(find(model, 1, "Toggle"))), "a toggle cannot be pressed");
+
+    Demo plain = demo_page(&f);
+    plain.settings[4] = setting(kStatus, CMFM_TYPE_BUTTON, "Run it");
+    plain.page.press = fake_press;
+    Menu m2;
+    add(m2, page_of(plain));
+    m2.build(model, why);
+    const native::GameOptionRow* run = find(model, 1, "Run it");
+    check(run && same(value_text(model, run, 0), "Run") && m2.button_question(id(run)) == nullptr,
+          "default text, no question");
+
+    Demo bad = demo_page(&f);
+    bad.settings[4] = setting(kStatus, CMFM_TYPE_BUTTON, "Reset");
+    check(refused(page_of(bad), "press"), "a button needs press");
+    bad.page.press = fake_press;
+    bad.page.size = offsetof(cmfm_page_t, press);  // a 1.0 page cannot have one
+    check(refused(page_of(bad), "press"), "a 1.0-sized page cannot carry press");
+}
+
+void locks_rows() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.page.locked = fake_locked;
+    Menu m;
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* scale = find(model, 1, "Scale");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    const std::uint32_t l0 = m.lock_revision();
+    m.refresh();  // as when a page opens
+    check(m.is_locked(id(scale)) && !m.is_locked(id(toggle)) && m.lock_revision() != l0, "locked at opening");
+    check(same(help_text(model, scale), "Locked: needs the toggle on."), "the reason in the help line");
+    check(!m.set(id(scale), 6) && f.values[slot(kScale)].f == 0.0, "a locked row refuses a change");
+    const std::uint32_t l1 = m.lock_revision();
+    check(m.set(id(toggle), 1) && !m.is_locked(id(scale)) && m.lock_revision() != l1, "unlocked by another change");
+    check(same(help_text(model, scale), "Help."), "the help line back");
+    check(m.set(id(scale), 6) && f.values[slot(kScale)].f == 2.0, "changes again");
+}
+
+void accepts_1_0_sizes() {
+    Fake f;
+    Demo d = demo_page(&f);
+    d.page.size = offsetof(cmfm_page_t, press);
+    for (cmfm_setting_t& s : d.settings) {
+        s.size = offsetof(cmfm_setting_t, button);
+    }
+    // Settings smaller than the 1.1 struct: step through them by that size.
+    struct Small {
+        unsigned char bytes[offsetof(cmfm_setting_t, button)];
+    };
+    Small small[6];
+    for (int i = 0; i < 6; ++i) {
+        std::memcpy(small[i].bytes, &d.settings[i], sizeof small[i].bytes);
+    }
+    cmfm_page_t page = d.page;
+    page.settings = reinterpret_cast<const cmfm_setting_t*>(small);
+    Page copy;
+    std::string why;
+    check(copy_page(&page, copy, why) && copy.settings.size() == 6 && copy.settings[5].label == "Restart thing" &&
+              copy.press == nullptr && copy.locked == nullptr,
+          "pages and settings of cmfm.menu 1.0's size are read");
+}
+
 void reads_the_start_value_before_a_first_change() {
     static OptionsModel model;
     Fake f;
@@ -626,6 +733,9 @@ int main() {
     reads_the_start_value_before_a_first_change();
     picks_slider_rows();
     picks_list_rows();
+    presses_buttons();
+    locks_rows();
+    accepts_1_0_sizes();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

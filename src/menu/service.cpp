@@ -235,4 +235,24 @@ std::uint32_t service_list_choices(std::uint32_t setting_id) {
     return g_menu && g_model_ok ? g_menu->list_choices(setting_id) : 0;
 }
 
+bool service_is_button(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_button(setting_id);
+}
+
+const char* service_button_question(std::uint32_t setting_id) {
+    return g_menu && g_model_ok ? g_menu->button_question(setting_id) : nullptr;
+}
+
+bool service_press(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->press(setting_id);
+}
+
+bool service_locked(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_locked(setting_id);
+}
+
+std::uint32_t service_lock_revision() {
+    return g_menu ? g_menu->lock_revision() : 0;
+}
+
 }  // namespace cmfm::menu

@@ -39,12 +39,18 @@ using SelectDecideFn = std::uint64_t (*)(void* select, std::uint32_t index);
 using SetFocusFn = std::uint64_t (*)(void* unit, std::int32_t focus);
 using SetScaleYFn = void (*)(void* instance, float scale);
 using SetCurrentFrameFn = void (*)(void* object, float frame, bool apply);
+using EnabledCheckFn = std::uint8_t (*)(const GameOptionRow* row, std::int32_t* reason, std::uint8_t flag);
+using TabRefreshFn = std::uint64_t (*)(void* tab);
+using YesNoDialogFn = void (*)(void* manager, void* request);
+using DefaultAnswerFn = void (*)(void* const* capture, std::uint32_t unknown, std::int32_t answer);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
 RowLooksFn g_row_looks_next = nullptr;
 RowDecideFn g_row_decide_next = nullptr;
 SelectDecideFn g_select_decide_next = nullptr;
+EnabledCheckFn g_enabled_check_next = nullptr;
+DefaultAnswerFn g_default_answer_next = nullptr;
 InitCategoryFn g_init_category = nullptr;
 // From uGUIMenuOption::update: the input manager and area manager globals and
 // the input lock.
@@ -86,10 +92,26 @@ SetCurrentFrameFn g_set_current_frame = nullptr;
 void* g_pick_checks[game::kSelectRows] = {};
 std::uint32_t g_pick_count = 0;
 std::int32_t g_pick_filled = -1;  // the setting the pick list holds
+// Buttons: the refresh after a press, the Yes/No question (optional: a
+// button with a question is not pressed without it).
+TabRefreshFn g_tab_refresh = nullptr;
+YesNoDialogFn g_yes_no_dialog = nullptr;
+std::int32_t g_pending_button = -1;  // the button whose question is open
+char g_question[256];                // the text the open question shows
+std::uint32_t g_lock_seen = 0;       // the menu's lock revision the panel shows
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
-enum Hook { kShowCategory, kListMove, kRowLooks, kRowDecide, kSelectDecide, kHookCount };
+enum Hook {
+    kShowCategory,
+    kListMove,
+    kRowLooks,
+    kRowDecide,
+    kSelectDecide,
+    kEnabledCheck,
+    kDefaultAnswer,
+    kHookCount
+};
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -465,6 +487,16 @@ std::uint64_t page_update(void* unit) {
             decorate_panel(unit);
             show_restart_line(unit);
         }
+        // A lock changed (after any change CMFM made): the rows' looks again,
+        // which grey them through the enabled check, then CMFM's touches.
+        const std::uint32_t locks = menu::service_lock_revision();
+        if (locks != g_lock_seen) {
+            g_lock_seen = locks;
+            if (void* list = field<void*>(tab_object(unit, game::kSplitPanel), game::kTabList)) {
+                g_row_looks_next(tab_object(unit, game::kSplitPanel), field<std::uint32_t>(list, game::kListCursor));
+            }
+            decorate_panel(unit);
+        }
     }
     if (g_hold_player.load(std::memory_order_relaxed)) {
         hold_player(unit);
@@ -744,8 +776,8 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
         }
         char* row_object = tab + (r + 1) * game::kRowObjectSize;
         const bool slider = show_slider(row_object, rows[r], r, r == active_row);
-        if (!slider && g_set_focus != nullptr && menu::service_list_choices(id) != 0) {
-            field<std::uint8_t>(row_object, game::kRowOpensList) = 1;  // Confirm opens the pick list
+        if (!slider && ((g_set_focus != nullptr && menu::service_list_choices(id) != 0) || menu::service_is_button(id))) {
+            field<std::uint8_t>(row_object, game::kRowOpensList) = 1;  // Confirm opens the pick list or presses
         }
         void* root = field<void*>(row, game::kInstRoot);
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
@@ -913,6 +945,7 @@ std::uint64_t page_open(void* unit) {
                              static_cast<std::int32_t>(game::kSplitPanel));
         show_mod_list();
         g_restart_seen = menu::service_restart_revision();
+        g_lock_seen = menu::service_lock_revision();
         g_decorated_focus = field<std::int32_t>(unit, game::kOptFocus);
         decorate_panel(unit);
         show_restart_line(unit);
@@ -935,6 +968,7 @@ std::uint64_t page_close(void* unit) {
     g_slider_count = 0;
     g_pick_count = 0;
     g_pick_filled = -1;
+    g_pending_button = -1;
     options_view_sliders(false);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
@@ -1057,16 +1091,91 @@ void show_pick_list(void* unit, const GameOptionRow& entry) {
     }
 }
 
-// Confirm on a panel row: the pick list for CMFM's long CHOICE rows (the
-// game's own decide does something only for its language and dialog rows).
+// A button pressed: the mod's action, then every row of the panel read and
+// written again the game's way (the mod may have changed any value or text).
+void press_button(void* unit, std::uint32_t id) {
+    menu::service_press(id);
+    if (g_tab_refresh != nullptr) {
+        g_tab_refresh(tab_object(unit, game::kSplitPanel));
+    }
+}
+
+// Confirm on a button: pressed now, or after the game's Yes/No question,
+// asked the way the title page's Default asks (its lambda carries the
+// answer; the answer hook below takes it for CMFM's page).
+void ask_button(void* unit, std::uint32_t id) {
+    const char* question = menu::service_button_question(id);
+    if (question == nullptr) {
+        press_button(unit, id);
+        return;
+    }
+    void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+    const auto* lambda = reinterpret_cast<const std::uintptr_t*>(g_env.base + game::kRvaDefaultLambdaVtable);
+    if (g_yes_no_dialog == nullptr || manager == nullptr || lambda[0] != g_env.base + game::kRvaDefaultLambdaCopy ||
+        lambda[2] != g_env.base + game::kRvaDefaultLambdaCall) {
+        logf(AL_LOG_WARNING, "Mods page: no Yes/No question available; the button is not pressed");
+        return;
+    }
+    std::snprintf(g_question, sizeof g_question, "%s", question);  // the request keeps the pointer
+    alignas(16) unsigned char request[game::kYesNoSize] = {};
+    const auto* vector = reinterpret_cast<const float*>(g_env.base + game::kRvaDialogVector);
+    field<const char*>(request, game::kYesNoText) = g_question;
+    field<std::int32_t>(request, game::kYesNoX) = *reinterpret_cast<const std::int32_t*>(g_env.base + game::kRvaScreenWidth) / 2;
+    field<std::int32_t>(request, game::kYesNoY) = *reinterpret_cast<const std::int32_t*>(g_env.base + game::kRvaScreenHeight) / 2;
+    for (std::size_t i = 0; i < 3; ++i) {
+        field<float>(request, game::kYesNoVector + 4 * i) = vector[i];
+    }
+    field<std::uint32_t>(request, game::kYesNoKind) = game::kYesNoKindYesNo;
+    field<const void*>(request, game::kYesNoAnswer) = lambda;
+    field<void*>(request, game::kYesNoAnswer + 8) = static_cast<char*>(unit) + game::kOptCategories;
+    field<void*>(request, game::kYesNoAnswerImpl) = request + game::kYesNoAnswer;
+    g_pending_button = static_cast<std::int32_t>(id);
+    g_yes_no_dialog(manager, request);  // copies the request
+}
+
+// Confirm on a panel row: buttons and the pick list for CMFM's long CHOICE
+// rows (the game's own decide does something only for its language and
+// dialog rows).
 void row_decide_detour(void* row) {
     const auto* entry = field<const GameOptionRow*>(row, game::kRowDef);
     void* unit = field<void*>(row, game::kRowObjectUnit);
     if (entry != nullptr && unit != nullptr && split_view() && unit == g_view_unit.load(std::memory_order_acquire) &&
-        is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id)) && open_pick_list(unit, *entry)) {
-        return;
+        is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id))) {
+        const auto id = static_cast<std::uint32_t>(entry->setting_id);
+        if (menu::service_is_button(id)) {
+            ask_button(unit, id);
+            return;
+        }
+        if (open_pick_list(unit, *entry)) {
+            return;
+        }
     }
     g_row_decide_next(row);
+}
+
+// The Default question's answer. On CMFM's page (which never asks it) it is
+// a button's answer: Yes presses the button; the game's handler (a reset of
+// every option) never runs for it.
+void default_answer_detour(void* const* capture, std::uint32_t unknown, std::int32_t answer) {
+    void* page = page_alive();
+    if (capture != nullptr && page != nullptr && *capture == static_cast<char*>(page) + game::kOptCategories) {
+        const std::int32_t id = g_pending_button;
+        g_pending_button = -1;
+        logf(AL_LOG_INFO, "Mods page: button question answered %s", answer == 0 ? "Yes" : "No");
+        if (answer == 0 && id >= 0 && g_view.load(std::memory_order_acquire)) {
+            press_button(page, static_cast<std::uint32_t>(id));
+        }
+        return;
+    }
+    g_default_answer_next(capture, unknown, answer);
+}
+
+// The enabled check for CMFM's rows: locked rows are greyed by the game.
+std::uint8_t enabled_check_detour(const GameOptionRow* row, std::int32_t* reason, std::uint8_t flag) {
+    if (row != nullptr && is_cmfm_row(row->kind, static_cast<std::uint32_t>(row->setting_id))) {
+        return menu::service_locked(static_cast<std::uint32_t>(row->setting_id)) ? 0 : 1;
+    }
+    return g_enabled_check_next(row, reason, flag);
 }
 
 // A pick in the pick list: CMFM's settings get the value; the game's handler
@@ -1182,6 +1291,10 @@ bool mods_page_register(const Env& env, std::string& why) {
          reinterpret_cast<void**>(&g_row_decide_next)},
         {"CMFM:uGUIOption::decidePick", game::kSelectDecidePattern, reinterpret_cast<void*>(&select_decide_detour),
          reinterpret_cast<void**>(&g_select_decide_next)},
+        {"CMFM:OptionRow::isEnabled", game::kEnabledCheckPattern, reinterpret_cast<void*>(&enabled_check_detour),
+         reinterpret_cast<void**>(&g_enabled_check_next)},
+        {"CMFM:uGUIOption::defaultAnswer", game::kDefaultAnswerPattern, reinterpret_cast<void*>(&default_answer_detour),
+         reinterpret_cast<void**>(&g_default_answer_next)},
     };
     for (int i = 0; i < kHookCount; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
@@ -1199,7 +1312,8 @@ bool mods_page_register(const Env& env, std::string& why) {
         }
     }
     logf(AL_LOG_INFO,
-         "Mods page: hooks registered (Options show category; list cursor moves; row looks; row and pick decide)");
+         "Mods page: hooks registered (Options show category; list cursor moves; row looks; row and pick decide; "
+         "row enabled; Default answer)");
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
@@ -1221,6 +1335,15 @@ bool mods_page_register(const Env& env, std::string& why) {
                             reinterpret_cast<void**>(&g_set_current_frame), pick_why)) {
         g_set_focus = nullptr;
         logf(AL_LOG_WARNING, "Mods page: %s; long choices keep their arrows", pick_why.c_str());
+    }
+    std::string button_why;
+    if (!find_game_function(env, "tab refresh", game::kTabRefreshPattern, reinterpret_cast<void**>(&g_tab_refresh),
+                            button_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; rows update later after a button", button_why.c_str());
+    }
+    if (!find_game_function(env, "Yes/No dialog", game::kYesNoDialogPattern,
+                            reinterpret_cast<void**>(&g_yes_no_dialog), button_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; buttons with a question are not pressed", button_why.c_str());
     }
     // The wheel scrolls a long category list; without al.input it does not.
     if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {

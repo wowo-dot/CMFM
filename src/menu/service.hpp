@@ -52,5 +52,11 @@ std::uint32_t service_value_revision();
 // CHOICE rows that open the game's pick list on CMFM's page: their choices,
 // or 0.
 std::uint32_t service_list_choices(std::uint32_t setting_id);
+// BUTTON rows and locks (Menu::press, Menu::is_locked).
+bool service_is_button(std::uint32_t setting_id);
+const char* service_button_question(std::uint32_t setting_id);  // nullptr: none
+bool service_press(std::uint32_t setting_id);
+bool service_locked(std::uint32_t setting_id);
+std::uint32_t service_lock_revision();
 
 }  // namespace cmfm::menu

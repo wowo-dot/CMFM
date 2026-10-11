@@ -20,7 +20,7 @@
 
 enum {
     ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
-    ID_QUALITY
+    ID_QUALITY, ID_RESET
 };
 
 static const al_api_t* g_api;
@@ -129,6 +129,32 @@ static cmfm_result_t CMFM_CALL demo_set(void* user, uint32_t id, const cmfm_valu
     return CMFM_OK;
 }
 
+/* Since cmfm.menu 1.1: the button (after the player said Yes to its question). */
+static cmfm_result_t CMFM_CALL demo_press(void* user, uint32_t id) {
+    (void)user;
+    if (id != ID_RESET) {
+        return CMFM_ERROR;
+    }
+    g_values.toggle = 0;
+    g_values.choice = 0;
+    g_values.percent = 50;
+    g_values.scale = 1.0;
+    g_values.quality = 3;
+    g_dirty = 1;
+    logline(AL_LOG_INFO, "reset to defaults (button)");
+    return CMFM_OK;
+}
+
+/* Since cmfm.menu 1.1: Demo scale can be changed only while Demo toggle is on. */
+static uint32_t CMFM_CALL demo_locked(void* user, uint32_t id, char* why, uint32_t why_size) {
+    (void)user;
+    if (id == ID_SCALE && !g_values.toggle) {
+        snprintf(why, why_size, "Turn on Demo toggle first.");
+        return 1;
+    }
+    return 0;
+}
+
 static void CMFM_CALL demo_text(void* user, uint32_t id, char* text, uint32_t text_size) {
     (void)user;
     if (id == ID_STATUS) {
@@ -199,7 +225,7 @@ static const char* const kQuality[] = {"Off", "Very low", "Low", "Medium", "High
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[10];
+    cmfm_setting_t s[11];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
@@ -207,7 +233,7 @@ static void add_page(void) {
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 10; ++i) {
+    for (int i = 0; i < 11; ++i) {
         s[i].size = sizeof s[i];
     }
     s[0].id = ID_BASICS;
@@ -243,7 +269,7 @@ static void add_page(void) {
     s[5].id = ID_SCALE;
     s[5].type = CMFM_TYPE_FLOAT;
     s[5].label = "Demo scale";
-    s[5].help = "A number from 0.50 to 2.00 in steps of 0.25.";
+    s[5].help = "A number from 0.50 to 2.00 in steps of 0.25. Needs Demo toggle on.";
     s[5].min = 0.5;
     s[5].max = 2.0;
     s[5].step = 0.25;
@@ -274,18 +300,27 @@ static void add_page(void) {
     s[9].choice_count = 7;
     s[9].default_value.i = 3;
 
+    s[10].id = ID_RESET;
+    s[10].type = CMFM_TYPE_BUTTON;
+    s[10].label = "Reset demo";
+    s[10].help = "Puts the demo's settings back to their defaults.";
+    s[10].button = "Reset";
+    s[10].confirm = "Reset the demo's settings to their defaults?";
+
     memset(&page, 0, sizeof page);
     page.size = sizeof page;
     page.plugin = "cmfm_demo";
     page.title = "Demo";
     page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
     page.settings = s;
-    page.setting_count = 10;
+    page.setting_count = 11;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;
     page.get_text = demo_text;
     page.on_event = demo_event;
+    page.press = demo_press;
+    page.locked = demo_locked;
     /* CMFM copies the page: the local arrays may go away after this. */
     if (menu->add_page(&page, why, sizeof why) == 0) {
         char line[256];

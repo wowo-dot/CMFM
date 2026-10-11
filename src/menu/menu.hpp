@@ -48,6 +48,12 @@ struct Setting {
     // for a restart.
     std::int32_t first_index = -1;
     bool restart_pending = false;
+    // BUTTON (since 1.1): the value box's text and the Yes/No question.
+    std::string button;
+    std::string confirm;
+    // Session state: locked now (the page's `locked`), and why.
+    bool locked = false;
+    std::string locked_why;
 };
 
 struct Page {
@@ -61,6 +67,8 @@ struct Page {
     cmfm_validate_fn validate = nullptr;
     cmfm_get_text_fn get_text = nullptr;
     cmfm_event_fn on_event = nullptr;
+    cmfm_press_fn press = nullptr;    // since 1.1
+    cmfm_locked_fn locked = nullptr;  // since 1.1
 };
 
 // Checks a plugin's page against cmfm.h's rules and copies it; false with
@@ -112,6 +120,16 @@ public:
     // CMFM_FLAG_ARROWS. The number of choices, or 0 for any other row.
     std::uint32_t list_choices(std::uint32_t setting_id) const;
 
+    // BUTTON rows: press() calls the page's `press` (false if it failed or
+    // the row is no button); afterwards texts and locks are read again.
+    bool is_button(std::uint32_t setting_id) const;
+    const char* button_question(std::uint32_t setting_id) const;  // nullptr: none
+    bool press(std::uint32_t setting_id);
+    // Locks (the pages' `locked`), read when a page opens and after every
+    // change CMFM makes; a locked row refuses changes.
+    bool is_locked(std::uint32_t setting_id) const;
+    std::uint32_t lock_revision() const { return lock_revision_; }
+
 private:
     struct Entry {
         bool page;          // a page (index into pages_) or a refusal
@@ -142,6 +160,8 @@ private:
     // After a value change: the restart state and the Overview's text.
     void note_value(Row& row, std::uint32_t index);
     void update_status_texts();
+    void refresh_locks();  // and the locked rows' help lines
+    void refresh_texts();  // TEXT rows
 
     std::string version_;
     LogFn log_;
@@ -151,6 +171,7 @@ private:
     bool dirty_ = true;
     std::uint32_t restart_revision_ = 0;
     std::uint32_t value_revision_ = 0;
+    std::uint32_t lock_revision_ = 0;
 
     // The last build.
     const native::OptionsModel* model_ = nullptr;
