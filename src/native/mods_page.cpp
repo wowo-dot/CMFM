@@ -613,7 +613,7 @@ void request_split_help(void* unit) {
 // CMFM's value label goes into the slider's text; the row's value box stays
 // hidden. False if the row is no slider (not a number row, sliders off, or
 // the panel's rows have none).
-bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r) {
+bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, bool active) {
     const auto id = static_cast<std::uint32_t>(entry.setting_id);
     const std::uint32_t steps = menu::service_slider_steps(id);
     void* slider = field<void*>(row_object, game::kRowSlider);
@@ -625,6 +625,10 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r) 
         field<std::uint8_t>(row_object, game::kRowIsSlider) = 1;
         g_slider_from_setting(slider, nullptr, &entry);
         field<std::uint32_t>(slider, game::kSliderMode) = 2;
+        // Set from the getter marks the slider active; the row look keeps it
+        // to the panel's cursor row (run 20261011-sliders-1: green knobs while
+        // the list had the focus).
+        field<std::uint8_t>(slider, game::kSliderActive) = active ? 1 : 0;
         gui_set_play(slider, true);
     }
     const auto index = static_cast<std::uint32_t>(menu::service_get(id));
@@ -698,6 +702,10 @@ void decorate_panel(void* unit) {
     const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
     std::int32_t first = -1;  // the first row the cursor may take
     std::uint32_t known = 0;  // rows with a table entry
+    // The row the panel's cursor is on, while the panel has the focus.
+    const std::uint32_t active_row = field<std::int32_t>(unit, game::kOptFocus) == 1
+                                         ? field<std::uint32_t>(list, game::kListCursor)
+                                         : 0xFFFFFFFFu;
     g_slider_count = 0;
     g_value_seen = menu::service_value_revision();
     for (std::uint32_t r = 0; r < count && rows[r].kind != kRowTableEnd; ++r) {
@@ -713,7 +721,7 @@ void decorate_panel(void* unit) {
         if (!section && first < 0) {
             first = static_cast<std::int32_t>(r);
         }
-        const bool slider = show_slider(tab + (r + 1) * game::kRowObjectSize, rows[r], r);
+        const bool slider = show_slider(tab + (r + 1) * game::kRowObjectSize, rows[r], r, r == active_row);
         void* root = field<void*>(row, game::kInstRoot);
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
             gui_set_hidden(star, !menu::service_restart_pending(id));

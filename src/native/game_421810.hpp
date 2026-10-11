@@ -329,6 +329,7 @@ inline constexpr std::size_t kSliderMode = 1664;   // 2 as the row filler leaves
 inline constexpr std::size_t kSliderMin = 1672;    // float
 inline constexpr std::size_t kSliderMax = 1676;    // float
 inline constexpr std::size_t kSliderSteps = 1696;  // positions snap to steps + 1 places
+inline constexpr std::size_t kSliderActive = 1708;  // byte: takes keys, active look (the row look sets it)
 inline constexpr std::size_t kSliderDragging = 1728;  // byte: the mouse holds the knob
 // The slider from a setting(slider, value text or nullptr, row entry) at RVA
 // 0xEEAD20: reads the getter, places the knob, formats the text.
