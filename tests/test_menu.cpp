@@ -198,11 +198,15 @@ void validates_pages() {
     bad.settings[1].default_value.i = 3;
     check(refused(page_of(bad), "default"), "choice default out of range");
     bad = demo_page(&f);
-    bad.settings[2].max = 330;
-    check(refused(page_of(bad), "32 steps"), "34 steps refused");
+    bad.settings[2].max = 1010;
+    check(refused(page_of(bad), "101 values"), "102 values refused");
     bad = demo_page(&f);
-    bad.settings[2].max = 310;
-    check(!refused(page_of(bad), ""), "32 steps accepted");
+    bad.settings[2].max = 1000;
+    check(!refused(page_of(bad), ""), "101 values accepted");
+    bad = demo_page(&f);
+    bad.settings[2].max = 100;
+    bad.settings[2].step = 1;
+    check(!refused(page_of(bad), ""), "0 to 100 in steps of 1 accepted");
     bad = demo_page(&f);
     bad.settings[2].step = 2.5;
     check(refused(page_of(bad), "whole"), "INT step must be whole");
@@ -289,12 +293,22 @@ void shows_a_page() {
     const native::GameOptionRow* scale = find(model, 1, "Scale");
     const native::GameOptionRow* restart = find(model, 1, "Restart thing");
     check(toggle && toggle->value_count == 2 && same(value_text(model, toggle, 1), "On"), "bool values");
-    check(percent && percent->value_count == 11 && same(value_text(model, percent, 0), "0%") &&
-              same(value_text(model, percent, 10), "100%"),
+    check(percent && percent->value_count == 11 && same(m.value_text(id(percent), 0), "0%") &&
+              same(m.value_text(id(percent), 10), "100%"),
           "int values with unit");
-    check(scale && scale->value_count == 7 && same(value_text(model, scale, 0), "0.50x") &&
-              same(value_text(model, scale, 6), "2.00x"),
+    check(scale && scale->value_count == 7 && same(m.value_text(id(scale), 0), "0.50x") &&
+              same(m.value_text(id(scale), 6), "2.00x"),
           "float values with decimals");
+    check(m.value_text(id(toggle), 0) == nullptr, "no number text for other rows");
+    // A number row's values share one text: the current value.
+    const std::uint32_t now = m.get(id(percent));
+    const std::string now_text = m.value_text(id(percent), now);
+    check(percent->values != nullptr && same(value_text(model, percent, 0), now_text.c_str()),
+          "a number row's one text is its current value");
+    check(m.set(id(percent), 3) && same(value_text(model, percent, 0), "30%"), "and follows a change");
+    check(percent->values[0].text == percent->label_id + 1 && percent->values[100].text == percent->label_id + 1 &&
+              percent->values[50].help_id == percent->help_id && toggle->values == nullptr,
+          "every slider position points at that text and the row's help");
     check(restart && std::strstr(help_text(model, restart), "restarting the game"), "restart note in the help");
 }
 
@@ -419,15 +433,18 @@ void stops_at_24_pages() {
 }
 
 void drops_pages_that_do_not_fit() {
-    // Four pages of 24 settings with 32 values each overflow the text ids.
+    // Four pages of 24 choices of 32 names each overflow the text ids
+    // (number rows no longer would: their values share one text).
     static OptionsModel model;
     static Fake f;
+    static const char* const names[CMFM_MAX_CHOICES] = {
+        "c0",  "c1",  "c2",  "c3",  "c4",  "c5",  "c6",  "c7",  "c8",  "c9",  "c10", "c11", "c12", "c13", "c14", "c15",
+        "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31"};
     static cmfm_setting_t big[CMFM_MAX_SETTINGS];
     for (std::uint32_t i = 0; i < CMFM_MAX_SETTINGS; ++i) {
-        big[i] = setting(i, CMFM_TYPE_INT, "Big");
-        big[i].min = 0;
-        big[i].max = 31;
-        big[i].step = 1;
+        big[i] = setting(i, CMFM_TYPE_CHOICE, "Big");
+        big[i].choices = names;
+        big[i].choice_count = CMFM_MAX_CHOICES;
     }
     Menu m;
     for (int p = 0; p < 4; ++p) {

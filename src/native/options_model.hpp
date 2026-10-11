@@ -7,8 +7,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace cmfm::native {
+
+// A value's texts in the game's per-value table (sub_140EEA620: the text id
+// at +4, or +0 if that is -1; sub_140EEB160: the help id and file).
+struct GameValueText {
+    std::int32_t text;
+    std::int32_t text_again;
+    std::int32_t help_id;
+    std::int32_t help_cat;
+};
+static_assert(sizeof(GameValueText) == 16);
 
 // The game's Options row (cmfm_OptionRow in IDA).
 struct GameOptionRow {
@@ -20,10 +31,12 @@ struct GameOptionRow {
     std::int32_t setting_id;
     std::int32_t value_count;
     std::int32_t pad;
-    const std::int32_t* value_labels;
+    // One entry per value, read instead of the ids that follow the label and
+    // help ids; nullptr: those.
+    const GameValueText* values;
 };
 static_assert(sizeof(GameOptionRow) == 40);
-static_assert(offsetof(GameOptionRow, value_labels) == 32);
+static_assert(offsetof(GameOptionRow, values) == 32);
 
 // CMFM rows are kind 1 (system settings) with setting ids from 100: both
 // Options pages keep kind-1 rows (the title page drops unknown kinds), and
@@ -47,6 +60,11 @@ inline constexpr std::size_t kMaxTabs = 25;        // the title page scrolls thr
 inline constexpr std::size_t kMaxRowsPerTab = 24;  // the title Options page holds 24 rows per tab
 inline constexpr std::size_t kMaxRows = 200;       // setting ids 100-299
 inline constexpr std::size_t kMaxValues = 32;
+// Rows whose values share one text (numbers, as CMFM writes the current
+// value) hold up to 101 values, the game slider's positions 0-100. Their
+// per-value table has an entry for each position: the game reads a slider
+// row's text at its 0-100 value (the getter on the slider's scale).
+inline constexpr std::size_t kMaxSharedValues = 101;
 static_assert(kSettingIdFirst + kMaxRows <= kSettingIdLimit);
 
 // True for a row CMFM answers (kind 1, ids 100-299).
@@ -64,9 +82,12 @@ struct TabSpec {
 struct RowSpec {
     const char* label;
     const char* help;
-    const char* const* values;  // value_count names
-    std::uint32_t value_count;  // 1..kMaxValues
+    const char* const* values;  // value_count names, or one if shared
+    std::uint32_t value_count;  // 1..kMaxValues, or 1..kMaxSharedValues if shared
     std::uint32_t tab;          // 0..kTabCount-1
+    // The values share values[0], a text its owner rewrites as the value
+    // changes (numbers): one text id and one help id for all of them.
+    bool shared = false;
 };
 
 class OptionsModel {
@@ -115,6 +136,9 @@ private:
     std::uint32_t help_end_ = kHelpIdFirst;
     // Per tab: its rows plus the end row.
     GameOptionRow tables_[kMaxTabs][kMaxRowsPerTab + 1] = {};
+    // The shared rows' per-value tables, kMaxSharedValues entries each
+    // (sized once per build: the tables point into it).
+    std::vector<GameValueText> shared_values_;
 };
 
 }  // namespace cmfm::native

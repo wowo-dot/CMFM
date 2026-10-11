@@ -1098,8 +1098,7 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
         gui_set_hidden(end, true);
     }
     if (void* text = field<void*>(row_object, game::kRowSliderText)) {
-        const char* label =
-            menu::service_model().label_text(static_cast<std::uint32_t>(entry.label_id) + 1 + index);
+        const char* label = menu::service_value_text(id, index);
         gui_format_text(text, label != nullptr ? label : "");
         gui_set_hidden(text, false);
     }
@@ -1135,6 +1134,34 @@ void end_sliders(void* unit, bool all) {
         }
     }
 }
+
+float slider_position(void* slider);
+
+}  // namespace
+
+bool mods_page_slider_index(std::uint32_t setting_id, std::uint32_t steps, std::uint32_t* index) {
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    if (unit == nullptr || steps == 0 || !split_view()) {
+        return false;
+    }
+    char* tab = tab_object(unit, game::kSplitPanel);
+    for (std::size_t i = 0; i < g_slider_count; ++i) {
+        char* row_object = tab + (g_slider_rows[i].row + 1) * game::kRowObjectSize;
+        const auto* entry = field<const GameOptionRow*>(row_object, game::kRowDef);
+        void* slider = field<void*>(row_object, game::kRowSlider);
+        if (entry == nullptr || slider == nullptr || field<std::uint8_t>(row_object, game::kRowIsSlider) == 0 ||
+            static_cast<std::uint32_t>(entry->setting_id) != setting_id) {
+            continue;
+        }
+        const float place = slider_position(slider) * static_cast<float>(steps) + 0.5f;
+        const auto k = place <= 0.0f ? 0u : static_cast<std::uint32_t>(place);
+        *index = k > steps ? steps : k;
+        return true;
+    }
+    return false;
+}
+
+namespace {
 
 // The slider's knob as a fraction of its track (sub_140B8A190).
 float slider_position(void* slider) {

@@ -77,7 +77,9 @@ typedef uint32_t cmfm_type_t;
  * CMFM_FLAG_ARROWS force either; more than 14 always uses the arrows). */
 #define CMFM_TYPE_CHOICE 2u /* one of `choices`: value.i is its index */
 /* INT and FLOAT with 3 or more values show as the game's slider on the Mods
- * page (the value next to the bar), with arrows elsewhere. */
+ * page (the value next to the bar), with arrows elsewhere. Keys move one
+ * step; the mouse drags. Since 1.1 up to CMFM_MAX_STEPS values (0 to 100 in
+ * steps of 1, say); 1.0 took up to CMFM_MAX_CHOICES. */
 #define CMFM_TYPE_INT 3u    /* value.i from min to max in steps of `step` */
 #define CMFM_TYPE_FLOAT 4u  /* value.f from min to max in steps of `step` */
 #define CMFM_TYPE_TEXT 5u   /* a read-only line: the label and a text from get_text */
@@ -105,7 +107,8 @@ typedef uint32_t cmfm_flags_t;
 /* Limits of CMFM 1.0's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */
 #define CMFM_MAX_SETTINGS 24u /* per page */
-#define CMFM_MAX_CHOICES 32u  /* CHOICE names, and INT/FLOAT steps from min to max */
+#define CMFM_MAX_CHOICES 32u  /* CHOICE names (and INT/FLOAT values in 1.0) */
+#define CMFM_MAX_STEPS 101u   /* since 1.1: INT/FLOAT values from min to max (the slider's 0-100) */
 #define CMFM_MAX_TEXT 128u    /* bytes CMFM offers get_text, including the NUL */
 
 typedef struct cmfm_value_t {
@@ -127,7 +130,7 @@ typedef struct cmfm_setting_t {
     /* INT and FLOAT: the range, and how a value is shown. */
     uint32_t decimals; /* FLOAT: digits after the point, 0 to 3 */
     double min;
-    double max;        /* (max - min) / step + 1 values, at most CMFM_MAX_CHOICES */
+    double max;        /* (max - min) / step + 1 values, at most CMFM_MAX_STEPS */
     double step;       /* > 0; whole numbers for INT */
     const char* unit;  /* shown after the number, e.g. "%" or " ms"; may be NULL */
     /* BOOL, CHOICE, INT, FLOAT: what "Set To Default" restores. */

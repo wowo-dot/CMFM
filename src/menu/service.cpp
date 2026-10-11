@@ -219,6 +219,10 @@ const char* service_tab_header(std::size_t tab) {
     return g_menu && g_model_ok ? g_menu->tab_header(tab) : "";
 }
 
+const char* service_value_text(std::uint32_t setting_id, std::uint32_t index) {
+    return g_menu && g_model_ok ? g_menu->value_text(setting_id, index) : nullptr;
+}
+
 std::uint32_t service_restart_revision() {
     return g_menu ? g_menu->restart_revision() : 0;
 }

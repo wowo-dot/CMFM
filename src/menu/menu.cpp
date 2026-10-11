@@ -159,8 +159,8 @@ bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::s
             if (!is_int && in.decimals > 3) {
                 return fail("decimals above 3");
             }
-            if ((in.max - in.min) / in.step + 1 > CMFM_MAX_CHOICES + 0.5) {
-                return fail("more than 32 steps (the native menu shows each value)");
+            if ((in.max - in.min) / in.step + 1 > CMFM_MAX_STEPS + 0.5) {
+                return fail("more than 101 values (the slider has positions 0 to 100)");
             }
             if (!text_ok(in.unit, kMaxUnit, true, s.unit)) {
                 return fail("unit longer than 8 bytes");
@@ -400,17 +400,18 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
                 r.value_ptrs = {r.values[0].c_str()};
             } else if (s.type == CMFM_TYPE_BOOL) {
                 r.value_ptrs = {kOffOn[0], kOffOn[1]};
-            } else {
-                if (s.type == CMFM_TYPE_CHOICE) {
-                    r.values = s.choices;
-                } else {
-                    for (std::uint32_t k = 0; k < s.value_count; ++k) {
-                        r.values.push_back(number(s, k));
-                    }
-                }
+            } else if (s.type == CMFM_TYPE_CHOICE) {
+                r.values = s.choices;
                 for (const std::string& v : r.values) {
                     r.value_ptrs.push_back(v.c_str());
                 }
+            } else {
+                // Numbers: one text for all values, the current one (written
+                // on every read and change), so a range needs no text per value.
+                r.shared = true;
+                r.value_count = s.value_count;
+                std::snprintf(r.text, sizeof r.text, "%s", number(s, 0).c_str());
+                r.value_ptrs = {r.text};
             }
             r.base_help = s.help;
             if ((s.flags & CMFM_FLAG_RESTART) != 0) {
@@ -423,8 +424,8 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     specs.clear();
     for (const Row& r : rows_) {
         const std::uint32_t tab = r.status ? 0 : static_cast<std::uint32_t>(1 + r.page);
-        specs.push_back({r.label.c_str(), r.help, r.value_ptrs.data(), static_cast<std::uint32_t>(r.value_ptrs.size()),
-                         tab});
+        specs.push_back({r.label.c_str(), r.help, r.value_ptrs.data(),
+                         r.shared ? r.value_count : static_cast<std::uint32_t>(r.value_ptrs.size()), tab, r.shared});
     }
 
     tab_count_ = 1 + shown < native::kTabCount ? native::kTabCount : 1 + shown;
@@ -653,6 +654,16 @@ const char* Menu::tab_header(std::size_t tab) {
     return header_.c_str();
 }
 
+const char* Menu::value_text(std::uint32_t setting_id, std::uint32_t index) {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr || !r->shared) {
+        return nullptr;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    value_text_ = number(s, index < s.value_count ? index : s.value_count - 1);
+    return value_text_.c_str();
+}
+
 std::uint32_t Menu::slider_steps(std::uint32_t setting_id) const {
     const Row* r = any_setting_row(setting_id);
     if (r == nullptr) {
@@ -724,6 +735,9 @@ std::uint32_t Menu::get(std::uint32_t setting_id) {
     if (s.first_index < 0) {
         s.first_index = static_cast<std::int32_t>(index);  // the value the session started with
     }
+    if (r->shared) {
+        std::snprintf(r->text, sizeof r->text, "%s", number(s, index).c_str());  // read right after this
+    }
     return index;
 }
 
@@ -740,7 +754,8 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
         return false;
     }
     const cmfm_value_t v = value_at(s, static_cast<std::uint32_t>(index));
-    const char* name = r->value_ptrs[static_cast<std::size_t>(index)];
+    const std::string number_name = r->shared ? number(s, static_cast<std::uint32_t>(index)) : std::string();
+    const char* name = r->shared ? number_name.c_str() : r->value_ptrs[static_cast<std::size_t>(index)];
     if (s.locked) {
         if (!r->lock_logged) {
             r->lock_logged = true;
@@ -770,6 +785,9 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     set_help(*r, r->base_help.c_str());
     logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name);
+    if (r->shared) {
+        std::snprintf(r->text, sizeof r->text, "%s", name);
+    }
     ++value_revision_;
     note_value(*r, static_cast<std::uint32_t>(index));
     refresh_locks();  // a lock may depend on this value

@@ -4,12 +4,17 @@ namespace cmfm::native {
 
 namespace {
 
+// The texts a row has after its label: one if its values share it.
+std::uint32_t text_count(const RowSpec& s) {
+    return s.shared ? 1 : s.value_count;
+}
+
 bool valid(const RowSpec& s) {
     if (s.label == nullptr || s.help == nullptr || s.values == nullptr || s.value_count == 0 ||
-        s.value_count > kMaxValues) {
+        s.value_count > (s.shared ? kMaxSharedValues : kMaxValues)) {
         return false;
     }
-    for (std::uint32_t v = 0; v < s.value_count; ++v) {
+    for (std::uint32_t v = 0; v < text_count(s); ++v) {
         if (s.values[v] == nullptr) {
             return false;
         }
@@ -60,9 +65,17 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
     std::uint32_t label = kLabelIdFirst;
     std::uint32_t help = kHelpIdFirst;
     std::size_t row = 0;
+    std::size_t shared = 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        shared += rows[i].shared ? 1 : 0;
+    }
+    shared_values_.assign(shared * kMaxSharedValues, GameValueText{});
+    std::size_t shared_used = 0;
     const auto add = [&](const RowSpec& s, std::size_t tab, std::int32_t source) {
-        // Label then its values in file 12; help then one per value in file 18.
-        if (label + 1 + s.value_count > kTextIdLimit || help + 1 + s.value_count > kHelpIdLimit) {
+        // Label then its value texts in file 12; help then one per value in
+        // file 18 (a shared row's values all use the row's help).
+        const std::uint32_t value_helps = s.shared ? 0 : s.value_count;
+        if (label + 1 + text_count(s) > kTextIdLimit || help + 1 + value_helps > kHelpIdLimit) {
             return false;
         }
         specs_[row] = s;
@@ -70,12 +83,22 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
         sources_[row] = source;
         label_ids_[row] = label;
         help_ids_[row] = help;
+        const GameValueText* values = nullptr;
+        if (s.shared) {
+            GameValueText* entries = &shared_values_[shared_used * kMaxSharedValues];
+            for (std::size_t k = 0; k < kMaxSharedValues; ++k) {
+                entries[k] = GameValueText{static_cast<std::int32_t>(label + 1), static_cast<std::int32_t>(label + 1),
+                                           static_cast<std::int32_t>(help), kHelpCategory};
+            }
+            values = entries;
+            ++shared_used;
+        }
         tables_[tab][per_tab[tab]++] = GameOptionRow{
             kCmfmRowKind, static_cast<std::int32_t>(label), 1, kHelpCategory, static_cast<std::int32_t>(help),
             static_cast<std::int32_t>(kSettingIdFirst + row), static_cast<std::int32_t>(s.value_count), 0,
-            nullptr};
-        label += 1 + s.value_count;
-        help += 1 + s.value_count;
+            values};
+        label += 1 + text_count(s);
+        help += 1 + value_helps;
         ++row;
         return true;
     };
@@ -109,7 +132,7 @@ const char* OptionsModel::label_text(std::uint32_t id) const {
         if (id == first) {
             return specs_[i].label;
         }
-        if (id > first && id <= first + specs_[i].value_count) {
+        if (id > first && id <= first + text_count(specs_[i])) {
             return specs_[i].values[id - first - 1];
         }
     }
@@ -122,7 +145,7 @@ const char* OptionsModel::help_text(std::uint32_t id) const {
     }
     for (std::size_t i = 0; i < count_; ++i) {
         const std::uint32_t first = help_ids_[i];
-        if (id >= first && id <= first + specs_[i].value_count) {
+        if (id >= first && id <= first + (specs_[i].shared ? 0 : specs_[i].value_count)) {
             return specs_[i].help;  // the row's help, for every value too
         }
     }

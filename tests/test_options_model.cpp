@@ -153,6 +153,32 @@ void knows_its_ids() {
     check(!is_cmfm_row(0, 100) && !is_cmfm_row(2, 100) && !is_cmfm_row(7, 100), "other kinds pass on");
 }
 
+void shares_number_texts() {
+    static OptionsModel m;
+    static const char* now[] = {"50%"};
+    const RowSpec rows[] = {
+        {"Fine", "A fine number.", now, 101, 0, true},
+        {"Test toggle", "A test switch.", kOnOff, 2, 0},
+    };
+    const char* why = nullptr;
+    check(m.build("Mods", kTabs, kTabCount, rows, 2, kFree, why), "builds with a shared row");
+    const GameOptionRow* t0 = m.table(0);
+    check(t0[0].value_count == 101 && t0[0].values != nullptr, "101 values with a per-value table");
+    check(t0[0].values[0].text == 9101 && t0[0].values[100].text == 9101 && t0[0].values[100].text_again == 9101 &&
+              t0[0].values[7].help_id == t0[0].help_id && t0[0].values[7].help_cat == 18,
+          "every entry: the one value text and the row's help");
+    check(same(m.label_text(9101), "50%"), "the shared text");
+    now[0] = "51%";
+    check(same(m.label_text(9101), "51%"), "read through the owner's pointer");
+    check(t0[1].label_id == 9102 && t0[1].help_id == 9003, "the next row after two label ids and one help id");
+    check(m.help_text(9002) != nullptr && same(m.help_text(9003), "A test switch."), "help ids");
+    check(t0[1].values == nullptr, "other rows have no table");
+    const RowSpec too_many[] = {{"Fine", "A fine number.", now, 102, 0, true}};
+    check(!m.build("Mods", kTabs, kTabCount, too_many, 1, kFree, why), "102 shared values refused");
+    const RowSpec plain_many[] = {{"Plain", "Not shared.", now, 33, 0}};
+    check(!m.build("Mods", kTabs, kTabCount, plain_many, 1, kFree, why), "33 own values refused");
+}
+
 }  // namespace
 
 int main() {
@@ -164,6 +190,7 @@ int main() {
     builds_more_tabs();
     runs_out_of_text_ids();
     knows_its_ids();
+    shares_number_texts();
     if (g_failures == 0) {
         std::printf("test_options_model: all passed\n");
     }

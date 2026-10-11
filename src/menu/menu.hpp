@@ -122,6 +122,9 @@ public:
     // values (or CMFM_FLAG_LIST), at most kMaxListChoices, not
     // CMFM_FLAG_ARROWS. The number of choices, or 0 for any other row.
     std::uint32_t list_choices(std::uint32_t setting_id) const;
+    // A number row's value text for value `index` ("50%"), as the row shows
+    // it; nullptr for other rows. Valid until the next call.
+    const char* value_text(std::uint32_t setting_id, std::uint32_t index);
 
     // BUTTON rows: press() calls the page's `press` (false if it failed or
     // the row is no button); afterwards texts and locks are read again.
@@ -154,7 +157,11 @@ private:
         std::vector<const char*> value_ptrs;
         std::string base_help;
         char help[kMaxHelp + 64] = {};
-        char text[CMFM_MAX_TEXT] = {};  // TEXT rows' and status rows' value
+        // TEXT rows' and status rows' value; number rows' current value (all
+        // their values share this text, native::RowSpec::shared).
+        char text[CMFM_MAX_TEXT] = {};
+        std::uint32_t value_count = 0;  // the model row's values (value_ptrs.size() unless shared)
+        bool shared = false;
         bool get_failed = false;        // logged once per opening
         bool lock_logged = false;       // a refused change while locked, logged once per opening
     };
@@ -192,6 +199,7 @@ private:
     std::string tab_names_[native::kMaxTabs];
     std::string tab_helps_[native::kMaxTabs];
     std::string header_;  // the last tab_header
+    std::string value_text_;  // the last value_text
 };
 
 }  // namespace cmfm::menu

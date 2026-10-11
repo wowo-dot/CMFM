@@ -3,6 +3,7 @@
 #include "menu/service.hpp"
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
+#include "native/mods_page.hpp"
 #include "native/options_model.hpp"
 
 #include <atomic>
@@ -51,11 +52,15 @@ std::uintptr_t tab_slot(std::size_t tab) {
 }
 
 // Slider rows (CMFM's page): the game reads and writes them on the slider's
-// 0-100 scale (sub_140EEB860 every frame: the knob's position * 100 against
-// the getter, the setter when they differ). The last value the slider set is
-// kept, so a knob between two steps reads back what it set and the game does
-// not set it again every frame. -1: none.
+// 0-100 scale (sub_140EEB860 every frame: the knob's position * 100, rounded
+// up, against the getter; the setter when they differ). The setter takes the
+// value from the knob itself (mods_page_slider_index: rounded to the nearest
+// step; the game's rounding up is a step too far for some positions with 100
+// steps). The last 0-100 value the game set is kept with the value it meant,
+// so the getter answers the game's own number while the value stands and the
+// game does not set it again every frame. -1: none.
 std::int16_t g_slider_raw[kSettingIdLimit - kSettingIdFirst];
+std::uint8_t g_slider_meant[kSettingIdLimit - kSettingIdFirst];
 
 std::uint32_t slider_index(std::int32_t raw, std::uint32_t steps) {
     raw = raw < 0 ? 0 : raw > 100 ? 100 : raw;
@@ -71,9 +76,9 @@ std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
         const std::uint64_t index = menu::service_get(id);
         if (const std::uint32_t steps = menu::service_slider_steps(id)) {
             const std::int16_t raw = g_slider_raw[id - kSettingIdFirst];
-            return raw >= 0 && slider_index(raw, steps) == index ? static_cast<std::uint64_t>(raw)
-                                                                   : static_cast<std::uint64_t>(slider_raw(
-                                                                         static_cast<std::uint32_t>(index), steps));
+            return raw >= 0 && g_slider_meant[id - kSettingIdFirst] == index
+                       ? static_cast<std::uint64_t>(raw)
+                       : static_cast<std::uint64_t>(slider_raw(static_cast<std::uint32_t>(index), steps));
         }
         return index;
     }
@@ -87,8 +92,12 @@ std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value
             return 0;  // greyed: no change (a slider's knob snaps back)
         }
         if (const std::uint32_t steps = menu::service_slider_steps(id)) {
+            std::uint32_t index = 0;
+            if (!mods_page_slider_index(id, steps, &index)) {
+                index = slider_index(value, steps);
+            }
             g_slider_raw[id - kSettingIdFirst] = static_cast<std::int16_t>(value < 0 ? 0 : value > 100 ? 100 : value);
-            const std::uint32_t index = slider_index(value, steps);
+            g_slider_meant[id - kSettingIdFirst] = static_cast<std::uint8_t>(index);
             if (index != menu::service_get(id)) {
                 menu::service_set(id, static_cast<std::int32_t>(index));
             }

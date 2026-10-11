@@ -45,6 +45,8 @@ std::size_t service_restart_count();
 // Tab t's header (Menu::tab_header); "" without a menu. Valid until the next
 // call.
 const char* service_tab_header(std::size_t tab);
+// A number row's value text (Menu::value_text); nullptr for other rows.
+const char* service_value_text(std::uint32_t setting_id, std::uint32_t index);
 std::uint32_t service_restart_revision();
 // Sliders: on while CMFM's own page shows its menu (its number rows are game
 // sliders then, and the option hooks speak the slider's 0-100 scale for

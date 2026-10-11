@@ -284,10 +284,10 @@ static void add_page(void) {
     s[4].id = ID_PERCENT;
     s[4].type = CMFM_TYPE_INT;
     s[4].label = "Demo percent";
-    s[4].help = "A number from 0 to 100 in steps of 10.";
+    s[4].help = "A number from 0 to 100 in steps of 1: a fine slider (since 1.1).";
     s[4].min = 0;
     s[4].max = 100;
-    s[4].step = 10;
+    s[4].step = 1;
     s[4].unit = "%";
     s[4].default_value.i = 50;
 
