@@ -459,6 +459,36 @@ lines and rows that open sub-pages come after.
   sixth hook now answers it in the view: Yes resets CMFM's rows only and
   redraws through `refreshRows` (pattern `40 56 41 54 41 57 48 83 EC 40`).
 
+## The title screen (decision 8, second entry point; static)
+
+**Title menu** (`uGUITitle`, layout `ui\title\title`, vtable 0x1434870E8):
+code-driven, not a table. Setup (slot 74, 0x141F00600) takes
+`btnlist_menuList`, sets its `DuplicateNum` to 7 directly and attaches
+callbacks: selected 0x141EFF480 (row index; e.g. the row stored at
+`+12332` opens a Yes/No with text 23/0x171), back 0x141EFF3C0, cursor
+0x141EFF690 (row -> item: 0->0, 1->2, 2->3, 3->4, 4->5, 5->6 under a
+condition), buttons 0x141EFF750. `uGUITitle::play` (slot 90, 0x141EFFDF0)
+writes each row's two texts by row index (texts 13/0, 13/1, file 20 id 7,
+...). A "Mods" row below Options means an 8th row and translating row
+indices in those callbacks (not built).
+
+**Title Options** (`uGUIOption`, `ui\title\options`): each of its tab
+sub-objects (0x968 bytes at `+0x2918`, tab index at `+80`) builds its list
+in 0x141E8DDD0 from **`off_143FC0480[tab]`** (`.data`, writable; 6 pointers:
+0x1431BEEE0, 0x1431BE870 = in-game Display, 0x1431BEB70 = Audio,
+0x1431BED00, 0x1431BF000, 0x1431BE190 = Controls), the same 40-byte rows.
+It keeps only **kind 1** rows and kind 2 rows whose id byte is 0-1, 4-7 or
+9+ (2-3 conditional, 8 never); kind 0 (save data, no save at the title)
+and unknown kinds are dropped. It resizes the list with `setRowCount` and
+fills rows with 0x141E8D890; values go through the same getter and setter.
+
+**Consequence for CMFM rows:** use **kind 1 with setting ids 100-199**
+instead of kind 7. Both pages keep kind 1 rows, draw their values through
+the generic path (value count > 0), treat them as enabled and visible, and
+the getter/setter hooks answer them first. Real kind-1 ids are 0-34 (system
+settings in `sUserData`); a missed hook would write `sUserData` out of
+range, so the view stays off unless every hook is active (as now).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
