@@ -34,6 +34,9 @@ QwordPatch g_tabs[kTabCount];
 
 // Prototype 2 content: one tab with two test rows.
 const char* const kTabNames[kTabCount] = {"CMFM", "-", "-", "-", "-"};
+const char* const kTabHelps[kTabCount] = {"CMFM's own test rows (prototype).", "No mod settings on this tab yet.",
+                                          "No mod settings on this tab yet.", "No mod settings on this tab yet.",
+                                          "No mod settings on this tab yet."};
 const char* const kOnOff[] = {"Off", "On"};
 const char* const kChoice[] = {"Alpha", "Beta", "Gamma"};
 const OptionSpec kTestRows[] = {
@@ -155,7 +158,7 @@ bool register_hook(const char* name, const char* pattern, void* detour, void** n
 bool options_view_register(const Env& env, std::string& why) {
     g_env = env;
     const char* fail = nullptr;
-    if (!g_model.build("Mods", kTabNames, kTestRows, sizeof kTestRows / sizeof kTestRows[0], kFreeTab, fail)) {
+    if (!g_model.build("Mods", kTabNames, kTabHelps, kTestRows, sizeof kTestRows / sizeof kTestRows[0], kFreeTab, fail)) {
         why = std::string("test rows: ") + fail;
         return false;
     }

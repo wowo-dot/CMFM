@@ -25,8 +25,8 @@ bool title_menu_register(const Env& env, std::string& why);
 // title tables. False (with `why`) leaves the title untouched.
 bool title_menu_check(const Env& env, std::string& why);
 
-// From the text hook: the category labels while the title Mods page is on,
-// or nullptr to let the game answer.
+// From the text hook: the category labels and descriptions while the title
+// Mods page is on, or nullptr to let the game answer.
 const char* title_menu_text(void* message_file, std::uint32_t id);
 
 // SHUTDOWN: puts the game's title tables back.

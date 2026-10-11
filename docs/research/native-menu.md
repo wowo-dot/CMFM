@@ -508,7 +508,7 @@ runs flow 9: step 0 `uMhGUI::requestOpen(uGUIOption unit, 0)` (0x141FB7CF0:
 state |= 0x10, parent at +8448), step 1 wait for closing/closed
 (state & 0x22), step 2 `0x141E8BFE0(unit)` then flow 12.
 
-**Design for the title (not built):**
+**Design for the title (built as prototype 3, below):**
 - *Entry:* an 8th row (`DuplicateNum` 8). Hooks on the cursor and selected
   callbacks translate the row: rows 0-3 unchanged, row 4 = Mods (acts as
   row 3, Options, after entering the title view), rows 5-7 -> 4-6 (Quit's
@@ -545,6 +545,49 @@ the generic path (value count > 0), treat them as enabled and visible, and
 the getter/setter hooks answer them first. Real kind-1 ids are 0-34 (system
 settings in `sUserData`); a missed hook would write `sUserData` out of
 range, so the view stays off unless every hook is active (as now).
+
+### Prototype 3: what the build needed (confirmed, static)
+
+- **`uGUITitle::play` (slot 90, the open handler) builds the menu by code**:
+  row 0 Start Game (13/0); row 1 Gallery (13/1) only when a save condition
+  holds (`+11720` = 1, `+12240` = its row, else -1; on PC with Gallery the
+  item equals the row); then Steam Store (file 20 id 7, `+12244`), Options
+  (13/0xF, `+12248`), Credits (13/0x66), Support (13/0x5F), Quit (23/0x170,
+  `+12332`). Every row first gets `sub_140B732A0(row, 1, 0)` (flag 2 at
+  `+1576`), flag 0x10 (enabled) and `setPlay(row, 1)`; the rows after Quit
+  get flag 2 cleared and `setPlay(row, 0)`. So with `DuplicateNum` 8 the 8th
+  row is hidden unless CMFM shows it. `+12332` is read only by the selected
+  callback; `+12236..+12248` (four rows) only by `sub_141F023E0`, which does
+  nothing on PC (`switchD_142af6b01::caseD_0` returns 0).
+- **`cGUIInstButtonList::setRowCount` rebuilds the row copies but keeps the
+  cursor** (`+628`), and `setCursor` (0x140B76190) reads the row under the
+  old cursor unchecked. Each title Options tab object holds 24 row objects
+  (96 bytes from +96; constructor 0x141E87F80: vtable, zeros, tab 7 at +80,
+  -1 at +88) that the page iterates in full every frame (`sub_141E8EC90`)
+  and on open (`sub_141E8EB40`), using rows beyond the new count. Before a
+  rebuild CMFM sets every cursor to row 0 (while the old rows still exist)
+  and resets the row objects to the constructor's values.
+- **24 rows per tab** on the title page: `fillCategoryRows` collects rows in a
+  24-entry stack array without a bound check.
+- **The page header** (`a_title_options` / `msg_title`, 12/0) is written once
+  at setup (0x141E8B360); CMFM writes it with `formatText`. The gear next to
+  it is placed by the header's width at setup.
+- **The help line while a category is highlighted** comes from
+  `sub_141E8C8F0`: file 18 ids 852, 782, 783, 784, 859 (tabs 0-4), 10123 (Key
+  Config), 10215 (Default). A row's help is its own `helpCat`/`helpId`.
+- `buildCategories`' Key Config condition (`switchD_142af6b01::caseD_7`)
+  returns 1: always seven categories on PC.
+
+### Prototype 3 in game (run 20261011-native-m3)
+
+- **The title Mods entry and page work**: the menu reads Start Game,
+  Gallery, Steam Store, Options, **Mods**, Credits, Support, Quit; Mods opens
+  the title Options page as "Mods" with five categories (CMFM, four "-"),
+  the test rows, value changes, close; Key Config and Default are gone;
+  Options afterwards shows the game's page again. No crash (the exit report
+  was the Stracker baseline).
+- With the cursor on a category the help line showed the game's category
+  description (852 etc.); fixed afterwards by answering those ids.
 
 ## Answers so far
 

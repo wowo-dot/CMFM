@@ -19,8 +19,8 @@ bool valid(const OptionSpec& s) {
 
 }  // namespace
 
-bool OptionsModel::build(const char* header, const char* const* tab_names, const OptionSpec* specs,
-                         std::size_t count, const OptionSpec& placeholder, const char*& why) {
+bool OptionsModel::build(const char* header, const char* const* tab_names, const char* const* tab_helps,
+                         const OptionSpec* specs, std::size_t count, const OptionSpec& placeholder, const char*& why) {
     if (!valid(placeholder)) {
         why = "invalid placeholder row";
         return false;
@@ -51,6 +51,7 @@ bool OptionsModel::build(const char* header, const char* const* tab_names, const
     header_ = header ? header : "";
     for (std::size_t t = 0; t < kTabCount; ++t) {
         tab_names_[t] = tab_names && tab_names[t] ? tab_names[t] : "";
+        tab_helps_[t] = tab_helps && tab_helps[t] ? tab_helps[t] : "";
         per_tab[t] = 0;
     }
     std::uint32_t label = kLabelIdFirst;

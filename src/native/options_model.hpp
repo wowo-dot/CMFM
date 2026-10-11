@@ -65,8 +65,11 @@ public:
     // Options page reads the row under the cursor without a null check, so a
     // tab must never be empty (run 20261011-native-m2 crashed on one). A tab
     // takes at most kMaxRowsPerTab rows.
-    bool build(const char* header, const char* const* tab_names, const OptionSpec* specs, std::size_t count,
-               const OptionSpec& placeholder, const char*& why);
+    // `tab_names` and `tab_helps` (each kTabCount entries, or NULL) name and
+    // describe the tabs; the title Options page shows the description while
+    // the tab's category is highlighted.
+    bool build(const char* header, const char* const* tab_names, const char* const* tab_helps, const OptionSpec* specs,
+               std::size_t count, const OptionSpec& placeholder, const char*& why);
 
     // The game-format table for a tab, ended by a row with kind -1.
     const GameOptionRow* table(std::size_t tab) const { return tables_[tab]; }
@@ -76,6 +79,7 @@ public:
     const char* help_text(std::uint32_t id) const;   // file 18, row and value help
     const char* header() const { return header_; }
     const char* tab_name(std::size_t tab) const { return tab < kTabCount ? tab_names_[tab] : nullptr; }
+    const char* tab_help(std::size_t tab) const { return tab < kTabCount ? tab_helps_[tab] : nullptr; }
 
     std::size_t row_count() const { return count_; }
     // By setting id (kSettingIdFirst + row); false if it is not one of ours.
@@ -89,6 +93,7 @@ public:
 private:
     const char* header_ = "";
     const char* tab_names_[kTabCount] = {};
+    const char* tab_helps_[kTabCount] = {};
     OptionSpec specs_[kMaxRows] = {};
     std::uint32_t values_[kMaxRows] = {};
     std::uint32_t label_ids_[kMaxRows] = {};

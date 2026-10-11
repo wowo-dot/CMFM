@@ -435,12 +435,20 @@ bool title_menu_check(const Env& env, std::string& why) {
 }
 
 const char* title_menu_text(void* message_file_ptr, std::uint32_t id) {
-    if (!g_view.load(std::memory_order_relaxed) || message_file_ptr != message_file(game::kRvaMessages12)) {
+    if (!g_view.load(std::memory_order_relaxed)) {
         return nullptr;
     }
-    for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
-        if (id == game::kTitleCategoryLabelIds[t]) {
-            return options_view_model().tab_name(t);
+    if (message_file_ptr == message_file(game::kRvaMessages12)) {
+        for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
+            if (id == game::kTitleCategoryLabelIds[t]) {
+                return options_view_model().tab_name(t);
+            }
+        }
+    } else if (message_file_ptr == message_file(game::kRvaMessages18)) {
+        for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
+            if (id == game::kTitleCategoryHelpIds[t]) {
+                return options_view_model().tab_help(t);
+            }
         }
     }
     return nullptr;

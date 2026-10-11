@@ -126,8 +126,11 @@ inline constexpr std::size_t kTitleOptionTabTableCount = 6;
 inline constexpr std::uintptr_t kRvaTitleOptionRows[kTitleOptionTabTableCount] = {
     0x31BEEE0, 0x31BE870, 0x31BEB70, 0x31BED00, 0x31BF000, 0x31BE190};
 inline constexpr std::size_t kTitleViewTabs = 5;
-// The category labels for tabs 0-4 (file 12), asked for by buildCategories.
+// The category labels for tabs 0-4 (file 12), asked for by buildCategories,
+// and the help line while a category is highlighted (file 18, set by
+// sub_141E8C8F0; run 20261011-native-m3 showed the game's).
 inline constexpr std::uint32_t kTitleCategoryLabelIds[kTitleViewTabs] = {392, 347, 348, 349, 395};
+inline constexpr std::uint32_t kTitleCategoryHelpIds[kTitleViewTabs] = {852, 782, 783, 784, 859};
 
 // Message files for the title rows CMFM moves down: Credits 13/0x66,
 // Support 13/0x5F, Quit 23/0x170 (as uGUITitle::play writes them).
