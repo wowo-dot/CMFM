@@ -7,7 +7,8 @@
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
  * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
- * of a long list of mods); the first of them is a long page of 64 rows, the
+ * of a long list of mods, up to 1023); the first of them is a long page of
+ * 1024 rows (the most a page holds), the
  * second holds a key binding that overlaps the demo's hotkey (F5 against
  * Ctrl+F5), so CMFM marks both.
  *
@@ -57,7 +58,7 @@ static struct {
 } g_values = {0, 0, 50, 1.0, 0, 3, 0, 1, 50, 1, CMFM_KEY_CTRL | VK_F5_KEY};
 static int g_dirty;
 static int g_opened;
-#define MAX_EXTRA 23
+#define MAX_EXTRA 1023 /* CMFM shows 1024 pages since cmfm.menu 1.2 */
 static int g_extra_pages; /* from the ini: test pages to add */
 static int g_extra[MAX_EXTRA];
 
@@ -267,9 +268,9 @@ static void CMFM_CALL demo_event(void* user, cmfm_event_t event) {
 }
 
 /* ---- The extra test pages: one toggle each; `user` is the page number ---- */
-/* The first one is a long page instead: CMFM_MAX_SETTINGS rows (64 since
- * cmfm.menu 1.2), four sections of 15 toggles (CMFM's tests of a page taller
- * than the panel and of the longest page). */
+/* The first one is a long page instead: CMFM_MAX_SETTINGS rows (1024 since
+ * cmfm.menu 1.2), sections of 15 toggles (CMFM's tests of a page taller than
+ * the panel and of the longest page). */
 
 static int g_long[CMFM_MAX_SETTINGS];
 
@@ -292,8 +293,8 @@ static cmfm_result_t CMFM_CALL extra_set(void* user, uint32_t id, const cmfm_val
 }
 
 static void add_extra_pages(const cmfm_menu_t* menu) {
-    cmfm_setting_t s[CMFM_MAX_SETTINGS];
-    static char labels[CMFM_MAX_SETTINGS][40]; /* CMFM copies them in add_page */
+    static cmfm_setting_t s[CMFM_MAX_SETTINGS]; /* static: too big for the stack */
+    static char labels[CMFM_MAX_SETTINGS][40];  /* CMFM copies them in add_page */
     cmfm_page_t page;
     char title[24];
     char why[200];
@@ -315,7 +316,7 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
                 snprintf(labels[i], sizeof labels[i], "Long toggle %u%s", i - i / 16,
                          i == count - 1 ? " (the last row)" : "");
                 s[i].label = labels[i];
-                s[i].help = "A test page of 64 rows, the most a page holds (since 1.2).";
+                s[i].help = "A test page of 1024 rows, the most a page holds (since 1.2).";
             }
         }
         if (n == 2) { /* a key binding as another mod's: F5 overlaps the demo's Ctrl+F5 */

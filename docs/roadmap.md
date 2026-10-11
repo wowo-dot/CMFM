@@ -93,6 +93,15 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    a table cut at 24 rows. Still shared by all pages: 200 rows and about 900
    label/value text ids (pages that no longer fit are listed as not shown);
    lifting those is a later step if mods need it.
+6. **No shared caps.** Built, awaiting its test (run `caps-1`); asked for by
+   the user after item 5 ("lets do it properly"). The study
+   (research/native-menu.md, "No caps") found every shared limit to be
+   CMFM's own: row texts now live in the game's text file 23, far above its
+   own numbers (the game sends every number above 10000 there), setting ids
+   run from 100 to 100 + 2^20, the model sizes itself. Left: 1024 settings
+   per page and 1024 pages (limits against mistakes), and per setting the
+   pick list's 14 rows and the slider's 101 positions (Later: long pick
+   lists, finer sliders).
 
 ## Then: config pages without code (1.3, its own design first)
 

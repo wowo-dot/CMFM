@@ -256,7 +256,7 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         return false;
     }
     if (page->settings == nullptr || page->setting_count == 0 || page->setting_count > CMFM_MAX_SETTINGS) {
-        why = "needs 1 to 64 settings";
+        why = "needs 1 to 1024 settings";
         return false;
     }
     const std::uint32_t stride = page->settings[0].size;
@@ -384,7 +384,7 @@ void Menu::add_refused(std::string plugin, std::string why) {
 
 void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     // Status rows: CMFM itself, one per add_page call (at most 23 rows).
-    constexpr std::size_t kStatusRows = native::kGameRowsPerTab;  // the Overview shows whole in every view
+    constexpr std::size_t kStatusRows = native::kMaxRowsPerTab;
     std::size_t entry_rows = entries_.empty() ? 1 : entries_.size();
     const bool more = entry_rows > kStatusRows - 1;
     if (more) {
@@ -489,6 +489,8 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     }
 
     tab_count_ = 1 + shown < native::kTabCount ? native::kTabCount : 1 + shown;
+    tab_names_.assign(tab_count_, std::string());
+    tab_helps_.assign(tab_count_, std::string());
     tab_names_[0] = "Overview";
     tab_helps_[0] = "CMFM's version and every mod: active, waiting for a restart, or refused.";
     for (std::size_t t = 1; t < tab_count_; ++t) {
@@ -505,18 +507,19 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
 
 bool Menu::build(native::OptionsModel& model, std::string& why) {
     for (std::size_t p = 0; p < pages_.size(); ++p) {
-        not_shown_why_[p] = p < kMaxPages ? "" : "Not shown: only 24 mod pages fit.";
+        not_shown_why_[p] = p < kMaxPages ? "" : "Not shown: only 1024 mod pages fit.";
     }
     std::size_t shown = pages_.size() < kMaxPages ? pages_.size() : kMaxPages;
-    native::TabSpec tabs[native::kMaxTabs];
+    std::vector<native::TabSpec> tabs;
     std::vector<native::RowSpec> specs;
     for (;;) {
         compose(shown, specs);
+        tabs.assign(tab_count_, native::TabSpec{});
         for (std::size_t t = 0; t < tab_count_; ++t) {
             tabs[t] = {tab_names_[t].c_str(), tab_helps_[t].c_str()};
         }
         const char* fail = nullptr;
-        if (model.build("Mods", tabs, tab_count_, specs.data(), specs.size(), kEmptyRow, fail)) {
+        if (model.build("Mods", tabs.data(), tab_count_, specs.data(), specs.size(), kEmptyRow, fail)) {
             break;
         }
         if (shown == 0) {
@@ -526,7 +529,7 @@ bool Menu::build(native::OptionsModel& model, std::string& why) {
             return false;
         }
         --shown;
-        not_shown_why_[shown] = std::string("Not shown: ") + fail + " (too many rows or texts).";
+        not_shown_why_[shown] = std::string("Not shown: ") + fail + ".";
         logf(1, "page \"%s\" (%s) not shown: %s", pages_[shown].title.c_str(), pages_[shown].plugin.c_str(), fail);
     }
     model_ = &model;

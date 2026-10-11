@@ -163,10 +163,10 @@ std::size_t g_panel_top = 0;    // the first of them in the window
 // The tab's rows the panel shows, by their index in the tab (rows hidden by
 // their lock, CMFM_FLAG_HIDE_LOCKED, left out), and which were hidden when
 // the panel was last filled (one bit per tab row).
-std::uint8_t g_panel_shown[kMaxRowsPerTab];
+std::uint16_t g_panel_shown[kMaxRowsPerTab];
 using RowBits = std::bitset<kMaxRowsPerTab>;
 RowBits g_panel_hidden;
-static_assert(kMaxRowsPerTab <= 256);  // g_panel_shown's entries
+static_assert(kMaxRowsPerTab <= 65536);  // g_panel_shown's entries
 
 // The scrollbars of CMFM's layout (track and bar, the game's own), found by
 // name on the page: one for the mod list, one for the panel. Shown only while
@@ -803,7 +803,7 @@ void load_panel_rows(std::size_t top, bool recheck = true) {
     std::size_t tab_rows = 0;
     for (; tab_rows < kMaxRowsPerTab && rows[tab_rows].kind != kRowTableEnd; ++tab_rows) {
         if (!g_panel_hidden.test(tab_rows)) {
-            g_panel_shown[count] = static_cast<std::uint8_t>(tab_rows);
+            g_panel_shown[count] = static_cast<std::uint16_t>(tab_rows);
             g_panel_selectable[count] =
                 !menu::service_is_section(static_cast<std::uint32_t>(rows[tab_rows].setting_id));
             ++count;

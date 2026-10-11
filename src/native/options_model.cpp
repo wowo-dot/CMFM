@@ -1,5 +1,7 @@
 #include "native/options_model.hpp"
 
+#include <algorithm>
+
 namespace cmfm::native {
 
 namespace {
@@ -22,6 +24,8 @@ bool valid(const RowSpec& s) {
     return true;
 }
 
+const GameOptionRow kEndRow = {kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
+
 }  // namespace
 
 bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t tab_count, const RowSpec* rows,
@@ -35,8 +39,7 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
         why = "tab count out of range";
         return false;
     }
-    std::size_t per_tab[kMaxTabs] = {};
-    std::size_t empty = 0;
+    std::vector<std::size_t> per_tab(tab_count, 0);
     for (std::size_t i = 0; i < count; ++i) {
         if (rows[i].tab >= tab_count || !valid(rows[i])) {
             why = "invalid row";
@@ -47,9 +50,7 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
             return false;
         }
     }
-    for (std::size_t t = 0; t < tab_count; ++t) {
-        empty += per_tab[t] == 0 ? 1 : 0;
-    }
+    const auto empty = static_cast<std::size_t>(std::count(per_tab.begin(), per_tab.end(), std::size_t{0}));
     if (count + empty > kMaxRows) {
         why = "too many rows";
         return false;
@@ -57,13 +58,21 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
 
     header_ = header ? header : "";
     tab_count_ = tab_count;
+    tabs_.assign(tab_count, TabSpec{});
+    tables_.assign(tab_count, {});
+    game_tables_.assign(tab_count, {});
     for (std::size_t t = 0; t < tab_count; ++t) {
         tabs_[t].name = tabs && tabs[t].name ? tabs[t].name : "";
         tabs_[t].help = tabs && tabs[t].help ? tabs[t].help : "";
-        per_tab[t] = 0;
+        tables_[t].reserve((per_tab[t] == 0 ? 1 : per_tab[t]) + 1);
     }
-    std::uint32_t label = kLabelIdFirst;
-    std::uint32_t help = kHelpIdFirst;
+    const std::size_t total = count + empty;
+    specs_.assign(total, RowSpec{});
+    sources_.assign(total, 0);
+    label_ids_.assign(total, 0);
+    help_ids_.assign(total, 0);
+    std::uint32_t label = kLabelFirst;
+    std::uint32_t help = kHelpFirst;
     std::size_t row = 0;
     std::size_t shared = 0;
     for (std::size_t i = 0; i < count; ++i) {
@@ -71,13 +80,13 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
     }
     shared_values_.assign(shared * kMaxSharedValues, GameValueText{});
     std::size_t shared_used = 0;
+    // kMaxRows rows of at most 1 + kMaxValues texts each stay within a text
+    // span: numbers never run out.
+    static_assert(kMaxRows * (1 + kMaxValues) < kTextSpan);
     const auto add = [&](const RowSpec& s, std::size_t tab, std::int32_t source) {
-        // Label then its value texts in file 12; help then one per value in
-        // file 18 (a shared row's values all use the row's help).
+        // Label then its value texts; help then one per value (a shared row's
+        // values all use the row's help).
         const std::uint32_t value_helps = s.shared ? 0 : s.value_count;
-        if (label + 1 + text_count(s) > kTextIdLimit || help + 1 + value_helps > kHelpIdLimit) {
-            return false;
-        }
         specs_[row] = s;
         specs_[row].tab = static_cast<std::uint32_t>(tab);
         sources_[row] = source;
@@ -93,35 +102,25 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
             values = entries;
             ++shared_used;
         }
-        tables_[tab][per_tab[tab]++] = GameOptionRow{
+        tables_[tab].push_back(GameOptionRow{
             kCmfmRowKind, static_cast<std::int32_t>(label), 1, kHelpCategory, static_cast<std::int32_t>(help),
             static_cast<std::int32_t>(kSettingIdFirst + row), static_cast<std::int32_t>(s.value_count), 0,
-            values};
+            values});
         label += 1 + text_count(s);
         help += 1 + value_helps;
         ++row;
-        return true;
     };
     for (std::size_t i = 0; i < count; ++i) {
-        if (!add(rows[i], rows[i].tab, static_cast<std::int32_t>(i))) {
-            why = "text ids exhausted";
-            count_ = 0;
-            return false;
-        }
+        add(rows[i], rows[i].tab, static_cast<std::int32_t>(i));
     }
     for (std::size_t t = 0; t < tab_count; ++t) {
-        if (per_tab[t] == 0 && !add(placeholder, t, kPlaceholder)) {
-            why = "text ids exhausted";
-            count_ = 0;
-            return false;
+        if (tables_[t].empty()) {
+            add(placeholder, t, kPlaceholder);
         }
-        tables_[t][per_tab[t]] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
-        const std::size_t game_rows = per_tab[t] < kGameRowsPerTab ? per_tab[t] : kGameRowsPerTab;
-        for (std::size_t r = 0; r < game_rows; ++r) {
-            game_tables_[t][r] = tables_[t][r];
-        }
-        game_tables_[t][game_rows] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
-        tab_rows_[t] = per_tab[t];
+        const std::size_t game_rows = std::min(tables_[t].size(), kGameRowsPerTab);
+        game_tables_[t].assign(tables_[t].begin(), tables_[t].begin() + static_cast<std::ptrdiff_t>(game_rows));
+        game_tables_[t].push_back(kEndRow);
+        tables_[t].push_back(kEndRow);
     }
     count_ = row;
     label_end_ = label;
@@ -129,33 +128,39 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
     return true;
 }
 
+std::size_t OptionsModel::row_of(const std::vector<std::uint32_t>& firsts, std::uint32_t id) const {
+    // The last row whose first number is at most `id` (numbers ascend with
+    // the rows).
+    const auto end = firsts.begin() + static_cast<std::ptrdiff_t>(count_);
+    const auto next = std::upper_bound(firsts.begin(), end, id);
+    return next == firsts.begin() ? count_ : static_cast<std::size_t>(next - firsts.begin()) - 1;
+}
+
 const char* OptionsModel::label_text(std::uint32_t id) const {
-    if (id < kLabelIdFirst || id >= label_end_) {
+    if (id < kLabelFirst || id >= label_end_) {
         return nullptr;
     }
-    for (std::size_t i = 0; i < count_; ++i) {
-        const std::uint32_t first = label_ids_[i];
-        if (id == first) {
-            return specs_[i].label;
-        }
-        if (id > first && id <= first + text_count(specs_[i])) {
-            return specs_[i].values[id - first - 1];
-        }
+    const std::size_t i = row_of(label_ids_, id);
+    if (i == count_) {
+        return nullptr;
     }
-    return nullptr;
+    const std::uint32_t first = label_ids_[i];
+    if (id == first) {
+        return specs_[i].label;
+    }
+    return id <= first + text_count(specs_[i]) ? specs_[i].values[id - first - 1] : nullptr;
 }
 
 const char* OptionsModel::help_text(std::uint32_t id) const {
-    if (id < kHelpIdFirst || id >= help_end_) {
+    if (id < kHelpFirst || id >= help_end_) {
         return nullptr;
     }
-    for (std::size_t i = 0; i < count_; ++i) {
-        const std::uint32_t first = help_ids_[i];
-        if (id >= first && id <= first + (specs_[i].shared ? 0 : specs_[i].value_count)) {
-            return specs_[i].help;  // the row's help, for every value too
-        }
+    const std::size_t i = row_of(help_ids_, id);
+    if (i == count_) {
+        return nullptr;
     }
-    return nullptr;
+    // The row's help, for every value too.
+    return id <= help_ids_[i] + (specs_[i].shared ? 0 : specs_[i].value_count) ? specs_[i].help : nullptr;
 }
 
 std::int32_t OptionsModel::source(std::uint32_t setting_id) const {

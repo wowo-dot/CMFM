@@ -435,13 +435,13 @@ void keeps_five_tabs_for_the_in_game_page() {
     check(same(model.tab_name(2), "-") && find(model, 4, "Empty") != nullptr, "unused tabs");
 }
 
-void stops_at_24_pages() {
+void shows_1024_pages() {
     static OptionsModel model;
     static Fake f;
     static cmfm_setting_t one[1];
     one[0] = setting(kToggle, CMFM_TYPE_BOOL, "One");
     Menu m;
-    for (int p = 0; p < 26; ++p) {
+    for (int p = 0; p < 1026; ++p) {
         cmfm_page_t page = {};
         page.size = sizeof page;
         page.plugin = "many";
@@ -454,15 +454,17 @@ void stops_at_24_pages() {
         add(m, page);
     }
     std::string why;
-    check(m.build(model, why) && m.used_tabs() == 25 && model.tab_count() == 25, "24 pages shown");
-    // 26 entries: the status list holds 22 and a "More" row for the other 4.
+    check(m.build(model, why) && m.used_tabs() == 1025 && model.tab_count() == 1025, "1024 pages shown");
+    check(model.tab_rows(1024) == 2, "the last page: its setting and its reset row");
+    // 1026 entries: the Overview holds CMFM's row, 1023 and a "More" row.
     const native::GameOptionRow* more = find(model, 0, "More");
-    check(more != nullptr && same(value_text(model, more, 0), "4"), "the status list says 4 more");
+    check(more != nullptr && same(value_text(model, more, 0), "3"), "the Overview says 3 more");
+    check(model.tab_rows(0) == native::kMaxRowsPerTab, "the Overview's rows");
 }
 
-void drops_pages_that_do_not_fit() {
-    // Four pages of 24 choices of 32 names each overflow the text ids
-    // (number rows no longer would: their values share one text).
+void fits_big_pages() {
+    // Four pages of 24 choices of 32 names each overflowed the old text
+    // numbers (900 in file 12); they fit now.
     static OptionsModel model;
     static Fake f;
     static const char* const names[CMFM_MAX_CHOICES] = {
@@ -489,13 +491,14 @@ void drops_pages_that_do_not_fit() {
         add(m, page);
     }
     std::string why;
-    check(m.build(model, why) && m.used_tabs() == 2, "only the first big page fits");
+    check(m.build(model, why) && m.used_tabs() == 5, "every big page shown");
     check(model.tab_count() == 5, "five tabs for the in-game page");
     std::size_t not_shown = 0;
     for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
         not_shown += same(value_text(model, r, 0), "Not shown");
     }
-    check(not_shown == 3, "the others are listed as not shown");
+    check(not_shown == 0, "none listed as not shown");
+    check(same(value_text(model, &model.table(4)[23], 31), "c31"), "the last page's last name");
 }
 
 void shows_sections() {
@@ -918,25 +921,26 @@ void holds_long_pages() {
     static Fake f;
     static cmfm_setting_t s[CMFM_MAX_SETTINGS + 1];
     for (std::uint32_t i = 0; i <= CMFM_MAX_SETTINGS; ++i) {
-        s[i] = setting(1000 + i, i % 16 == 0 ? CMFM_TYPE_SECTION : CMFM_TYPE_BOOL, i == 63 ? "Last" : "Row");
+        s[i] = setting(1000 + i, i % 16 == 0 ? CMFM_TYPE_SECTION : CMFM_TYPE_BOOL,
+                       i == CMFM_MAX_SETTINGS - 1 ? "Last" : "Row");
     }
     cmfm_page_t page = demo_page(&f, "Long").page;
     page.get = fake_get_any;
     page.set = fake_set_any;
     page.settings = s;
     page.setting_count = CMFM_MAX_SETTINGS + 1;
-    check(refused(page, "needs 1 to 64 settings"), "65 settings refused");
+    check(refused(page, "needs 1 to 1024 settings"), "1025 settings refused");
     page.setting_count = CMFM_MAX_SETTINGS;
     Menu m;
-    check(add(m, page), "a page of 64 settings");
+    check(add(m, page), "a page of 1024 settings");
     std::string why;
     check(m.build(model, why) && model.tab_rows(1) == CMFM_MAX_SETTINGS + 1, "laid out with its reset row");
     const native::GameOptionRow* last = &model.table(1)[CMFM_MAX_SETTINGS - 1];
     const native::GameOptionRow* reset = &model.table(1)[CMFM_MAX_SETTINGS];
     check(same(model.label_text(static_cast<std::uint32_t>(last->label_id)), "Last") && m.is_plain_button(id(reset)),
-          "the 64th setting, then the reset row");
+          "the 1024th setting, then the reset row");
     m.refresh();
-    check(m.set(id(last), 1) && f.values[0].i == 1, "the 64th setting set through the page");
+    check(m.set(id(last), 1) && f.values[0].i == 1, "the 1024th setting set through the page");
     check(model.game_table(1)[native::kGameRowsPerTab].kind == native::kRowTableEnd,
           "the game's own view gets the first 24 rows");
 }
@@ -1077,8 +1081,8 @@ int main() {
     refreshes_texts_and_sends_events();
     lists_every_page_on_the_status_tab();
     keeps_five_tabs_for_the_in_game_page();
-    stops_at_24_pages();
-    drops_pages_that_do_not_fit();
+    shows_1024_pages();
+    fits_big_pages();
     shows_sections();
     tracks_restart_changes();
     reads_the_start_value_before_a_first_change();

@@ -1130,6 +1130,46 @@ each fill, on open and when a restart state changes.
   answered with the row's current help line, since the help bar redraws only
   when its id changes (as for the mod list's 9996 / 9997).
 
+## No caps (static, 2026-10-12; run `caps-1`)
+
+Every shared limit CMFM had (200 rows over all mods, about 900 label and
+value texts, 24 pages, 24 then 64 settings per page) was CMFM's own. What
+the game allows:
+
+- **Text numbers.** Row labels and value names go through `sub_14044A280(12,
+  id)`: `id > 10000` (unsigned) -> `rGUIMessage::getMessage(file 23, id -
+  10000)`, else file 12. Help lines go through the help bar
+  (`sub_141AE0E60` stores id and file; `sub_141D91740` draws): `id <= 10000`
+  (signed) -> `GetGameMessage(file, id)`, else `getMessage(file 23, id -
+  10000)`; `GetGameMessage` itself does the same. `getMessage` checks the
+  number against the file's count (+0xD8), but CMFM's hook answers first.
+  So CMFM's row texts live in file 23 far above the game's own: labels and
+  value names from row number 10000 + 0x10000000, help lines from 10000 +
+  0x20000000 (2^28 numbers each, within a signed int). Every other reader
+  of a row's text numbers seen (`sub_141E81FF0`, `sub_141E8BD70` value texts;
+  `sub_141E8EA70`, `sub_141E80310`, `sub_141E808A0` help) uses the same two
+  paths. The row filler compares label numbers with a few fixed ones (40-45,
+  314, 316-321, 394, 396, 10135-10136), none in CMFM's range.
+- **Setting ids.** The functions that take a row's id: the getter
+  `sub_140EEA350` (kind 1: `sUserData + 256 + id`, unchecked) and the setter
+  `sub_140EEB450` (hooked by CMFM; every caller in the exe goes through them),
+  the slider type `sub_140EEA2D0`, enabled `sub_140EEAE80` (hooked),
+  visible `OptionRow_isVisible`, and the row looks (ids 3-5, 6, 29, 33, 34,
+  below 32): all compare with fixed numbers. So kind-1 ids from 100 can run
+  far (CMFM: 100 to 100 + 2^20).
+- **Pages.** CMFM's own layout lists mods in its own scrolling list; the
+  game's five category rows are not used for them. Only the fallback without
+  CMFM's layout scrolls the game's category list (any length).
+- **Rows per page.** The game's tab object holds 24 row objects, but the
+  panel window gives the game only the 14 rows it shows. The views that show
+  a tab whole (the game's Options page fallback, CMFM's page without its own
+  layout) get the first 24 rows (`OptionsModel::game_table`).
+
+What remains: CMFM's limits against mistakes (1024 settings per page, 1024
+pages, 2^20 rows in all), and two per-setting limits of the game's parts:
+CHOICE names (32; the pick list shows 14 rows) and number values (101, the
+slider's 0-100 positions).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,

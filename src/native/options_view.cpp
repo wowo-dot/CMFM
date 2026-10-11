@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
+#include <vector>
 
 namespace cmfm::native {
 namespace {
@@ -59,8 +60,9 @@ std::uintptr_t tab_slot(std::size_t tab) {
 // steps). The last 0-100 value the game set is kept with the value it meant,
 // so the getter answers the game's own number while the value stands and the
 // game does not set it again every frame. -1: none.
-std::int16_t g_slider_raw[kSettingIdLimit - kSettingIdFirst];
-std::uint8_t g_slider_meant[kSettingIdLimit - kSettingIdFirst];
+// Per model row (setting id - kSettingIdFirst), sized when a page opens.
+std::vector<std::int16_t> g_slider_raw;
+std::vector<std::uint8_t> g_slider_meant;
 
 std::uint32_t slider_index(std::int32_t raw, std::uint32_t steps) {
     raw = raw < 0 ? 0 : raw > 100 ? 100 : raw;
@@ -74,9 +76,10 @@ std::int32_t slider_raw(std::uint32_t index, std::uint32_t steps) {
 std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
     if (is_cmfm_row(kind, id)) {
         const std::uint64_t index = menu::service_get(id);
+        const std::size_t row = id - kSettingIdFirst;
         if (const std::uint32_t steps = menu::service_slider_steps(id)) {
-            const std::int16_t raw = g_slider_raw[id - kSettingIdFirst];
-            return raw >= 0 && g_slider_meant[id - kSettingIdFirst] == index
+            const std::int16_t raw = row < g_slider_raw.size() ? g_slider_raw[row] : std::int16_t{-1};
+            return raw >= 0 && g_slider_meant[row] == index
                        ? static_cast<std::uint64_t>(raw)
                        : static_cast<std::uint64_t>(slider_raw(static_cast<std::uint32_t>(index), steps));
         }
@@ -96,8 +99,11 @@ std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value
             if (!mods_page_slider_index(id, steps, &index)) {
                 index = slider_index(value, steps);
             }
-            g_slider_raw[id - kSettingIdFirst] = static_cast<std::int16_t>(value < 0 ? 0 : value > 100 ? 100 : value);
-            g_slider_meant[id - kSettingIdFirst] = static_cast<std::uint8_t>(index);
+            const std::size_t row = id - kSettingIdFirst;
+            if (row < g_slider_raw.size()) {
+                g_slider_raw[row] = static_cast<std::int16_t>(value < 0 ? 0 : value > 100 ? 100 : value);
+                g_slider_meant[row] = static_cast<std::uint8_t>(index);
+            }
             if (index != menu::service_get(id)) {
                 menu::service_set(id, static_cast<std::int32_t>(index));
             }
@@ -237,9 +243,10 @@ bool options_view_check(const Env& env, std::string& why) {
 bool options_view_ready() { return g_ready; }
 
 void options_view_sliders(bool on) {
-    for (std::int16_t& raw : g_slider_raw) {
-        raw = -1;
-    }
+    // A page opens (the model is built) or closes: no 0-100 values kept.
+    const std::size_t rows = menu::service_texts_on() ? menu::service_model().row_count() : 0;
+    g_slider_raw.assign(rows, -1);
+    g_slider_meant.assign(rows, 0);
     menu::service_set_sliders(on);
 }
 
@@ -298,11 +305,11 @@ const char* options_view_text(void* message_file_ptr, std::uint32_t id) {
         return nullptr;
     }
     const OptionsModel& model = menu::service_model();
-    if (id >= kLabelIdFirst && id < kTextIdLimit && message_file_ptr == message_file(game::kRvaMessages12)) {
-        return model.label_text(id);
-    }
-    if (id >= kHelpIdFirst && id < kTextIdLimit && message_file_ptr == message_file(game::kRvaMessages18)) {
-        return model.help_text(id);
+    // Row texts: file 23 numbers (the game took kFile23Offset off).
+    if (id >= kLabelFirst - kFile23Offset && id < kHelpFirst + kTextSpan - kFile23Offset &&
+        message_file_ptr == message_file(game::kRvaMessages23)) {
+        const std::uint32_t number = id + kFile23Offset;
+        return number < kHelpFirst ? model.label_text(number) : model.help_text(number);
     }
     if (id <= kTabCount && g_view.load(std::memory_order_relaxed) &&
         message_file_ptr == message_file(game::kRvaMessages12)) {

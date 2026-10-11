@@ -38,15 +38,15 @@
  *
  * What a page looks like: the Mods page lists "Overview" (CMFM's version and
  * every plugin's state) and then one entry per plugin page, by its title, in
- * the order pages were added (24 at most; further pages are listed as not
- * shown on the Overview). The highlighted entry's settings show next to the
+ * the order pages were added (1024 at most since 1.2, 24 before; further
+ * pages are listed as not shown on the Overview). The highlighted entry's settings show next to the
  * list, one row each: the label on the left, the value on the right, the
  * help line at the bottom. SECTION rows group the rows below them. Above the
  * rows, the page's header: its title, its version (since 1.1) and "Restart
  * needed" while one of its changes waits for a game restart. A page with
  * more rows than fit (14) scrolls; keep the important settings near the top.
  * Since 1.2 CMFM ends every page with a "Reset to defaults" row of its own
- * (see CMFM_PAGE_NO_RESET), and a page holds up to 64 settings.
+ * (see CMFM_PAGE_NO_RESET), and a page holds up to 1024 settings.
  */
 #ifndef CMFM_H
 #define CMFM_H
@@ -136,10 +136,11 @@ typedef uint32_t cmfm_flags_t;
 
 /* Limits of CMFM's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */
-/* Per page, sections included: 64 since 1.2 (24 before; an older CMFM
- * refuses a longer page with the reason). The game's own Options page, CMFM's
+/* Per page, sections included: 1024 since 1.2 (24 before; an older CMFM
+ * refuses a longer page with the reason). A limit against mistakes, not of
+ * the game: the Mods page scrolls. The game's own Options page, CMFM's
  * fallback when its Mods page cannot open, shows a page's first 24 rows. */
-#define CMFM_MAX_SETTINGS 64u
+#define CMFM_MAX_SETTINGS 1024u
 #define CMFM_MAX_CHOICES 32u  /* CHOICE names (and INT/FLOAT values in 1.0) */
 #define CMFM_MAX_STEPS 101u   /* since 1.1: INT/FLOAT values from min to max (the slider's 0-100) */
 #define CMFM_MAX_TEXT 128u    /* bytes CMFM offers get_text, including the NUL */

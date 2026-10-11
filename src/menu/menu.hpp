@@ -235,8 +235,8 @@ private:
     std::size_t shown_ = 0;
     std::vector<std::string> not_shown_why_;  // per page; empty if shown
     std::size_t tab_count_ = native::kTabCount;
-    std::string tab_names_[native::kMaxTabs];
-    std::string tab_helps_[native::kMaxTabs];
+    std::vector<std::string> tab_names_;
+    std::vector<std::string> tab_helps_;
     std::string header_;  // the last tab_header
     std::string value_text_;  // the last value_text
     std::uint32_t key_waiting_ = 0;  // the KEY row waiting for a key (0: none)

@@ -38,7 +38,7 @@ if (menu == NULL) {
 - **Version:** ask for the version whose features you use: 1.1 is the
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
   header (rows that hide, live lines, key bindings, CMFM's reset row,
-  pages of up to 64 settings). Within a major
+  pages of up to 1024 settings, no shared limits between mods). Within a major
   version CMFM only adds: later CMFMs keep accepting your pages, and an
   older CMFM returns NULL when you ask for more than it has.
 
@@ -130,15 +130,15 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 
 | What | Limit |
 |---|---|
-| settings per page | 1 to 64 (headings count; 24 before 1.2) |
+| settings per page | 1 to 1024 (headings count; 24 before 1.2) |
 | plugin name / title / version | 64 / 24 / 24 bytes |
 | label / help | 64 / 200 bytes |
 | CHOICE names | 1 to 32, each 32 bytes at most |
 | INT/FLOAT values | (max - min) / step + 1, at most 101; INT needs whole min, max, step |
 | unit | 8 bytes |
 | BUTTON text / question | 32 / 200 bytes |
-| pages shown | 24 (more are listed on the Overview as not shown) |
-| all pages together | 200 rows, and the game's text ids: about 900 labels and value names (a BOOL uses 3, a CHOICE 1 plus its names, a number 2). Pages that no longer fit are listed on the Overview as not shown |
+| pages shown | 1024 (more are listed on the Overview as not shown; 24 before 1.2) |
+| all pages together | no shared limit since 1.2 (one mod's page never pushes out another's) |
 
 A page needs at least one setting besides its headings; ids must be unique
 on the page (ids from `CMFM_RESERVED_IDS`, 0xFFFFFF00, are CMFM's); a
