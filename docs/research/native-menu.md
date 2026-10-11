@@ -493,6 +493,34 @@ It keeps only **kind 1** rows and kind 2 rows whose id byte is 0-1, 4-7 or
 and unknown kinds are dropped. It resizes the list with `setRowCount` and
 fills rows with 0x141E8D890; values go through the same getter and setter.
 
+**Who acts on the title menu (run `20261011-title-opener`, x64dbg hardware
+breakpoint, user's OK):** the selected callback sets the title's state to 8
+for every row but Quit; its state machine (`uGUITitle::updateState`
+0x141F020F0, slot 82) then closes the title (`uMhGUI::requestClose`
+0x141FB7CC0: state |= 0xA0). The **title scene** (`TitleScene::updateMenu`
+0x140261C50; title unit at scene+216, uGUIOption unit at scene+312) waits
+in its state 1 for the title to close, copies the item (`unit+10488`, read
+at 0x140261F09) to scene+120 and goes to state 12, which switches on the
+item: 0 start game, 1 (scene transition 7), 2 (state 2), **3 Options ->
+sub-flow scene+116 = 9**, 4 -> 25, 5 -> 23, 6 -> 22. On PC (`title+11720`
+set) the item equals the row index. `TitleScene::updateFlows` (0x14025E0D0)
+runs flow 9: step 0 `uMhGUI::requestOpen(uGUIOption unit, 0)` (0x141FB7CF0:
+state |= 0x10, parent at +8448), step 1 wait for closing/closed
+(state & 0x22), step 2 `0x141E8BFE0(unit)` then flow 12.
+
+**Design for the title (not built):**
+- *Entry:* an 8th row (`DuplicateNum` 8). Hooks on the cursor and selected
+  callbacks translate the row: rows 0-3 unchanged, row 4 = Mods (acts as
+  row 3, Options, after entering the title view), rows 5-7 -> 4-6 (Quit's
+  check against `+12332` = 6 then still matches). Rows 4-7 relabelled after
+  `play()`; Mods' help line set through the text hook.
+- *Page:* entering the title view swaps `TitleOptionTabTables[0..4]`, makes
+  the text hook answer the header and category labels, re-runs
+  `uGUIOption::buildCategories` (0x141E8D5A0, `(unit+10488 object, unit)`)
+  and trims the category list to 5 rows; the game's own flow 9 then opens
+  the page. Leaving it (the page's close, or flow 9 step 2) restores the
+  tables and rebuilds again.
+
 **Title Options layout (run `20261011-title-inspect`, read-only):** a
 category list on the left (`btnlist_menu`): Interface, Display, Audio,
 Language, Privacy, Key Config, Default; the highlighted category's rows on
