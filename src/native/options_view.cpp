@@ -35,6 +35,9 @@ const OptionSpec kTestRows[] = {
     {"Test toggle", "Prototype row: switches between Off and On.", kOnOff, 2, 0, 0},
     {"Test choice", "Prototype row: picks one of three values.", kChoice, 3, 0, 0},
 };
+// Every tab needs a row (the page reads the row under the cursor unchecked).
+const char* const kDash[] = {"-"};
+const OptionSpec kFreeTab = {"Free tab", "No mod settings on this tab yet.", kDash, 1, 0, 0};
 
 // Short lines from the game thread on user actions only (no allocation).
 void logf(al_log_level_t level, const char* format, ...) {
@@ -100,7 +103,7 @@ bool register_hook(const char* name, const char* pattern, void* detour, void** n
 bool options_view_register(const Env& env, std::string& why) {
     g_env = env;
     const char* fail = nullptr;
-    if (!g_model.build("Mods", kTabNames, kTestRows, sizeof kTestRows / sizeof kTestRows[0], fail)) {
+    if (!g_model.build("Mods", kTabNames, kTestRows, sizeof kTestRows / sizeof kTestRows[0], kFreeTab, fail)) {
         why = std::string("test rows: ") + fail;
         return false;
     }

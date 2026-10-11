@@ -47,8 +47,11 @@ struct OptionSpec {
 class OptionsModel {
 public:
     // Builds the model; false (with `why`) if a spec is invalid or ids run out.
+    // A tab without rows gets `placeholder` (its `tab` is ignored): the game's
+    // Options page reads the row under the cursor without a null check, so a
+    // tab must never be empty (run 20261011-native-m2 crashed on one).
     bool build(const char* header, const char* const* tab_names, const OptionSpec* specs, std::size_t count,
-               const char*& why);
+               const OptionSpec& placeholder, const char*& why);
 
     // The game-format table for a tab, ended by a row with kind -1.
     const GameOptionRow* table(std::size_t tab) const { return tables_[tab]; }
