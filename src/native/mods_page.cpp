@@ -25,6 +25,10 @@ using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t ind
 using BuildCategoriesFn = void (*)(void* categories, void* unit);
 using LockChannelFn = std::uint64_t (*)(void* input, std::int32_t channel, std::uint32_t player);
 using LoadResourceFn = void* (*)(void* resources, const void* resource_class, const char* path, std::uint32_t flags);
+using MousePositionFn = void* (*)(void* gui, float* out, void* list);
+using MouseHitFn = std::uint8_t (*)(void* gui, void* instance, const float* position, std::int32_t* index);
+using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
+using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -35,6 +39,14 @@ void* const* g_input_manager = nullptr;
 void* const* g_area_manager = nullptr;
 LockChannelFn g_lock_channel = nullptr;
 LoadResourceFn g_load_resource = nullptr;
+// The page's mouse helpers (split mode); without them the mod list follows
+// only the keys and the wheel.
+MousePositionFn g_mouse_position = nullptr;
+MouseHitFn g_mouse_hit = nullptr;
+MouseFlagFn g_mouse_click = nullptr;
+MouseFlagFn g_mouse_moved = nullptr;
+bool g_mouse_off = false;       // a focus function was not where expected (logged once)
+bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
@@ -335,10 +347,97 @@ void log_split_state(void* unit) {
     }
 }
 
+// Split mode: the page enters the panel under the category cursor, and only
+// the split panel is shown, so the cursor stays there (a Confirm on any other
+// row would enter a hidden panel and keep the input there; run
+// 20261011-split-3). The layout's start row covers the list's opening; this
+// catches anything else, visibly.
+void keep_panel_cursor(void* unit) {
+    void* categories = field<void*>(unit, game::kOptCategoryList);
+    if (categories == nullptr || field<std::int32_t>(unit, game::kOptFocus) != 0) {
+        return;
+    }
+    const std::uint32_t cursor = field<std::uint32_t>(categories, game::kListCursor);
+    if (cursor == game::kSplitPanel) {
+        return;
+    }
+    if (!g_cursor_warned) {
+        g_cursor_warned = true;
+        logf(AL_LOG_WARNING, "Mods page: the category cursor moved to row %u; back on the panel", cursor);
+    }
+    if (cursor < field<std::uint32_t>(categories, game::kListRowCount)) {
+        gui_set_cursor(categories, static_cast<std::uint32_t>(game::kSplitPanel));
+    } else {
+        field<std::uint32_t>(categories, game::kListCursor) = static_cast<std::uint32_t>(game::kSplitPanel);
+    }
+    show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
+                         static_cast<std::int32_t>(game::kSplitPanel));
+}
+
+// One of the page's own focus changes, if the object's vtable slot holds it.
+PanelFocusFn focus_function(void* object, std::size_t slot, std::uintptr_t rva, const char* what) {
+    void* const* vtable = field<void* const*>(object, 0);
+    void* fn = vtable != nullptr ? vtable[slot] : nullptr;
+    if (reinterpret_cast<std::uintptr_t>(fn) != g_env.base + rva) {
+        g_mouse_off = true;
+        logf(AL_LOG_WARNING, "Mods page: %s is not where expected; the mouse no longer moves the focus", what);
+        return nullptr;
+    }
+    return reinterpret_cast<PanelFocusFn>(fn);
+}
+
+// Split mode, the mouse with both sides live, as on the game's page: over the
+// mod list it highlights the entry under the pointer (and takes the focus
+// back from the panel, as Back does); moving onto the panel gives it the
+// focus (the game's page waits for a click there; the page's update still
+// does that too). Only on mouse activity, and only while the page has the
+// input (the helpers answer nothing otherwise).
+void track_mouse(void* unit) {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    if (g_mouse_moved == nullptr || g_mouse_off || list == nullptr || (focus != 0 && focus != 1)) {
+        return;
+    }
+    const bool moved = g_mouse_moved(unit, nullptr) != 0;
+    if (!moved && g_mouse_click(unit, nullptr) == 0) {
+        return;
+    }
+    alignas(16) float position[4] = {};
+    g_mouse_position(unit, position, nullptr);
+    const std::uint32_t rows = field<std::uint32_t>(list, game::kListRowCount);
+    for (std::uint32_t r = 0; r < rows; ++r) {
+        void* row = list_row(list, r);
+        if (row == nullptr || g_mouse_hit(unit, row, position, nullptr) == 0) {
+            continue;
+        }
+        if (focus == 1) {
+            char* tab = tab_object(unit, game::kSplitPanel);
+            if (PanelFocusFn leave = focus_function(tab, game::kLeavePanelSlot, game::kRvaLeavePanel, "a panel's Back")) {
+                leave(tab, 0);
+            }
+        }
+        select_tab(unit, g_mod_top + r);
+        return;
+    }
+    void* categories = field<void*>(unit, game::kOptCategoryList);
+    void* window = field<void*>(tab_object(unit, game::kSplitPanel), game::kTabWindow);
+    if (focus != 0 || !moved || categories == nullptr || window == nullptr ||
+        field<std::uint32_t>(categories, game::kListCursor) != game::kSplitPanel ||
+        g_mouse_hit(unit, window, position, nullptr) == 0) {
+        return;
+    }
+    void* owner = static_cast<char*>(unit) + game::kOptCategories;
+    if (PanelFocusFn enter = focus_function(owner, game::kEnterPanelSlot, game::kRvaEnterPanel, "the category Confirm")) {
+        enter(owner, static_cast<std::int32_t>(game::kSplitPanel));
+    }
+}
+
 // CMFM's page, vtable slot 81: every frame while it is open (state 2; the
 // menu's thread).
 std::uint64_t page_update(void* unit) {
-    if (split_view()) {
+    if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
+        keep_panel_cursor(unit);
+        track_mouse(unit);
         log_split_state(unit);
     }
     if (g_hold_player.load(std::memory_order_relaxed)) {
@@ -457,6 +556,8 @@ void show_mod_list() {
     const std::size_t cursor = g_selected.load(std::memory_order_relaxed) - g_mod_top;
     if (cursor < rows) {
         gui_set_cursor(list, static_cast<std::uint32_t>(cursor));
+        // Where the list's opening animation leaves the cursor.
+        field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(cursor);
     }
 }
 
@@ -554,14 +655,18 @@ bool enter_view(void* unit) {
     }
     if (mod_list != nullptr) {
         // The category list keeps its cursor on the audio panel (set after the
-        // game's open handler); Up/Down on it move the mod list instead.
+        // game's open handler, and where the list's opening animation leaves
+        // it); Up/Down on it move the mod list instead.
+        field<std::int32_t>(categories, game::kListStartRow) = static_cast<std::int32_t>(game::kSplitPanel);
+        g_cursor_warned = false;
         g_wheel.store(0, std::memory_order_relaxed);
         g_wheel_rest = 0;
         g_view_unit.store(unit, std::memory_order_release);
         g_window_list.store(categories, std::memory_order_release);
         g_mod_list.store(mod_list, std::memory_order_release);
-        // CMFM drives the mod list; the game never set it up, so it must not
-        // take input (the page's active list gets it).
+        // CMFM drives the mod list (the keys through the category list, the
+        // mouse in track_mouse); the game never set it up, so it must not take
+        // input itself.
         field<std::uint8_t>(mod_list, game::kListInactive) = 1;
         const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
         if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
@@ -662,6 +767,22 @@ bool find_input_lock(const Env& env, std::string& why) {
     return true;
 }
 
+// The page's mouse helpers, from the calls in uGUIOption's click check.
+bool find_mouse(const Env& env, std::string& why) {
+    void* match = nullptr;
+    if (!find_game_function(env, "uGUIOption click check", game::kOptionClickPattern, &match, why) ||
+        !find_game_function(env, "mouse moved", game::kMouseMovedPattern, reinterpret_cast<void**>(&g_mouse_moved),
+                            why)) {
+        g_mouse_moved = nullptr;
+        return false;
+    }
+    const auto* code = static_cast<const std::uint8_t*>(match);
+    g_mouse_position = reinterpret_cast<MousePositionFn>(rip_target(code, game::kOptionClickPosCall + 5));
+    g_mouse_hit = reinterpret_cast<MouseHitFn>(rip_target(code, game::kOptionClickHitCall + 5));
+    g_mouse_click = reinterpret_cast<MouseFlagFn>(rip_target(code, game::kOptionClickPressCall + 5));
+    return true;
+}
+
 }  // namespace
 
 bool mods_page_register(const Env& env, std::string& why) {
@@ -702,6 +823,10 @@ bool mods_page_register(const Env& env, std::string& why) {
         }
     }
     logf(AL_LOG_INFO, "Mods page: hooks registered (Options show category; list cursor moves)");
+    std::string mouse_why;
+    if (!find_mouse(env, mouse_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
+    }
     // The wheel scrolls a long category list; without al.input it does not.
     if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {
         logf(AL_LOG_WARNING, "Mods page: no window messages from al.input; the mouse wheel will not scroll the list");

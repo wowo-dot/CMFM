@@ -156,7 +156,7 @@ inline constexpr char kListMovePattern[] = "48 89 5C 24 18 57 48 83 EC 30 48 63 
 // Not hooked (confirms slot 81).
 inline constexpr char kTitleOptionsUpdatePattern[] =
     "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 30 48 8B F9";
-inline constexpr std::size_t kOptFocus = 0x28F0;  // 0: the category list
+inline constexpr std::size_t kOptFocus = 0x28F0;  // 0: the category list, 1: the panel under its cursor
 // uGUIOption::initCategory(tab object, unit, tab, name, title) at RVA
 // 0x1E8DFE0: finds the tab's layout objects and fills its rows from
 // TitleOptionTabTables[tab] (buildCategories calls it per category).
@@ -206,6 +206,9 @@ inline constexpr std::size_t kListDuplicateNum = 0x298;
 inline constexpr std::size_t kListCursor = 0x274;
 inline constexpr std::size_t kListWrap = 656;  // byte: Down on the last row goes to row 0
 inline constexpr std::size_t kListInactive = 371;  // byte: 1 = takes no input (tab setActive writes it)
+// The row the cursor goes to when the list's opening animation ends (the
+// list's update, RVA 0xB755C0, state 1: the first enabled row from here).
+inline constexpr std::size_t kListStartRow = 560;
 // List row (cGUIInstance) fields.
 inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
 inline constexpr std::size_t kInstFlags = 0x628;
@@ -292,6 +295,32 @@ inline constexpr char kGuiResourceClassName[] = "rGUI";
 // rows carry a slider part).
 inline constexpr char kModListName[] = "btnlist_camera";
 inline constexpr std::size_t kSplitPanel = 2;
+
+// The mouse on uGUIOption (docs/research/native-menu.md, "Split mode and the
+// mouse"). sub_141E8A510 at RVA 0x1E8A510 asks whether a part of the page was
+// clicked; it calls the three helpers CMFM uses:
+//   mouse position(gui, float out[4], list) at RVA 0x1FB5D30 (call at +31),
+//   hit test(gui, instance, position, int* out) at RVA 0x1FB6190 (call at +53),
+//   left click this frame(gui, list) at RVA 0x1FB6560 (call at +82).
+// They answer only while the page has the input (gui +8897/+8898).
+inline constexpr char kOptionClickPattern[] =
+    "40 53 48 83 EC 30 48 83 B9 A0 00 00 00 00 48 8B D9 74 4E 48 8B 49 08 48 8D 54 24 20 45 33 C0 E8 ?? ?? ?? ?? 48 8B 93 A0 00 00 00 4C 8B C0 48 8B 4B 08 45 33 C9 E8 ?? ?? ?? ?? 3C 01 75 23 48 8B 05 ?? ?? ?? ?? 33 D2 C6 80 85 47 01 00 01 48 8B 4B 08 E8 ?? ?? ?? ??";
+inline constexpr std::size_t kOptionClickPosCall = 31;    // E8 rel32
+inline constexpr std::size_t kOptionClickHitCall = 53;    // E8 rel32
+inline constexpr std::size_t kOptionClickPressCall = 82;  // E8 rel32
+// The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
+inline constexpr char kMouseMovedPattern[] =
+    "48 85 D2 74 09 80 BA 72 01 00 00 00 74 0D 8B 81 9C 22 00 00 C1 E8 0A A8 01 75 1E 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 0C 48 8B 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? 32 C0";
+// The page's own focus changes, called through the objects' vtables after
+// checking the slot: the category list's Confirm, slot 8 of the categories
+// object (RVA 0x1E89C40, enters the panel under the category cursor; the
+// page's update calls it for a click on the panel), and a panel list's Back,
+// slot 9 of a tab object (RVA 0x1E89AB0, focus back to the category list).
+inline constexpr std::uintptr_t kRvaEnterPanel = 0x1E89C40;
+inline constexpr std::size_t kEnterPanelSlot = 8;
+inline constexpr std::uintptr_t kRvaLeavePanel = 0x1E89AB0;
+inline constexpr std::size_t kLeavePanelSlot = 9;
+inline constexpr std::size_t kTabWindow = 48;  // a_window_<tab>: the panel, as the page's update hit-tests it
 inline constexpr char kOptionPageClassName[] = "uGUIOption";
 inline constexpr std::uint32_t kOptionPageClassId = 0x165BDEB6;  // (~crc32(name)) & 0x7FFFFFFF
 // MtDTI as MtDti::ctor fills it; its vtable has 4 slots (1: new object).
