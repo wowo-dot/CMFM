@@ -258,6 +258,53 @@ and copies the visible rows of the current page (10 per page) into
   (12, setting 14). The same table swap can hide or mark them while the mod
   owns AA.
 
+## The Start menu's System tab (confirmed, static; decision 8)
+
+- **Where the entries come from.** Two tab lists in `.rdata` (read-only;
+  section flags R--): `StartMenu_TabList_cmfm` 0x143481870 and
+  `StartMenu_TabList_InQuest_cmfm` 0x143481820, each 5 x `{u32 tab label id
+  (category 11), pad, item table*}`, pointing at the same item tables in
+  `.data`. The System tab's table is `StartMenu_SystemItems_cmfm`
+  0x143FC0E40: items 71 Options, 10 View Mode, 72 Steam Store, 73 Save,
+  74 Return to Title, 75 Quit Game, then the 76 end marker. It cannot grow
+  in place: the View Tutorials submenu table (0x143FC0EB0, referenced by
+  address from code) follows it.
+- **Who reads the tab lists:** `uGUIStartMenu::hoverCategory` (0x141ECAAD0,
+  fills a tab: pointers to the visible items go into 11 slots at
+  `menu+10696`, padded with the end marker, then rows are shown, labelled
+  and greyed out), `uGUIStartMenu::setupTabs` (0x141ECCE30, tab icons and
+  names when the menu opens) and `uGUIStartMenu::updateFrame` (0x141ED0810,
+  every frame while open).
+- **Confirm path:** list callback -> `uGUIStartMenu::pressButton(menu,
+  slot)` (0x141ECC8B0): if the menu is active and `isItemAvailable(id)`,
+  store the slot (`+10588`) and call `onItemAction(menu, id)`.
+- **An unknown item id (77, say)** is visible (`isOptionVisible` default
+  true, in and out of quests), available (`isItemAvailable` default true),
+  has no badge (`isItemVisible` default false) and is labelled from category
+  11 by its label id (`setItemLabel` 0x141ED1BF0; ids 6, 7, 8, 43, 54, 74,
+  75 use category 23, 72 category 20, 56 category 4). But **the action
+  switch's default opens the Item Pouch** (`sMhGUI::open_uGUIItemPouch`),
+  so our id must be intercepted before `onItemAction` runs. 76 is the end
+  marker and must not be used.
+- **The help line** is written by 0x141ED2300 through the help-text
+  function 0x141AE0E60 (not traced yet).
+
+**What a System-tab "Mods" entry needs (design, not tested):**
+1. The entry: a System table with `{77, label, help, 0}` after Options. The
+   cleanest way is to point the System slot of both tab lists (2 qwords in
+   `.rdata` at 0x143481868 and 0x1434818B8) at our own table; all three
+   readers then agree. That is a write to read-only game data, which AL has
+   no service for yet.
+2. Its texts: a label and help id whose strings are ours (a hook on
+   `rGUIMessage::getMessage` for those ids, or another way to add strings).
+3. Its action: a hook on `pressButton` or `onItemAction` that handles id 77
+   (opens the CMFM page) and passes every other id on.
+4. The CMFM page itself (registry, later).
+
+Whether the game's code check covers `.rdata` or the hooked functions is
+not known (and is not something we reverse); a long play session with the
+change in place will show whether it is stable.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
