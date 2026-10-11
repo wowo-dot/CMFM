@@ -69,6 +69,9 @@ typedef uint32_t cmfm_result_t;
 /* Setting types. */
 typedef uint32_t cmfm_type_t;
 #define CMFM_TYPE_BOOL 1u   /* Off / On: value.i is 0 or 1 */
+/* On the Mods page a CHOICE of up to 5 values cycles with the arrows; one of
+ * 6 to 14 values opens the game's pick list on Confirm (CMFM_FLAG_LIST and
+ * CMFM_FLAG_ARROWS force either; more than 14 always uses the arrows). */
 #define CMFM_TYPE_CHOICE 2u /* one of `choices`: value.i is its index */
 /* INT and FLOAT with 3 or more values show as the game's slider on the Mods
  * page (the value next to the bar), with arrows elsewhere. */
@@ -87,6 +90,10 @@ typedef uint32_t cmfm_flags_t;
  * marks the row, the page's title and the Overview until the game restarts
  * (or the value goes back). */
 #define CMFM_FLAG_RESTART 0x1u
+/* Since 1.1, CHOICE only, not both: the pick list even for 5 values or fewer
+ * (up to 14), or the arrows even for more than 5. */
+#define CMFM_FLAG_LIST 0x2u
+#define CMFM_FLAG_ARROWS 0x4u
 
 /* Limits of CMFM 1.0's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */

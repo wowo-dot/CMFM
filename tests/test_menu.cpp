@@ -542,6 +542,58 @@ void picks_slider_rows() {
     check(m.set(id(find(model, 1, "Percent")), 3) && m.value_revision() != v0, "a set changes the value revision");
 }
 
+void picks_list_rows() {
+    static OptionsModel model;
+    static const char* const kSix[] = {"A", "B", "C", "D", "E", "F"};
+    static const char* const kMany[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"};
+    Fake f;
+    cmfm_setting_t s[5] = {setting(kToggle, CMFM_TYPE_CHOICE, "Three"), setting(kChoice, CMFM_TYPE_CHOICE, "Six"),
+                           setting(kPercent, CMFM_TYPE_CHOICE, "Forced list"),
+                           setting(kScale, CMFM_TYPE_CHOICE, "Forced arrows"),
+                           setting(kStatus, CMFM_TYPE_CHOICE, "Fifteen")};
+    s[0].choices = kAbc;
+    s[0].choice_count = 3;
+    s[1].choices = kSix;
+    s[1].choice_count = 6;
+    s[2].choices = kAbc;
+    s[2].choice_count = 3;
+    s[2].flags = CMFM_FLAG_LIST;
+    s[3].choices = kSix;
+    s[3].choice_count = 6;
+    s[3].flags = CMFM_FLAG_ARROWS;
+    s[4].choices = kMany;
+    s[4].choice_count = 15;
+    s[4].flags = CMFM_FLAG_LIST;
+    cmfm_page_t page = {};
+    page.size = sizeof page;
+    page.plugin = "lists";
+    page.title = "Lists";
+    page.settings = s;
+    page.setting_count = 5;
+    page.user = &f;
+    page.get = fake_get;
+    page.set = fake_set;
+    Menu m;
+    check(add(m, page), "a page with list flags is valid");
+    std::string why;
+    m.build(model, why);
+    check(m.list_choices(id(find(model, 1, "Three"))) == 0, "3 choices: arrows");
+    check(m.list_choices(id(find(model, 1, "Six"))) == 6, "6 choices: the pick list");
+    check(m.list_choices(id(find(model, 1, "Forced list"))) == 3, "LIST forces the pick list");
+    check(m.list_choices(id(find(model, 1, "Forced arrows"))) == 0, "ARROWS forces the arrows");
+    check(m.list_choices(id(find(model, 1, "Fifteen"))) == 0, "more than 14: arrows even with LIST");
+
+    cmfm_setting_t bad = setting(1, CMFM_TYPE_BOOL, "Bool");
+    bad.flags = CMFM_FLAG_LIST;
+    cmfm_page_t one = page;
+    one.settings = &bad;
+    one.setting_count = 1;
+    check(refused(one, "for CHOICE"), "LIST on a BOOL is refused");
+    bad = s[1];
+    bad.flags = CMFM_FLAG_LIST | CMFM_FLAG_ARROWS;
+    check(refused(one, "together"), "LIST and ARROWS together are refused");
+}
+
 void reads_the_start_value_before_a_first_change() {
     static OptionsModel model;
     Fake f;
@@ -573,6 +625,7 @@ int main() {
     tracks_restart_changes();
     reads_the_start_value_before_a_first_change();
     picks_slider_rows();
+    picks_list_rows();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

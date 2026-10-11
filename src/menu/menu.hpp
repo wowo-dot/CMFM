@@ -26,6 +26,8 @@ inline constexpr std::uint32_t kMaxHelp = 200;   // the help line's space
 inline constexpr std::uint32_t kMaxChoice = 32;
 inline constexpr std::uint32_t kMaxUnit = 8;
 inline constexpr std::uint32_t kMaxPlugin = 64;
+inline constexpr std::uint32_t kArrowChoices = 5;     // more open the pick list
+inline constexpr std::uint32_t kMaxListChoices = 14;  // the pick list's rows (btnlist_select)
 
 struct Setting {
     std::uint32_t id = 0;
@@ -105,6 +107,10 @@ public:
     std::uint32_t slider_steps(std::uint32_t setting_id) const;
     // Changes whenever CMFM sets a value (the player, Set To Default).
     std::uint32_t value_revision() const { return value_revision_; }
+    // CHOICE rows that open the game's pick list: more than kArrowChoices
+    // values (or CMFM_FLAG_LIST), at most kMaxListChoices, not
+    // CMFM_FLAG_ARROWS. The number of choices, or 0 for any other row.
+    std::uint32_t list_choices(std::uint32_t setting_id) const;
 
 private:
     struct Entry {

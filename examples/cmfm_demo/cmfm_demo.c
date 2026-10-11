@@ -18,7 +18,10 @@
 #include <string.h>
 #include <wchar.h>
 
-enum { ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER };
+enum {
+    ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
+    ID_QUALITY
+};
 
 static const al_api_t* g_api;
 static al_plugin_t* g_self;
@@ -31,7 +34,8 @@ static struct {
     int percent;
     double scale;
     int restart;
-} g_values = {0, 0, 50, 1.0, 0};
+    int quality;
+} g_values = {0, 0, 50, 1.0, 0, 3};
 static int g_dirty;
 static int g_opened;
 #define MAX_EXTRA 23
@@ -59,6 +63,7 @@ static void load(void) {
         else if (sscanf(line, " percent = %d", &i) == 1 && i >= 0 && i <= 100) g_values.percent = i;
         else if (sscanf(line, " scale = %lf", &d) == 1 && d >= 0.5 && d <= 2.0) g_values.scale = d;
         else if (sscanf(line, " restart = %d", &i) == 1) g_values.restart = i != 0;
+        else if (sscanf(line, " quality = %d", &i) == 1 && i >= 0 && i <= 6) g_values.quality = i;
         else if (sscanf(line, " extra_pages = %d", &i) == 1 && i >= 0 && i <= MAX_EXTRA) g_extra_pages = i;
     }
     fclose(f);
@@ -72,8 +77,8 @@ static void save(void) {
         return;
     }
     fprintf(f, "# cmfm_demo settings (written by the plugin; editable by hand)\n");
-    fprintf(f, "toggle = %d\nchoice = %d\npercent = %d\nscale = %.2f\nrestart = %d\n", g_values.toggle,
-            g_values.choice, g_values.percent, g_values.scale, g_values.restart);
+    fprintf(f, "toggle = %d\nchoice = %d\npercent = %d\nscale = %.2f\nrestart = %d\nquality = %d\n",
+            g_values.toggle, g_values.choice, g_values.percent, g_values.scale, g_values.restart, g_values.quality);
     fprintf(f, "# test pages for a long list of mods (0 to %d)\nextra_pages = %d\n", MAX_EXTRA, g_extra_pages);
     fclose(f);
     g_dirty = 0;
@@ -90,6 +95,7 @@ static cmfm_result_t CMFM_CALL demo_get(void* user, uint32_t id, cmfm_value_t* v
         case ID_PERCENT: value->i = g_values.percent; return CMFM_OK;
         case ID_SCALE: value->f = g_values.scale; return CMFM_OK;
         case ID_RESTART: value->i = g_values.restart; return CMFM_OK;
+        case ID_QUALITY: value->i = g_values.quality; return CMFM_OK;
         default: return CMFM_ERROR;
     }
 }
@@ -114,6 +120,7 @@ static cmfm_result_t CMFM_CALL demo_set(void* user, uint32_t id, const cmfm_valu
         case ID_PERCENT: g_values.percent = value->i; break;
         case ID_SCALE: g_values.scale = value->f; break;
         case ID_RESTART: g_values.restart = value->i; break;
+        case ID_QUALITY: g_values.quality = value->i; break;
         default: return CMFM_ERROR;
     }
     g_dirty = 1;
@@ -186,11 +193,13 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
 /* ---- The page ---- */
 
 static const char* const kChoices[] = {"Alpha", "Beta", "Gamma"};
+/* Seven choices: more than five, so the Mods page opens its pick list. */
+static const char* const kQuality[] = {"Off", "Very low", "Low", "Medium", "High", "Very high", "Ultra"};
 
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[9];
+    cmfm_setting_t s[10];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
@@ -198,7 +207,7 @@ static void add_page(void) {
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 10; ++i) {
         s[i].size = sizeof s[i];
     }
     s[0].id = ID_BASICS;
@@ -257,13 +266,21 @@ static void add_page(void) {
     s[8].label = "Demo status";
     s[8].help = "A read-only line the plugin writes.";
 
+    s[9].id = ID_QUALITY;
+    s[9].type = CMFM_TYPE_CHOICE;
+    s[9].label = "Demo quality";
+    s[9].help = "Seven values: Confirm opens the list to pick from.";
+    s[9].choices = kQuality;
+    s[9].choice_count = 7;
+    s[9].default_value.i = 3;
+
     memset(&page, 0, sizeof page);
     page.size = sizeof page;
     page.plugin = "cmfm_demo";
     page.title = "Demo";
     page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
     page.settings = s;
-    page.setting_count = 9;
+    page.setting_count = 10;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;

@@ -108,8 +108,14 @@ bool copy_setting(const cmfm_setting_t& in, Setting& s, std::string& why) {
     if (!text_ok(in.help, kMaxHelp, true, s.help)) {
         return fail("help longer than 200 bytes");
     }
-    if ((in.flags & ~CMFM_FLAG_RESTART) != 0) {
+    if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0) {
         return fail("unknown flags");
+    }
+    if ((in.flags & (CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0 && in.type != CMFM_TYPE_CHOICE) {
+        return fail("LIST and ARROWS are for CHOICE settings");
+    }
+    if ((in.flags & CMFM_FLAG_LIST) != 0 && (in.flags & CMFM_FLAG_ARROWS) != 0) {
+        return fail("LIST and ARROWS together");
     }
     s.default_value = in.default_value;
     switch (in.type) {
@@ -506,6 +512,18 @@ std::uint32_t Menu::slider_steps(std::uint32_t setting_id) const {
     const Setting& s = pages_[r->page].settings[r->setting];
     const bool number = s.type == CMFM_TYPE_INT || s.type == CMFM_TYPE_FLOAT;
     return number && s.value_count >= 3 ? s.value_count - 1 : 0;
+}
+
+std::uint32_t Menu::list_choices(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return 0;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    if (s.type != CMFM_TYPE_CHOICE || s.value_count > kMaxListChoices || (s.flags & CMFM_FLAG_ARROWS) != 0) {
+        return 0;
+    }
+    return (s.flags & CMFM_FLAG_LIST) != 0 || s.value_count > kArrowChoices ? s.value_count : 0;
 }
 
 std::size_t Menu::restart_count() const {

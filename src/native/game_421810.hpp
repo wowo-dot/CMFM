@@ -335,6 +335,38 @@ inline constexpr std::size_t kSliderDragging = 1728;  // byte: the mouse holds t
 // 0xEEAD20: reads the getter, places the knob, formats the text.
 inline constexpr char kSliderFromSettingPattern[] =
     "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 60 C7 81 80 06 00 00 20 00 00 00";
+// The pick list (docs/research/native-menu.md, "The pick list"): the game's
+// language picker, the page's select object at +27376 (focus 2 gives it the
+// input). A row flagged +85 ("opens a sub-window") takes Confirm (the tab's
+// row look sets list +375 from it) and its decide runs the row decide
+// (RVA 0x1E8BA10), which fills and opens the pick list only for the language
+// rows; the pick list's decide (select object vtable, RVA 0x1E89B20) applies
+// the pick only for them. Both hooked: CMFM fills, opens and applies its own.
+inline constexpr char kRowDecidePattern[] = "40 55 53 56 48 8D 6C 24 B9 48 81 EC E0 00 00 00 48 8B 41 10";
+inline constexpr char kSelectDecidePattern[] = "48 83 EC 28 48 89 5C 24 30 48 89 74 24 38 8B F2";
+// The page's focus(unit, 0 list / 1 panel / 2 pick list) at RVA 0x1E8CDD0.
+inline constexpr char kSetFocusPattern[] = "48 89 5C 24 10 48 89 7C 24 18 41 56 48 83 EC 20 89 91 F0 28 00 00";
+// cGUIInstAnimation::setScaleY(instance, float) at RVA 0x234F7F0 and
+// cGUIObject::setCurrentFrame(object, float, bool) at RVA 0x2342D00, as the
+// language fill (RVA 0x1E8CFA0) sizes the window and its line.
+inline constexpr char kSetScaleYPattern[] = "0F 2E 89 C4 00 00 00 74 0F 81 49 58 00 00 01 00 F3 0F 11 89 C4 00 00 00 C3";
+inline constexpr char kSetCurrentFramePattern[] = "40 56 48 83 EC 40 0F 28 D1 48 8B F1 41 80 F8 01 74 17 45 84 C0";
+inline constexpr std::size_t kOptSelect = 27376;     // the select object
+inline constexpr std::size_t kSelectList = 24;       // btnlist_select
+inline constexpr std::size_t kSelectChecks = 40;     // 14 check marks the language rows use (left empty)
+inline constexpr std::size_t kSelectSetting = 152;   // the setting id it holds
+inline constexpr std::size_t kSelectWindow = 160;    // a_window_select, scaled to the rows
+inline constexpr std::size_t kSelectLine = 168;      // its line object, frame = rows
+inline constexpr std::size_t kSelectRows = 14;       // btnlist_select's DuplicateNum
+inline constexpr float kWindowRowScale = 1.44f;
+inline constexpr std::int32_t kFocusPickList = 2;
+inline constexpr std::size_t kRowObjectUnit = 8;     // a panel row object's page
+inline constexpr std::size_t kRowOpensList = 85;     // byte: Confirm opens a sub-window
+inline constexpr std::size_t kListTakesConfirm = 375;  // byte on a list: Confirm decides
+inline constexpr std::size_t kTabNumInput = 72;      // num_input_<tab>: the arrows over the cursor row
+inline constexpr char kPickText[] = "msg_language";
+inline constexpr char kPickCheck[] = "checkMark";
+
 // The slider's position(slider, float 0..1) at RVA 0xB8ABC0, snapped to the
 // slider's steps.
 inline constexpr char kSliderSetPositionPattern[] =

@@ -49,5 +49,8 @@ std::uint32_t service_restart_revision();
 void service_set_sliders(bool on);
 std::uint32_t service_slider_steps(std::uint32_t setting_id);  // 0: not a slider (now)
 std::uint32_t service_value_revision();
+// CHOICE rows that open the game's pick list on CMFM's page: their choices,
+// or 0.
+std::uint32_t service_list_choices(std::uint32_t setting_id);
 
 }  // namespace cmfm::menu

@@ -231,4 +231,8 @@ std::uint32_t service_value_revision() {
     return g_menu ? g_menu->value_revision() : 0;
 }
 
+std::uint32_t service_list_choices(std::uint32_t setting_id) {
+    return g_menu && g_model_ok ? g_menu->list_choices(setting_id) : 0;
+}
+
 }  // namespace cmfm::menu
