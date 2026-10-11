@@ -1,6 +1,7 @@
 #include "menu/service.hpp"
 
 #include "cmfm/cmfm.h"
+#include "menu/keys.hpp"
 #include "menu/menu.hpp"
 
 #include <windows.h>
@@ -98,12 +99,29 @@ std::uint32_t CMFM_CALL add_page(const cmfm_page_t* page, char* why, std::uint32
 
 const cmfm_menu_t kTable = {sizeof(cmfm_menu_t), CMFM_MENU_VERSION, &add_page};
 
+// The character a layout-dependent key types on the player's keyboard layout
+// (menu::KeyCharFn), unshifted, as UTF-8.
+bool layout_char(std::uint32_t vk, char* out, std::size_t size) {
+    const UINT c = MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) & 0x7FFFFFFFu;  // the top bit marks a dead key
+    if (c < 0x21 || c > 0xFFFF || size == 0) {
+        return false;
+    }
+    const wchar_t w = static_cast<wchar_t>(c);
+    const int n = WideCharToMultiByte(CP_UTF8, 0, &w, 1, out, static_cast<int>(size) - 1, nullptr, nullptr);
+    if (n <= 0) {
+        return false;
+    }
+    out[n] = '\0';
+    return true;
+}
+
 }  // namespace
 
 bool service_publish(const al_api_t* api, al_plugin_t* self, const char* version, std::string& why) {
     g_api = api;
     g_self = self;
     g_menu.emplace(version, &log_line);
+    set_key_chars(&layout_char);
     if (api->size < offsetof(al_api_t, publish_interface) + sizeof(api->publish_interface)) {
         why = "this Astera Loader cannot publish interfaces";
         return false;
@@ -265,6 +283,34 @@ bool service_locked(std::uint32_t setting_id) {
 
 bool service_hidden(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_hidden(setting_id);
+}
+
+bool service_is_key(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_key(setting_id);
+}
+
+bool service_begin_key(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->begin_key(setting_id);
+}
+
+void service_key_wait(std::uint32_t setting_id, std::uint32_t seconds) {
+    if (g_menu && g_model_ok) {
+        g_menu->key_wait(setting_id, seconds);
+    }
+}
+
+bool service_set_key(std::uint32_t setting_id, std::int32_t key) {
+    return g_menu && g_model_ok && g_menu->set_key(setting_id, key);
+}
+
+void service_cancel_key(std::uint32_t setting_id) {
+    if (g_menu && g_model_ok) {
+        g_menu->cancel_key(setting_id);
+    }
+}
+
+const char* service_row_help(std::uint32_t setting_id) {
+    return g_menu && g_model_ok ? g_menu->row_help(setting_id) : nullptr;
 }
 
 bool service_is_live(std::uint32_t setting_id) {

@@ -1,5 +1,7 @@
 #include "native/mods_page.hpp"
 
+#include "cmfm/cmfm.h"
+#include "menu/keys.hpp"
 #include "menu/service.hpp"
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
@@ -12,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -107,6 +110,20 @@ std::int32_t g_pick_filled = -1;  // the setting the pick list holds
 TabRefreshFn g_tab_refresh = nullptr;
 YesNoDialogFn g_yes_no_dialog = nullptr;
 std::int32_t g_pending_button = -1;  // the button whose question is open
+
+// A KEY row waiting for the player's key (begin_key_wait): the game sees idle
+// input meanwhile (al.input capture); CMFM reads the real keys every frame.
+struct KeyWait {
+    std::int32_t id = -1;  // the setting; -1: no wait
+    std::chrono::steady_clock::time_point end;
+    std::uint32_t seconds = 0;    // shown in the row
+    std::uint64_t armed[4] = {};  // keys seen up since the wait began (a key held then counts after a release)
+    std::uint32_t pad_armed[4] = {};  // the same for each pad's buttons
+};
+KeyWait g_key_wait;
+constexpr std::uint32_t kKeyWaitSeconds = 10;
+std::int32_t g_row_help = -1;  // the row whose help line kRowHelpIds show
+std::uint32_t g_row_help_flip = 0;
 char g_question[256];                // the text the open question shows
 std::uint32_t g_lock_seen = 0;       // the menu's lock revision the panel shows
 // CMFM's layout as loaded once (kept for the session, like the page).
@@ -332,6 +349,8 @@ void drag_scrollbars(void* unit);
 bool scroll_dragging();
 void wheel_split(void* unit, int steps);
 void refresh_live_rows(void* unit);
+void poll_key_wait(void* unit);
+void end_key_wait(void* unit, bool set, std::int32_t key, const char* how);
 std::size_t panel_visible();
 std::uint64_t panel_hidden_now();
 void rebuild_panel(void* unit);
@@ -544,6 +563,12 @@ void track_mouse(void* unit) {
 // CMFM's page, vtable slot 81: every frame while it is open (state 2; the
 // menu's thread).
 std::uint64_t page_update(void* unit) {
+    if (g_key_wait.id >= 0) {
+        g_wheel.store(0, std::memory_order_relaxed);  // the wait has the input
+        if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
+            poll_key_wait(unit);
+        }
+    }
     if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
         keep_panel_cursor(unit);
         drag_scrollbars(unit);
@@ -1395,8 +1420,9 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
         }
         char* row_object = tab + (r + 1) * game::kRowObjectSize;
         const bool slider = show_slider(row_object, rows[r], r, r == active_row);
-        if (!slider && ((g_set_focus != nullptr && menu::service_list_choices(id) != 0) || menu::service_is_button(id))) {
-            field<std::uint8_t>(row_object, game::kRowOpensList) = 1;  // Confirm opens the pick list or presses
+        if (!slider && ((g_set_focus != nullptr && menu::service_list_choices(id) != 0) || menu::service_is_button(id) ||
+                        menu::service_is_key(id))) {
+            field<std::uint8_t>(row_object, game::kRowOpensList) = 1;  // Confirm opens the pick list, presses, waits for a key
         }
         void* root = field<void*>(row, game::kInstRoot);
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
@@ -1646,6 +1672,10 @@ std::uint64_t page_close(void* unit) {
     g_pick_count = 0;
     g_pick_filled = -1;
     g_pending_button = -1;
+    if (g_key_wait.id >= 0) {
+        end_key_wait(nullptr, false, 0, "the page closed");
+    }
+    g_row_help = -1;
     g_bars_unit = nullptr;  // looked up again on the next open
     for (ScrollBar* b : {&g_list_bar, &g_panel_bar}) {
         if (b->bar != nullptr) {
@@ -1817,6 +1847,186 @@ void ask_button(void* unit, std::uint32_t id) {
     g_yes_no_dialog(manager, request);  // copies the request
 }
 
+// A panel row's value text written again the way the game's tab refresh
+// writes it (the text filler without the label, no row looks).
+void rewrite_value(void* unit, std::uint32_t id) {
+    char* tab = tab_object(unit, game::kSplitPanel);
+    for (std::size_t r = 0; r < panel_visible(); ++r) {
+        if (static_cast<std::uint32_t>(g_panel_rows[r].setting_id) != id) {
+            continue;
+        }
+        char* row_object = tab + (r + 1) * game::kRowObjectSize;
+        void* row = field<void*>(row_object, game::kRowInstance);
+        void* value = field<void*>(row_object, game::kRowValueObject);
+        if (g_row_text != nullptr && row != nullptr && value != nullptr) {
+            g_row_text(row, nullptr, value, &g_panel_rows[r]);
+        }
+    }
+}
+
+// The help bar shows a panel row's help line again (it changed in place).
+void request_row_help(void* unit, std::uint32_t id) {
+    void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+    if (g_help_request == nullptr || manager == nullptr) {
+        return;
+    }
+    g_row_help = static_cast<std::int32_t>(id);
+    g_row_help_flip ^= 1;
+    g_help_request(manager, unit, static_cast<std::int32_t>(game::kRowHelpIds[g_row_help_flip]),
+                   static_cast<std::int32_t>(game::kHelpFile), 0.0f, 0);
+}
+
+const al_input_t* key_input(al_input_status_t& status) {
+    const al_input_t* input = g_env.input;
+    status = {};
+    status.size = sizeof status;
+    if (input == nullptr || input->size < offsetof(al_input_t, status) + sizeof input->status) {
+        return nullptr;
+    }
+    input->status(g_env.self, &status);
+    return input;
+}
+
+// Confirm on a KEY row: the row says "Press a key", its help line how; the
+// game's input is captured (keyboard, mouse and pads, as Astera Loader can)
+// so nothing the player presses reaches the menu meanwhile.
+void begin_key_wait(void* unit, const GameOptionRow& entry) {
+    const auto id = static_cast<std::uint32_t>(entry.setting_id);
+    al_input_status_t status;
+    const al_input_t* input = key_input(status);
+    if (input == nullptr || status.state != AL_INPUT_RUNNING || (status.devices & AL_INPUT_KEYBOARD) == 0) {
+        logf(AL_LOG_WARNING, "Mods page: key bindings need Astera Loader's keyboard capture (%s)",
+             input == nullptr ? "no al.input" : status.reason != nullptr && status.reason[0] ? status.reason : "not running");
+        return;
+    }
+    if (!menu::service_begin_key(id)) {
+        return;  // locked (logged)
+    }
+    if (input->capture(g_env.self, status.devices & AL_INPUT_ALL) != AL_OK) {
+        menu::service_cancel_key(id);
+        logf(AL_LOG_WARNING, "Mods page: the input capture for a key binding failed (see the log above)");
+        return;
+    }
+    KeyWait& w = g_key_wait;
+    w = KeyWait{};
+    w.id = static_cast<std::int32_t>(id);
+    w.end = std::chrono::steady_clock::now() + std::chrono::seconds(kKeyWaitSeconds);
+    w.seconds = kKeyWaitSeconds;
+    for (std::uint32_t vk = 0; vk < 256; ++vk) {
+        if (input->key_down(g_env.self, vk) == 0) {
+            w.armed[vk / 64] |= 1ull << (vk % 64);
+        }
+    }
+    for (std::uint32_t slot = 0; slot < 4; ++slot) {
+        al_pad_state_t pad = {};
+        pad.size = sizeof pad;
+        const bool read = input->pad_state(g_env.self, slot, &pad) == AL_OK && pad.connected != 0;
+        w.pad_armed[slot] = read ? ~static_cast<std::uint32_t>(pad.buttons) : 0xFFFFFFFFu;
+    }
+    rewrite_value(unit, id);
+    request_row_help(unit, id);
+    logf(AL_LOG_INFO, "Mods page: waiting for a key (setting %u)", id);
+}
+
+// Every frame of a wait: Esc, a left or right click or a pad's B cancels;
+// Backspace sets no key; the first other key (pressed after the wait began)
+// is the binding, with the Ctrl, Shift and Alt held with it. Ten seconds
+// without one cancel too, as does losing the capture (the game lost focus).
+void poll_key_wait(void* unit) {
+    KeyWait& w = g_key_wait;
+    al_input_status_t status;
+    const al_input_t* input = key_input(status);
+    if (input == nullptr || (status.captured & AL_INPUT_KEYBOARD) == 0) {
+        end_key_wait(unit, false, 0, "the capture ended (the game lost the focus?)");
+        return;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    if (now >= w.end) {
+        end_key_wait(unit, false, 0, "no key in 10 seconds");
+        return;
+    }
+    const auto left = static_cast<std::uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(w.end - now).count() / 1000 + 1);
+    if (left != w.seconds) {
+        w.seconds = left;
+        menu::service_key_wait(static_cast<std::uint32_t>(w.id), left);
+        rewrite_value(unit, static_cast<std::uint32_t>(w.id));
+    }
+    // Keys pressed since the wait began: held now, and seen up before.
+    std::uint64_t fresh[4] = {};
+    for (std::uint32_t vk = 1; vk < 256; ++vk) {
+        const std::uint64_t bit = 1ull << (vk % 64);
+        if (input->key_down(g_env.self, vk) == 0) {
+            w.armed[vk / 64] |= bit;
+        } else if ((w.armed[vk / 64] & bit) != 0) {
+            fresh[vk / 64] |= bit;
+        }
+    }
+    const auto pressed = [&](std::uint32_t vk) { return (fresh[vk / 64] & (1ull << (vk % 64))) != 0; };
+    bool pad_back = false;
+    for (std::uint32_t slot = 0; slot < 4; ++slot) {
+        al_pad_state_t pad = {};
+        pad.size = sizeof pad;
+        if (input->pad_state(g_env.self, slot, &pad) != AL_OK || pad.connected == 0) {
+            continue;
+        }
+        const std::uint32_t buttons = pad.buttons;
+        pad_back = pad_back || (buttons & w.pad_armed[slot] & AL_PAD_B) != 0;
+        w.pad_armed[slot] |= ~buttons;
+    }
+    constexpr std::uint32_t kEsc = 0x1B, kBackspace = 0x08, kLeftClick = 0x01, kRightClick = 0x02;
+    if (pressed(kEsc) || pressed(kLeftClick) || pressed(kRightClick) || pad_back) {
+        end_key_wait(unit, false, 0, "cancelled");
+        return;
+    }
+    if (pressed(kBackspace)) {
+        end_key_wait(unit, true, 0, "no key");
+        return;
+    }
+    for (std::uint32_t vk = 1; vk < 256; ++vk) {
+        if (!pressed(vk) || !menu::key_bindable(vk)) {
+            continue;
+        }
+        constexpr std::uint32_t kCtrl = 0x11, kShift = 0x10, kAlt = 0x12;  // either side (al.input)
+        std::int32_t key = static_cast<std::int32_t>(vk);
+        key |= input->key_down(g_env.self, kCtrl) != 0 ? CMFM_KEY_CTRL : 0;
+        key |= input->key_down(g_env.self, kShift) != 0 ? CMFM_KEY_SHIFT : 0;
+        key |= input->key_down(g_env.self, kAlt) != 0 ? CMFM_KEY_ALT : 0;
+        end_key_wait(unit, true, key, "a key");
+        return;
+    }
+}
+
+// The wait ends: the key set (or refused, the reason in the help line) or the
+// wait cancelled; the capture released (keys still held stay hidden from the
+// game until released, so the key just bound does nothing in the menu). With
+// the page (`unit`), every row is written again (an overlap may have come or
+// gone on other rows) and the row's own help line comes back.
+void end_key_wait(void* unit, bool set, std::int32_t key, const char* how) {
+    const KeyWait w = g_key_wait;
+    g_key_wait.id = -1;
+    if (w.id < 0) {
+        return;
+    }
+    const auto id = static_cast<std::uint32_t>(w.id);
+    if (g_env.input != nullptr) {
+        g_env.input->release(g_env.self);
+    }
+    const bool ok = set && menu::service_set_key(id, key);
+    if (!set) {
+        menu::service_cancel_key(id);
+    }
+    logf(AL_LOG_INFO, "Mods page: key wait for setting %u ended: %s%s", id, how, set && !ok ? " (refused)" : "");
+    if (unit == nullptr) {
+        return;
+    }
+    if (g_tab_refresh != nullptr) {
+        g_tab_refresh(tab_object(unit, game::kSplitPanel));
+    }
+    decorate_panel(unit);
+    request_row_help(unit, id);
+}
+
 // Confirm on a panel row: buttons and the pick list for CMFM's long CHOICE
 // rows (the game's own decide does something only for its language and
 // dialog rows).
@@ -1828,6 +2038,10 @@ void row_decide_detour(void* row) {
         const auto id = static_cast<std::uint32_t>(entry->setting_id);
         if (menu::service_is_button(id)) {
             ask_button(unit, id);
+            return;
+        }
+        if (menu::service_is_key(id)) {
+            begin_key_wait(unit, *entry);
             return;
         }
         if (open_pick_list(unit, *entry)) {
@@ -2202,6 +2416,9 @@ const char* mods_page_text(void* message_file_ptr, std::uint32_t id) {
         }
         if (id == game::kSplitHelpIds[0] || id == game::kSplitHelpIds[1]) {
             return menu::service_model().tab_help(g_selected.load(std::memory_order_relaxed));
+        }
+        if ((id == game::kRowHelpIds[0] || id == game::kRowHelpIds[1]) && g_row_help >= 0) {
+            return menu::service_row_help(static_cast<std::uint32_t>(g_row_help));
         }
     }
     return nullptr;

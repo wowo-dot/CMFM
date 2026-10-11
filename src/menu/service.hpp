@@ -65,6 +65,13 @@ bool service_press(std::uint32_t setting_id);
 bool service_locked(std::uint32_t setting_id);
 bool service_hidden(std::uint32_t setting_id);  // Menu::is_hidden
 bool service_is_live(std::uint32_t setting_id);       // Menu::is_live
+// KEY rows (Menu::is_key, begin_key, key_wait, set_key, cancel_key, row_help).
+bool service_is_key(std::uint32_t setting_id);
+bool service_begin_key(std::uint32_t setting_id);
+void service_key_wait(std::uint32_t setting_id, std::uint32_t seconds);
+bool service_set_key(std::uint32_t setting_id, std::int32_t key);
+void service_cancel_key(std::uint32_t setting_id);
+const char* service_row_help(std::uint32_t setting_id);  // nullptr without a menu
 bool service_reread_text(std::uint32_t setting_id);   // Menu::reread_text
 std::uint32_t service_lock_revision();
 

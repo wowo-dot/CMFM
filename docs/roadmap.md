@@ -78,10 +78,13 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    `CMFM_FLAG_LIVE`: TEXT rows are read again four times a second while
    shown, not only on open: counters, damage numbers, "active" states,
    debug pages. A changed line gets only its value rewritten (no flicker).
-4. **Key bindings.** A KEY setting type: Confirm, press a key (with Ctrl,
-   Shift, Alt), Esc cancels; the row shows the key's name; CMFM warns when
-   another mod's KEY setting already uses it (MCM: key maps with conflict
-   detection, its most used feature). Keyboard first.
+4. **Key bindings.** Built, awaiting its test (run `keys-1`).
+   `CMFM_TYPE_KEY`: Confirm, press a key (with Ctrl, Shift, Alt; mouse
+   buttons 3 to 5 too), Esc or a click cancels, Backspace clears, 10 seconds;
+   the row shows the key's name, in red while another mod's KEY setting
+   overlaps it (named in the help line). The value is what Astera Loader's
+   hotkeys take, so a mod passes it straight on (MCM: key maps with conflict
+   detection, its most used feature). Keyboard first; pad bindings later.
 5. **More settings per page.** The panel scrolls, so a page may hold more
    than 24 rows (the limit to check against the text-id budget).
 

@@ -1,12 +1,15 @@
 /* cmfm_demo: an Astera Loader plugin that adds a page to CMFM's Mods menu.
  * The example for plugin authors (plain C), and CMFM's test client.
  *
- * It shows every setting type of cmfm.menu 1.2 (rows that hide since 1.2), keeps
+ * It shows every setting type of cmfm.menu 1.2 (rows that hide, live lines and
+ * key bindings since 1.2; its hotkey is a real Astera Loader hotkey), keeps
  * its values in its own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
  * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
- * of a long list of mods); the first of them is a long page of 24 rows.
+ * of a long list of mods); the first of them is a long page of 24 rows, the
+ * second holds a key binding that overlaps the demo's hotkey (F5 against
+ * Ctrl+F5), so CMFM marks both.
  *
  * Install: <game>\AsteraLoader\plugins\cmfm_demo\cmfm_demo.dll, next to CMFM.
  */
@@ -22,12 +25,18 @@
 enum {
     ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
     ID_QUALITY, ID_PRESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY, ID_LIVE,
-    ID_CLOCK
+    ID_CLOCK, ID_KEYS, ID_HOTKEY, ID_PRESSES
 };
+
+#define VK_F5_KEY 0x74 /* winuser.h's VK_F5 */
+#define DEMO_SETTINGS 21
 
 #define DEMO_VERSION "0.1.0" /* the plugin's version: Astera Loader's info and the page's header */
 
 static const al_api_t* g_api;
+static const al_input_t* g_input; /* Astera Loader's input service, for the hotkey; may be NULL */
+static uint32_t g_hotkey;         /* its handle, 0: none */
+static volatile long g_presses;   /* counted on the game's frame thread */
 static time_t g_start; /* the live clock counts from the plugin's start */
 static al_plugin_t* g_self;
 static wchar_t g_ini[1024];
@@ -44,7 +53,8 @@ static struct {
     int dlss_preset;
     int fsr_sharpness;
     int xess_quality;
-} g_values = {0, 0, 50, 1.0, 0, 3, 0, 1, 50, 1};
+    int hotkey; /* a key value: CMFM_KEY_CTRL | VK_F5 is Ctrl+F5 */
+} g_values = {0, 0, 50, 1.0, 0, 3, 0, 1, 50, 1, CMFM_KEY_CTRL | VK_F5_KEY};
 static int g_dirty;
 static int g_opened;
 #define MAX_EXTRA 23
@@ -77,6 +87,7 @@ static void load(void) {
         else if (sscanf(line, " dlss_preset = %d", &i) == 1 && i >= 0 && i <= 2) g_values.dlss_preset = i;
         else if (sscanf(line, " fsr_sharpness = %d", &i) == 1 && i >= 0 && i <= 100) g_values.fsr_sharpness = i;
         else if (sscanf(line, " xess_quality = %d", &i) == 1 && i >= 0 && i <= 3) g_values.xess_quality = i;
+        else if (sscanf(line, " hotkey = %d", &i) == 1 && i >= 0 && i <= 0x7FF) g_values.hotkey = i;
         else if (sscanf(line, " extra_pages = %d", &i) == 1 && i >= 0 && i <= MAX_EXTRA) g_extra_pages = i;
     }
     fclose(f);
@@ -94,10 +105,42 @@ static void save(void) {
             g_values.toggle, g_values.choice, g_values.percent, g_values.scale, g_values.restart, g_values.quality);
     fprintf(f, "upscaler = %d\ndlss_preset = %d\nfsr_sharpness = %d\nxess_quality = %d\n", g_values.upscaler,
             g_values.dlss_preset, g_values.fsr_sharpness, g_values.xess_quality);
+    fprintf(f, "# a virtual-key code plus 256 Ctrl, 512 Shift, 1024 Alt; 0 for none\nhotkey = %d\n", g_values.hotkey);
     fprintf(f, "# test pages for a long list of mods (0 to %d)\nextra_pages = %d\n", MAX_EXTRA, g_extra_pages);
     fclose(f);
     g_dirty = 0;
     logline(AL_LOG_INFO, "cmfm_demo.ini saved");
+}
+
+/* ---- The hotkey (Astera Loader's al.input) ---- */
+
+static void AL_CALL on_hotkey(al_plugin_t* self, uint32_t handle, void* user) {
+    (void)self;
+    (void)handle;
+    (void)user;
+    ++g_presses; /* the game's frame thread; the menu reads it */
+}
+
+/* A KEY setting's value is what al.input's hotkeys take: the virtual-key code
+ * and the AL_MOD_* modifiers. A new binding replaces the old hotkey. */
+static void bind_hotkey(int key) {
+    al_hotkey_t hotkey;
+    if (g_input == NULL) {
+        return;
+    }
+    if (g_hotkey != 0) {
+        g_input->remove_hotkey(g_self, g_hotkey);
+        g_hotkey = 0;
+    }
+    if (key == 0) {
+        return;
+    }
+    memset(&hotkey, 0, sizeof hotkey);
+    hotkey.size = sizeof hotkey;
+    hotkey.key = CMFM_KEY_VK(key);
+    hotkey.modifiers = CMFM_KEY_MODS(key);
+    hotkey.name = "Demo hotkey";
+    g_hotkey = g_input->add_hotkey(g_self, &hotkey, on_hotkey, NULL);
 }
 
 /* ---- cmfm.menu callbacks (the game's menu thread) ---- */
@@ -115,6 +158,7 @@ static cmfm_result_t CMFM_CALL demo_get(void* user, uint32_t id, cmfm_value_t* v
         case ID_DLSS_PRESET: value->i = g_values.dlss_preset; return CMFM_OK;
         case ID_FSR_SHARPNESS: value->i = g_values.fsr_sharpness; return CMFM_OK;
         case ID_XESS_QUALITY: value->i = g_values.xess_quality; return CMFM_OK;
+        case ID_HOTKEY: value->i = g_values.hotkey; return CMFM_OK;
         default: return CMFM_ERROR;
     }
 }
@@ -125,6 +169,10 @@ static cmfm_result_t CMFM_CALL demo_validate(void* user, uint32_t id, const cmfm
     (void)user;
     if (id == ID_CHOICE && value->i == 2 && !g_values.toggle) {
         snprintf(why, why_size, "Gamma needs Demo toggle on.");
+        return CMFM_ERROR;
+    }
+    if (id == ID_HOTKEY && CMFM_KEY_VK(value->i) == 0x0D) { /* VK_RETURN */
+        snprintf(why, why_size, "Enter is the game's Confirm; pick another key.");
         return CMFM_ERROR;
     }
     return CMFM_OK;
@@ -144,6 +192,10 @@ static cmfm_result_t CMFM_CALL demo_set(void* user, uint32_t id, const cmfm_valu
         case ID_DLSS_PRESET: g_values.dlss_preset = value->i; break;
         case ID_FSR_SHARPNESS: g_values.fsr_sharpness = value->i; break;
         case ID_XESS_QUALITY: g_values.xess_quality = value->i; break;
+        case ID_HOTKEY:
+            g_values.hotkey = value->i;
+            bind_hotkey(value->i); /* live: the new key works at once */
+            break;
         default: return CMFM_ERROR;
     }
     g_dirty = 1;
@@ -196,6 +248,12 @@ static void CMFM_CALL demo_text(void* user, uint32_t id, char* text, uint32_t te
     } else if (id == ID_CLOCK) { /* live: asked four times a second while it shows */
         const long seconds = (long)difftime(time(NULL), g_start);
         snprintf(text, text_size, "%02ld:%02ld:%02ld since start", seconds / 3600, seconds / 60 % 60, seconds % 60);
+    } else if (id == ID_PRESSES) { /* live too */
+        if (g_input == NULL) {
+            snprintf(text, text_size, "No hotkeys (no al.input)");
+        } else {
+            snprintf(text, text_size, "Pressed %ld time%s", g_presses, g_presses == 1 ? "" : "s");
+        }
     }
 }
 
@@ -253,6 +311,13 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
             s[i].label = n == 1 ? kLongLabels[i] : "Extra toggle";
             s[i].help = n == 1 ? "A test page taller than the panel." : "A test page for CMFM's list of mods.";
         }
+        if (n == 2) { /* a key binding as another mod's: F5 overlaps the demo's Ctrl+F5 */
+            s[0].type = CMFM_TYPE_KEY;
+            s[0].label = "Extra hotkey";
+            s[0].help = "A key binding of a pretend second mod (not a real hotkey).";
+            s[0].default_value.i = VK_F5_KEY;
+            g_extra[1] = VK_F5_KEY;
+        }
         memset(&page, 0, sizeof page);
         if (n == 1) {
             snprintf(title, sizeof title, "Long page");
@@ -289,7 +354,7 @@ static const char* const kXessQualities[] = {"Ultra quality", "Quality", "Balanc
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[18];
+    cmfm_setting_t s[DEMO_SETTINGS];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
@@ -297,7 +362,7 @@ static void add_page(void) {
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 18; ++i) {
+    for (int i = 0; i < DEMO_SETTINGS; ++i) {
         s[i].size = sizeof s[i];
     }
     s[0].id = ID_BASICS;
@@ -428,7 +493,23 @@ static void add_page(void) {
     s[17].label = "Demo clock";
     s[17].help = "A line read again four times a second while it shows (since 1.2).";
 
-    page.setting_count = 18;
+    s[18].id = ID_KEYS;
+    s[18].type = CMFM_TYPE_SECTION;
+    s[18].label = "Keys";
+
+    s[19].id = ID_HOTKEY;
+    s[19].type = CMFM_TYPE_KEY;
+    s[19].label = "Demo hotkey";
+    s[19].help = "A real hotkey: Confirm, then press the new key (since 1.2). The line below counts presses.";
+    s[19].default_value.i = CMFM_KEY_CTRL | VK_F5_KEY;
+
+    s[20].id = ID_PRESSES;
+    s[20].type = CMFM_TYPE_TEXT;
+    s[20].flags = CMFM_FLAG_LIVE;
+    s[20].label = "Hotkey presses";
+    s[20].help = "Counts presses of Demo hotkey.";
+
+    page.setting_count = DEMO_SETTINGS;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;
@@ -481,6 +562,9 @@ AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* api, const a
         swprintf(g_ini, sizeof g_ini / sizeof g_ini[0], L"%ls\\cmfm_demo.ini", init->data_folder);
         load();
     }
+    /* Asked in al_plugin_init, so Astera Loader installs its input layer. */
+    g_input = (const al_input_t*)api->get_interface(init->self, AL_INPUT_INTERFACE, AL_INPUT_VERSION);
+    bind_hotkey(g_values.hotkey);
     add_page();
     return AL_OK;
 }

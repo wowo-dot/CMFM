@@ -1,5 +1,7 @@
 #include "menu/menu.hpp"
 
+#include "menu/keys.hpp"
+
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -23,7 +25,15 @@ constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
 constexpr char kSectionEnd[] = "</STYL>";
 // Plain buttons (Menu::is_plain_button): the label in its own colour.
 constexpr char kPlainButtonStart[] = "<STYL MOJI_RED_DEFAULT>";
+constexpr char kKeyConflictStart[] = "<STYL MOJI_RED_DEFAULT>";
+constexpr char kKeyWaitHelp[] =
+    "Press the new key, with Ctrl, Shift or Alt if you like. Esc or a click cancels, Backspace sets no key.";
 const char* const kOffOn[] = {"Off", "On"};
+
+bool resettable_type(cmfm_type_t t) {
+    return t == CMFM_TYPE_BOOL || t == CMFM_TYPE_CHOICE || t == CMFM_TYPE_INT || t == CMFM_TYPE_FLOAT ||
+           t == CMFM_TYPE_KEY;
+}
 const char* const kDash[] = {"-"};
 const char* const kNoValue[] = {""};
 const native::RowSpec kEmptyRow = {"Empty", "No mod uses this tab.", kDash, 1, 0};
@@ -192,6 +202,15 @@ bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::s
             s.value_count = 1;
             s.help.clear();
             return true;
+        case CMFM_TYPE_KEY:
+            if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_HIDE_LOCKED)) != 0) {
+                return fail("a KEY takes no flags but RESTART and HIDE_LOCKED");
+            }
+            if (!key_valid(in.default_value.i)) {
+                return fail("default is not a key (a virtual-key code with CMFM_KEY_* modifiers, or 0)");
+            }
+            s.value_count = 1;
+            return true;
         case CMFM_TYPE_BUTTON: {
             if ((in.flags & ~CMFM_FLAG_HIDE_LOCKED) != 0) {
                 return fail("a BUTTON takes no flags but HIDE_LOCKED");
@@ -335,8 +354,7 @@ void Menu::set_help(Row& row, const char* text) {
 void Menu::add(Page page) {
     bool resettable = false;
     for (const Setting& s : page.settings) {
-        resettable = resettable || s.type == CMFM_TYPE_BOOL || s.type == CMFM_TYPE_CHOICE ||
-                     s.type == CMFM_TYPE_INT || s.type == CMFM_TYPE_FLOAT;
+        resettable = resettable || resettable_type(s.type);
     }
     if (resettable && (page.flags & CMFM_PAGE_NO_RESET) == 0 && page.settings.size() < CMFM_MAX_SETTINGS) {
         Setting reset;
@@ -426,6 +444,10 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
                 r.label = kSectionStart + s.label + kSectionEnd;
                 r.value_ptrs = {kNoValue[0]};
             } else if (s.type == CMFM_TYPE_TEXT) {
+                r.value_ptrs = {r.text};
+            } else if (s.type == CMFM_TYPE_KEY) {
+                // One text, the key's name (written on every read and change).
+                std::snprintf(r.text, sizeof r.text, "%s", key_name(s.key > 0 ? s.key : 0).c_str());
                 r.value_ptrs = {r.text};
             } else if (s.type == CMFM_TYPE_BUTTON) {
                 if (s.id == kResetId) {
@@ -625,6 +647,7 @@ void Menu::refresh_locks() {
             set_help(r, r.base_help.c_str());
         }
     }
+    update_keys();  // an unlocked KEY row gets its conflict note back
 }
 
 bool Menu::is_live(std::uint32_t setting_id) const {
@@ -780,6 +803,7 @@ std::size_t Menu::restart_count() const {
 }
 
 void Menu::refresh() {
+    key_waiting_ = 0;
     for (Row& r : rows_) {
         r.get_failed = false;
         r.lock_logged = false;
@@ -787,6 +811,175 @@ void Menu::refresh() {
     }
     refresh_texts();
     refresh_locks();
+    read_keys();
+}
+
+void Menu::read_keys() {
+    for (Row& r : rows_) {
+        if (r.status) {
+            continue;
+        }
+        Page& p = pages_[r.page];
+        Setting& s = p.settings[r.setting];
+        cmfm_value_t v = {};
+        if (s.type == CMFM_TYPE_KEY && p.get(p.user, s.id, &v) == CMFM_OK) {
+            s.key = key_valid(v.i) ? v.i : 0;
+            if (s.first_index < 0) {
+                s.first_index = s.key;  // the key the session started with
+            }
+        }
+    }
+    update_keys();
+}
+
+void Menu::update_keys() {
+    for (Row& r : rows_) {
+        if (r.status) {
+            continue;
+        }
+        const Setting& s = pages_[r.page].settings[r.setting];
+        if (s.type != CMFM_TYPE_KEY || s.id == key_waiting_) {
+            continue;
+        }
+        // A lock's reason and a refusal keep the help line.
+        const bool keep_help = s.locked || std::strncmp(r.help, "Not changed: ", 13) == 0;
+        // The first other KEY setting it overlaps, and how many there are.
+        const Setting* other = nullptr;
+        std::size_t other_page = 0;
+        std::size_t others = 0;
+        for (std::size_t p = 0; p < shown_ && s.key > 0; ++p) {
+            for (const Setting& o : pages_[p].settings) {
+                if (&o != &s && o.type == CMFM_TYPE_KEY && keys_overlap(o.key > 0 ? o.key : 0, s.key)) {
+                    if (other == nullptr) {
+                        other = &o;
+                        other_page = p;
+                    }
+                    ++others;
+                }
+            }
+        }
+        const std::string name = key_name(s.key > 0 ? s.key : 0);
+        if (other == nullptr) {
+            std::snprintf(r.text, sizeof r.text, "%s", name.c_str());
+            if (!keep_help) {
+                set_help(r, r.base_help.c_str());
+            }
+            continue;
+        }
+        std::snprintf(r.text, sizeof r.text, "%s%s%s", kKeyConflictStart, name.c_str(), kSectionEnd);
+        if (keep_help) {
+            continue;
+        }
+        std::string note = std::string(kKeyConflictStart) + key_name(other->key) + " is also " + other->label;
+        if (other_page != r.page) {
+            note += " (" + pages_[other_page].title + ")";
+        }
+        if (others > 1) {
+            note += " and " + std::to_string(others - 1) + " more";
+        }
+        note += std::string(".") + kSectionEnd;
+        if (!r.base_help.empty()) {
+            note += " " + r.base_help;
+        }
+        set_help(r, note.c_str());
+    }
+}
+
+bool Menu::is_key(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].type == CMFM_TYPE_KEY;
+}
+
+bool Menu::begin_key(std::uint32_t setting_id) {
+    const std::size_t i = row_index(setting_id);
+    if (i >= rows_.size() || !is_key(setting_id)) {
+        return false;
+    }
+    Row& r = rows_[i];
+    const Page& p = pages_[r.page];
+    const Setting& s = p.settings[r.setting];
+    if (s.locked) {
+        logf(0, "%s: \"%s\" is locked: %s", p.plugin.c_str(), s.label.c_str(), s.locked_why.c_str());
+        return false;
+    }
+    key_waiting_ = s.id;
+    key_wait(setting_id, 10);
+    set_help(r, kKeyWaitHelp);
+    return true;
+}
+
+void Menu::key_wait(std::uint32_t setting_id, std::uint32_t seconds) {
+    const std::size_t i = row_index(setting_id);
+    if (i < rows_.size() && is_key(setting_id) && pages_[rows_[i].page].settings[rows_[i].setting].id == key_waiting_) {
+        std::snprintf(rows_[i].text, sizeof rows_[i].text, "Press a key (%u)", seconds);
+    }
+}
+
+void Menu::cancel_key(std::uint32_t setting_id) {
+    const std::size_t i = row_index(setting_id);
+    if (i >= rows_.size() || !is_key(setting_id)) {
+        return;
+    }
+    key_waiting_ = 0;
+    set_help(rows_[i], rows_[i].base_help.c_str());
+    update_keys();
+}
+
+bool Menu::set_key(std::uint32_t setting_id, std::int32_t key) {
+    const std::size_t i = row_index(setting_id);
+    if (i >= rows_.size() || !is_key(setting_id)) {
+        return false;
+    }
+    key_waiting_ = 0;
+    Row& r = rows_[i];
+    const Page& p = pages_[r.page];
+    Setting& s = pages_[r.page].settings[r.setting];
+    const std::string name = key_name(key_valid(key) ? key : 0);
+    const auto refuse = [&](const char* why, bool warn) {
+        char line[sizeof r.help];
+        std::snprintf(line, sizeof line, "Not changed: %s", why);
+        set_help(r, line);
+        logf(warn ? 1 : 0, "%s: \"%s\" = %s refused: %s", p.plugin.c_str(), s.label.c_str(), name.c_str(), why);
+        update_keys();
+        return false;
+    };
+    if (!key_valid(key)) {
+        return refuse("this key cannot be bound.", false);
+    }
+    if (s.locked) {
+        return refuse(s.locked_why.empty() ? "the mod does not allow a change now." : s.locked_why.c_str(), false);
+    }
+    if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0) {
+        cmfm_value_t before = {};
+        if (p.get(p.user, s.id, &before) == CMFM_OK) {
+            s.first_index = key_valid(before.i) ? before.i : 0;  // the key before the first change
+        }
+    }
+    cmfm_value_t v = {};
+    v.i = key;
+    if (p.validate != nullptr) {
+        char why[kMaxHelp + 1] = {};
+        if (p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) {
+            why[sizeof why - 1] = '\0';
+            return refuse(why[0] ? why : "the mod refused this key.", false);
+        }
+    }
+    if (p.set(p.user, s.id, &v) != CMFM_OK) {
+        return refuse("the mod could not apply this key.", true);
+    }
+    set_help(r, r.base_help.c_str());
+    logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name.c_str());
+    s.key = key;
+    ++value_revision_;
+    note_value(r, static_cast<std::uint32_t>(key));
+    refresh_locks();
+    update_keys();
+    return true;
+}
+
+const char* Menu::row_help(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr ? r->help : nullptr;
 }
 
 void Menu::send(cmfm_event_t event) {
@@ -812,6 +1005,17 @@ std::uint32_t Menu::get(std::uint32_t setting_id) {
         }
         return 0;
     }
+    if (s.type == CMFM_TYPE_KEY) {
+        const std::int32_t key = key_valid(v.i) ? v.i : 0;
+        if (s.first_index < 0) {
+            s.first_index = key;  // the key the session started with
+        }
+        if (key != s.key) {
+            s.key = key;  // changed by the mod itself
+            update_keys();
+        }
+        return 0;  // the row's one text, the key's name
+    }
     const std::uint32_t index = index_of(s, v);
     if (s.first_index < 0) {
         s.first_index = static_cast<std::int32_t>(index);  // the value the session started with
@@ -829,6 +1033,9 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     const Page& p = pages_[r->page];
     const Setting& s = p.settings[r->setting];
+    if (s.type == CMFM_TYPE_KEY) {
+        return false;  // keys are set by set_key only
+    }
     if (index < 0 || static_cast<std::uint32_t>(index) >= s.value_count) {
         logf(1, "%s: \"%s\" got value index %d of %u; ignored", p.plugin.c_str(), s.label.c_str(), index,
              s.value_count);
@@ -884,7 +1091,7 @@ void Menu::reset_defaults() {
         }
         Page& p = pages_[r.page];
         Setting& s = p.settings[r.setting];
-        if (s.type == CMFM_TYPE_TEXT || s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_BUTTON) {
+        if (!resettable_type(s.type)) {
             continue;
         }
         if (reset_setting(r, false)) {
@@ -894,6 +1101,7 @@ void Menu::reset_defaults() {
         }
     }
     refresh_locks();
+    update_keys();
     logf(0, "Set To Default: %zu setting(s) back to their defaults, %zu refused", done, refused);
 }
 
@@ -903,12 +1111,18 @@ bool Menu::reset_setting(Row& r, bool even_locked) {
     if (s.locked && !even_locked) {
         return false;
     }
+    const bool key = s.type == CMFM_TYPE_KEY;
     cmfm_value_t current = {};
     if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0 && p.get(p.user, s.id, &current) == CMFM_OK) {
-        s.first_index = static_cast<std::int32_t>(index_of(s, current));  // the value before the reset
+        // The value before the reset.
+        s.first_index = key ? (key_valid(current.i) ? current.i : 0) : static_cast<std::int32_t>(index_of(s, current));
     }
-    const std::uint32_t index = index_of(s, s.default_value);
-    const cmfm_value_t v = value_at(s, index);
+    const std::uint32_t index = key ? static_cast<std::uint32_t>(s.default_value.i) : index_of(s, s.default_value);
+    cmfm_value_t v = value_at(s, index);
+    if (key) {
+        v = {};
+        v.i = s.default_value.i;
+    }
     char why[kMaxHelp + 1] = {};
     if ((p.validate != nullptr && p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) ||
         p.set(p.user, s.id, &v) != CMFM_OK) {
@@ -919,6 +1133,9 @@ bool Menu::reset_setting(Row& r, bool even_locked) {
     note_value(r, index);
     if (r.shared) {
         std::snprintf(r.text, sizeof r.text, "%s", number(s, index).c_str());
+    }
+    if (key) {
+        s.key = v.i;
     }
     return true;
 }
@@ -933,8 +1150,7 @@ void Menu::reset_page(std::size_t page) {
             continue;
         }
         const Setting& s = pages_[page].settings[r.setting];
-        if (s.type != CMFM_TYPE_BOOL && s.type != CMFM_TYPE_CHOICE && s.type != CMFM_TYPE_INT &&
-            s.type != CMFM_TYPE_FLOAT) {
+        if (!resettable_type(s.type)) {
             continue;
         }
         if (reset_setting(r, true)) {
@@ -946,6 +1162,7 @@ void Menu::reset_page(std::size_t page) {
     ++value_revision_;
     refresh_texts();
     refresh_locks();
+    update_keys();
     logf(0, "%s: Reset to defaults: %zu setting(s) back to their defaults, %zu refused", pages_[page].plugin.c_str(),
          done, kept);
 }

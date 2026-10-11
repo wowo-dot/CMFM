@@ -93,6 +93,24 @@ typedef uint32_t cmfm_type_t;
  * (after the game's Yes/No dialog when `confirm` is set); its value box shows
  * `button`. Needs `press`; flags 0. */
 #define CMFM_TYPE_BUTTON 7u
+/* Since 1.2: a key binding. value.i is a Windows virtual-key code (VK_F5,
+ * 'K', VK_XBUTTON1 for the fourth mouse button, ...) in bits 0-7, plus the
+ * modifiers held with it: CMFM_KEY_CTRL | VK_F5 is Ctrl+F5; 0 is no key.
+ * That is how Astera Loader's hotkeys take a key (al_hotkey_t: key =
+ * CMFM_KEY_VK(value), modifiers = CMFM_KEY_MODS(value)). The row shows the
+ * key's name; Confirm waits for the next key (with Ctrl, Shift or Alt held),
+ * Esc or a click cancels, Backspace sets no key. Modifiers alone, the Windows
+ * keys and the left and right mouse buttons cannot be bound. CMFM marks the
+ * row in red, with the other setting's name in the help line, while another
+ * KEY setting of any mod overlaps it (the same key, one's modifiers part of
+ * the other's: F5 fires with Ctrl+F5 too). `validate` may refuse a key (Esc,
+ * keys the mod reserves). Flags: RESTART and HIDE_LOCKED. */
+#define CMFM_TYPE_KEY 8u
+#define CMFM_KEY_CTRL 0x100
+#define CMFM_KEY_SHIFT 0x200
+#define CMFM_KEY_ALT 0x400
+#define CMFM_KEY_VK(value) ((uint32_t)(value) & 0xFFu)
+#define CMFM_KEY_MODS(value) (((uint32_t)(value) >> 8) & 7u) /* Astera Loader's AL_MOD_* bits */
 
 /* Setting flags. */
 typedef uint32_t cmfm_flags_t;
@@ -124,7 +142,7 @@ typedef uint32_t cmfm_flags_t;
 #define CMFM_MAX_TEXT 128u    /* bytes CMFM offers get_text, including the NUL */
 
 typedef struct cmfm_value_t {
-    int32_t i;         /* BOOL, CHOICE, INT */
+    int32_t i;         /* BOOL, CHOICE, INT, KEY */
     uint32_t reserved; /* 0 */
     double f;          /* FLOAT */
 } cmfm_value_t;
@@ -145,7 +163,7 @@ typedef struct cmfm_setting_t {
     double max;        /* (max - min) / step + 1 values, at most CMFM_MAX_STEPS */
     double step;       /* > 0; whole numbers for INT */
     const char* unit;  /* shown after the number, e.g. "%" or " ms"; may be NULL */
-    /* BOOL, CHOICE, INT, FLOAT: what "Set To Default" restores. */
+    /* BOOL, CHOICE, INT, FLOAT, KEY: what "Reset to defaults" restores. */
     cmfm_value_t default_value;
     /* Since 1.1 (read when `size` covers them). BUTTON: the text in its value
      * box, e.g. "Reset" (NULL: "Run"), and a question for the game's Yes/No
@@ -186,8 +204,8 @@ typedef cmfm_result_t(CMFM_CALL* cmfm_press_fn)(void* user, uint32_t id);
  * after every change it makes, so a lock may depend on other settings. */
 typedef uint32_t(CMFM_CALL* cmfm_locked_fn)(void* user, uint32_t id, char* why, uint32_t why_size);
 
-/* Since 1.2, page flags. CMFM ends every page that has a BOOL, CHOICE, INT or
- * FLOAT setting with a "Reset to defaults" row (after the game's Yes/No
+/* Since 1.2, page flags. CMFM ends every page that has a BOOL, CHOICE, INT,
+ * FLOAT or KEY setting with a "Reset to defaults" row (after the game's Yes/No
  * question it sets each of them to its default_value through `set`, after
  * `validate`; locked and hidden ones too), unless the page already has
  * CMFM_MAX_SETTINGS settings or sets this flag. Setting ids from

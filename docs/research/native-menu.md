@@ -1110,6 +1110,26 @@ each fill, on open and when a restart state changes.
   `decorate_panel` sets every label back (left, 340) unless it is a
   heading's or a plain button's, and requests the re-layout only when it changed something.
 
+**Key bindings (KEY rows, run `keys-1`):**
+- A KEY row is a one-value row to the game (like a TEXT row: its value text
+  is the key's name, the getter answers 0, the setter is refused); the row
+  takes Confirm (+85 set, as for buttons and pick rows), and the decide hook
+  starts CMFM's wait.
+- The wait uses `al.input` only: `capture` of every device Astera Loader can
+  capture (the game sees idle keyboard, mouse and pads, so the menu does not
+  move, close or confirm), `key_down` for the real keys every frame (left
+  and right modifiers report as VK_CONTROL / VK_SHIFT / VK_MENU, mouse
+  buttons as VK_LBUTTON..VK_XBUTTON2), `pad_state` for B. A key counts when
+  it goes down after the wait began (keys held then, such as the Confirm
+  that started it, count only after a release). `release` at the end; keys
+  still held stay hidden from the game until released, so the bound key does
+  nothing in the menu. On focus loss Astera Loader reports nothing captured
+  (CMFM's capture stays counted): CMFM ends the wait and releases.
+- The help line changes in place twice (the wait's instructions, then the
+  row's line again): CMFM requests file 18 ids 9998 / 9999 in turn, both
+  answered with the row's current help line, since the help bar redraws only
+  when its id changes (as for the mod list's 9996 / 9997).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,

@@ -55,6 +55,8 @@ struct Setting {
     // Session state: locked now (the page's `locked`), and why.
     bool locked = false;
     std::string locked_why;
+    // KEY (since 1.2), session state: the key last read or set (-1: not yet).
+    std::int32_t key = -1;
 };
 
 struct Page {
@@ -144,6 +146,21 @@ public:
     bool is_locked(std::uint32_t setting_id) const;
     // Locked with CMFM_FLAG_HIDE_LOCKED: the row is left out of the panel.
     bool is_hidden(std::uint32_t setting_id) const;
+    // KEY rows (since 1.2). The row shows the key's name, red while another
+    // KEY setting overlaps it (keys_overlap; that setting named in the help
+    // line). begin_key: the row waits for a key ("Press a key (10)", the
+    // instructions in its help line); false if it is no KEY row or locked.
+    // key_wait: the seconds left. set_key: the player's key through validate
+    // and set (false if refused, help line says why); cancel_key: the wait
+    // ends without a change. Both end the wait.
+    bool is_key(std::uint32_t setting_id) const;
+    bool begin_key(std::uint32_t setting_id);
+    void key_wait(std::uint32_t setting_id, std::uint32_t seconds);
+    bool set_key(std::uint32_t setting_id, std::int32_t key);
+    void cancel_key(std::uint32_t setting_id);
+    // A row's help line as it stands (the wait's instructions, a refusal, a
+    // conflict); nullptr for ids that are not a plugin setting.
+    const char* row_help(std::uint32_t setting_id) const;
     // TEXT rows with CMFM_FLAG_LIVE: reread_text asks get_text again and says
     // whether the line changed.
     bool is_live(std::uint32_t setting_id) const;
@@ -193,6 +210,10 @@ private:
     void update_status_texts();
     void refresh_locks();  // and the locked rows' help lines
     void refresh_texts();  // TEXT rows
+    void read_keys();      // every KEY setting of the shown pages, through `get`
+    // Every KEY row's text and help line from the keys known now: red with
+    // the overlapping setting named, or plain.
+    void update_keys();
     // One setting back to its default (validate, set, the restart state);
     // false if refused or failed, or locked unless `even_locked`.
     bool reset_setting(Row& row, bool even_locked);
@@ -218,6 +239,7 @@ private:
     std::string tab_helps_[native::kMaxTabs];
     std::string header_;  // the last tab_header
     std::string value_text_;  // the last value_text
+    std::uint32_t key_waiting_ = 0;  // the KEY row waiting for a key (0: none)
 };
 
 }  // namespace cmfm::menu

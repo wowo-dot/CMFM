@@ -37,7 +37,7 @@ if (menu == NULL) {
   always works.
 - **Version:** ask for the version whose features you use: 1.1 is the
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
-  header (rows that hide, live lines, CMFM's reset row). Within a major
+  header (rows that hide, live lines, key bindings, CMFM's reset row). Within a major
   version CMFM only adds: later CMFMs keep accepting your pages, and an
   older CMFM returns NULL when you ask for more than it has.
 
@@ -104,6 +104,7 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 | `CMFM_TYPE_TEXT` | none; `get_text` writes the line | a read-only line: label left, your text right |
 | `CMFM_TYPE_SECTION` | none; only `id` and `label` | a heading over the rows below it, centred and yellow; the cursor skips it |
 | `CMFM_TYPE_BUTTON` | none | a row whose value box shows `button` ("Run" if NULL); Confirm calls `press`, after the game's Yes/No question when `confirm` is set |
+| `CMFM_TYPE_KEY` (since 1.2) | `value.i`: a Windows virtual-key code plus `CMFM_KEY_CTRL`, `_SHIFT`, `_ALT`; 0 is no key | the key's name ("Ctrl+F5", "Mouse 4", "None"); Confirm, then the player presses the new key (Esc or a click cancels, Backspace sets no key, 10 seconds to choose); red while another KEY setting of any mod overlaps it, that setting named in the help line |
 
 ### Flags
 
@@ -182,6 +183,19 @@ call `add_page`. `get` runs every time a row is drawn.
   hide when it does not apply at all.
 - **Validate for refusals that depend on the machine.** "3x needs an RTX
   50" refuses the value with the reason; the row keeps its old value.
+- **Hotkeys with a KEY setting.** Its value is what Astera Loader's
+  `al.input` hotkeys take: `key = CMFM_KEY_VK(value)`, `modifiers =
+  CMFM_KEY_MODS(value)` in an `al_hotkey_t`. Ask for `al.input` in
+  `al_plugin_init`, add your hotkey from the value in your ini, and in `set`
+  remove the old hotkey and add the new one: the new key works at once (the
+  demo's "Demo hotkey" does exactly this). Use `validate` to refuse keys you
+  reserve ("Enter is the game's Confirm"). While CMFM waits for a key it holds
+  the game's input, so no hotkey fires meanwhile.
+- **Overlaps.** Astera Loader fires a hotkey while its key and at least its
+  modifiers are held, so F5 also fires with Ctrl+F5. CMFM marks two KEY
+  settings that overlap that way (any mods, also two of yours) in red and
+  names the other one; it does not refuse them, since the player may want
+  both. Keys of mods that do not use CMFM are not known to it.
 
 ## 4. What the player sees
 
@@ -214,8 +228,9 @@ call `add_page`. `get` runs every time a row is drawn.
   (`cmfm.menu: page "My mod" from my_mod added (N settings, ...)`) or why it
   was refused, and logs every value the player sets.
 - The demo plugin (`cmfm_demo`) shows every type, a validate refusal, a
-  lock, a button with a question, a restart setting, sections and a long
-  page.
+  lock, a button with a question, a restart setting, sections, rows that
+  hide, live lines, a real hotkey bound through a KEY setting (and, with
+  `extra_pages`, a long page and a second mod's key that overlaps it).
 
 ## 6. Checklist
 

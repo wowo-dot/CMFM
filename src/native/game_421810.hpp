@@ -475,6 +475,10 @@ inline constexpr std::size_t kHelpRequestManager = 6;  // 48 8B 0D rel32: sMhGUI
 inline constexpr std::size_t kHelpRequestCall = 33;    // E8 rel32
 inline constexpr std::uint32_t kHelpFile = 18;
 inline constexpr std::uint32_t kSplitHelpIds[2] = {9996, 9997};
+// A panel row's help line while it changes in place (a KEY row's wait and
+// its end): the row's own text under one of these ids in turn, since the help
+// bar redraws only when the id changes.
+inline constexpr std::uint32_t kRowHelpIds[2] = {9998, 9999};
 
 // The mouse on uGUIOption (docs/research/native-menu.md, "Split mode and the
 // mouse"). sub_141E8A510 at RVA 0x1E8A510 asks whether a part of the page was

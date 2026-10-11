@@ -1,4 +1,5 @@
 // Unit tests for cmfm::menu (the cmfm.menu core) with a fake plugin.
+#include "menu/keys.hpp"
 #include "menu/menu.hpp"
 
 #include <cstddef>
@@ -34,7 +35,16 @@ struct Fake {
     bool fail_get = false;
 };
 
-enum : std::uint32_t { kToggle = 10, kChoice = 11, kPercent = 12, kScale = 13, kStatus = 14, kRestart = 15 };
+enum : std::uint32_t {
+    kToggle = 10,
+    kChoice = 11,
+    kPercent = 12,
+    kScale = 13,
+    kStatus = 14,
+    kRestart = 15,
+    kKeyA = 16,
+    kKeyB = 17
+};
 
 std::uint32_t slot(std::uint32_t id) { return id - kToggle; }
 
@@ -60,6 +70,10 @@ cmfm_result_t CMFM_CALL fake_validate(void* user, std::uint32_t id, const cmfm_v
     auto* f = static_cast<Fake*>(user);
     if (id == kChoice && v->i == 2 && f->values[slot(kToggle)].i == 0) {
         std::snprintf(why, why_size, "Gamma needs the toggle on.");
+        return CMFM_ERROR;
+    }
+    if (id == kKeyB && v->i == 0x1B) {
+        std::snprintf(why, why_size, "Esc is reserved.");
         return CMFM_ERROR;
     }
     return CMFM_OK;
@@ -887,6 +901,131 @@ void rereads_live_lines() {
     check(!m.reread_text(id(toggle)), "other rows are never reread");
 }
 
+bool layout_char(std::uint32_t vk, char* out, std::size_t size) {
+    const char* c = vk == 0xBA ? "\xC5\x9F" : vk == 0xE2 ? "<" : nullptr;  // a Turkish layout's s-cedilla
+    if (c == nullptr) {
+        return false;
+    }
+    std::snprintf(out, size, "%s", c);
+    return true;
+}
+
+void names_keys() {
+    check(key_name(0) == "None", "no key");
+    check(key_name(CMFM_KEY_CTRL | 0x74) == "Ctrl+F5", "Ctrl+F5");
+    check(key_name(CMFM_KEY_CTRL | CMFM_KEY_SHIFT | CMFM_KEY_ALT | 'A') == "Ctrl+Shift+Alt+A", "every modifier, in order");
+    check(key_name(0x05) == "Mouse 4" && key_name(0x63) == "Num 3" && key_name(0x87) == "F24" &&
+              key_name(0x2E) == "Delete",
+          "mouse, numpad, F24, named keys");
+    check(key_name(0xBA) == ";", "a layout key: a US layout's character without one");
+    set_key_chars(layout_char);
+    check(key_name(0xBA) == "\xC5\x9F", "the layout's character");
+    check(key_name(0xE2) == "\\", "a character the game reads as a tag is not used");
+    set_key_chars(nullptr);
+    check(key_name(0x92) == "Key 0x92", "a key without a name");
+    check(key_valid(0) && key_valid('K') && key_valid(CMFM_KEY_ALT | 0x06) && key_valid(0x1B), "valid keys");
+    check(!key_valid(0x10) && !key_valid(0xA2) && !key_valid(0x01) && !key_valid(0x02) && !key_valid(0x5B) &&
+              !key_valid(0x800 | 'A') && !key_valid(-1) && !key_valid(CMFM_KEY_CTRL),
+          "modifiers, left and right click, Windows keys, unknown bits, a modifier with no key");
+    check(keys_overlap(0x74, CMFM_KEY_CTRL | 0x74), "F5 fires with Ctrl+F5: they overlap");
+    check(keys_overlap(CMFM_KEY_CTRL | 0x74, CMFM_KEY_CTRL | 0x74), "the same key");
+    check(!keys_overlap(CMFM_KEY_CTRL | 0x74, CMFM_KEY_SHIFT | 0x74), "Ctrl+F5 and Shift+F5 do not");
+    check(!keys_overlap(0x74, 0x75) && !keys_overlap(0, 0), "different keys; no key");
+}
+
+void binds_keys() {
+    static OptionsModel model;
+    Fake f;
+    Fake other;
+    f.values[slot(kKeyA)].i = CMFM_KEY_CTRL | 0x74;  // Ctrl+F5
+    f.values[slot(kKeyB)].i = 0x74;                  // F5: overlaps Ctrl+F5
+    other.values[slot(kKeyA)].i = 'K';
+    cmfm_setting_t s[3] = {setting(kKeyA, CMFM_TYPE_KEY, "Toggle HUD"), setting(kKeyB, CMFM_TYPE_KEY, "Screenshot"),
+                           setting(kToggle, CMFM_TYPE_BOOL, "Toggle")};
+    s[0].default_value.i = CMFM_KEY_CTRL | 0x74;
+    s[0].flags = CMFM_FLAG_RESTART | CMFM_FLAG_HIDE_LOCKED;
+    s[1].default_value.i = 'K';
+    cmfm_page_t page = demo_page(&f, "Keys").page;
+    page.settings = s;
+    page.setting_count = 3;
+    cmfm_setting_t o[1] = {setting(kKeyA, CMFM_TYPE_KEY, "Other key")};
+    cmfm_page_t other_page = demo_page(&other, "Other").page;
+    other_page.settings = o;
+    other_page.setting_count = 1;
+    Menu m;
+    check(add(m, page) && add(m, other_page), "KEY pages added");
+    std::string why;
+    check(m.build(model, why), "built");
+    m.refresh();
+    const native::GameOptionRow* a = find(model, 1, "Toggle HUD");
+    const native::GameOptionRow* b = find(model, 1, "Screenshot");
+    const native::GameOptionRow* k = find(model, 2, "Other key");
+    if (a == nullptr || b == nullptr || k == nullptr) {
+        check(false, "KEY rows laid out");
+        return;
+    }
+    check(m.is_key(id(a)) && !m.is_key(id(find(model, 1, "Toggle"))), "KEY rows known");
+    check(m.get(id(a)) == 0, "a KEY row has one text");
+    check(same(value_text(model, a, 0), "<STYL MOJI_RED_DEFAULT>Ctrl+F5</STYL>") &&
+              same(value_text(model, b, 0), "<STYL MOJI_RED_DEFAULT>F5</STYL>"),
+          "overlapping keys in red");
+    check(std::strstr(help_text(model, a), "F5 is also Screenshot.") != nullptr &&
+              std::strstr(help_text(model, a), "Help.") != nullptr,
+          "the other setting named in the help line, before the help");
+    check(same(value_text(model, k, 0), "K"), "a key nothing overlaps is plain");
+
+    check(m.begin_key(id(b)) && same(value_text(model, b, 0), "Press a key (10)") &&
+              std::strstr(m.row_help(id(b)), "Esc") != nullptr,
+          "waiting for a key, the instructions in the help line");
+    m.key_wait(id(b), 3);
+    check(same(value_text(model, b, 0), "Press a key (3)"), "the seconds left");
+    m.get(id(b));
+    check(same(value_text(model, b, 0), "Press a key (3)"), "a read does not end the wait");
+    const int sets = f.sets;
+    check(!m.set_key(id(b), 0x1B) && f.values[slot(kKeyB)].i == 0x74 &&
+              std::strstr(help_text(model, b), "Not changed: Esc is reserved.") != nullptr,
+          "validate refuses a key, the reason in the help line");
+    check(m.begin_key(id(b)) && m.set_key(id(b), 'K') && f.values[slot(kKeyB)].i == 'K' && f.sets == sets + 1,
+          "a key set through set");
+    check(same(value_text(model, a, 0), "Ctrl+F5") && std::strstr(help_text(model, a), "is also") == nullptr,
+          "the old overlap is gone");
+    check(same(value_text(model, b, 0), "<STYL MOJI_RED_DEFAULT>K</STYL>") &&
+              std::strstr(help_text(model, b), "K is also Other key (Other).") != nullptr &&
+              same(value_text(model, k, 0), "<STYL MOJI_RED_DEFAULT>K</STYL>"),
+          "an overlap with another mod's page, named with its title");
+    check(!m.set_key(id(b), 0x10) && f.values[slot(kKeyB)].i == 'K', "a modifier alone is refused");
+    check(m.set_key(id(b), 0) && same(value_text(model, b, 0), "None") && same(value_text(model, k, 0), "K"),
+          "no key: no overlap");
+    check(m.begin_key(id(a)), "waiting again");
+    m.cancel_key(id(a));
+    check(same(value_text(model, a, 0), "Ctrl+F5") && std::strstr(help_text(model, a), "Esc") == nullptr,
+          "cancel: the key and the help line as before");
+    check(!m.set(id(a), 0), "the game's setter cannot set a key");
+    check(m.set_key(id(a), CMFM_KEY_ALT | 'X') && m.restart_pending(id(a)), "a RESTART key waits for a restart");
+
+    f.values[slot(kKeyB)].i = 'K';  // the mod changed it itself
+    m.get(id(b));
+    check(same(value_text(model, b, 0), "<STYL MOJI_RED_DEFAULT>K</STYL>"), "a key the mod changed is seen on a read");
+
+    const native::GameOptionRow* reset = find(model, 1, "<STYL MOJI_RED_DEFAULT>Reset to defaults</STYL>");
+    check(reset != nullptr && m.press(id(reset)) && f.values[slot(kKeyA)].i == (CMFM_KEY_CTRL | 0x74) &&
+              f.values[slot(kKeyB)].i == 'K',
+          "reset to defaults sets the default keys");
+    check(!m.restart_pending(id(a)), "back to the key the game started with");
+
+    cmfm_setting_t bad[1] = {setting(kKeyA, CMFM_TYPE_KEY, "Bad")};
+    cmfm_page_t bad_page = demo_page(&f, "Bad").page;
+    bad_page.settings = bad;
+    bad_page.setting_count = 1;
+    bad[0].default_value.i = 0x10;
+    check(refused(bad_page, "default is not a key"), "a modifier alone as the default is refused");
+    bad[0].default_value.i = 0x74;
+    bad[0].flags = CMFM_FLAG_LIST;
+    check(refused(bad_page, "LIST and ARROWS are for CHOICE"), "CHOICE flags on a KEY are refused");
+    bad[0].flags = CMFM_FLAG_LIVE;
+    check(refused(bad_page, "LIVE is for TEXT"), "LIVE on a KEY is refused");
+}
+
 }  // namespace
 
 int main() {
@@ -911,6 +1050,8 @@ int main() {
     shows_page_headers();
     hides_locked_rows();
     resets_a_page();
+    names_keys();
+    binds_keys();
     rereads_live_lines();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
