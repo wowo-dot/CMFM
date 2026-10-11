@@ -797,6 +797,34 @@ layout-probe-1):**
   `tex_base_l` `VertexColorLeft/Right`, (32,32,32) -> (180,30,30)): red at
   the title and in game.
 
+**Layout study (2026-10-11, static):**
+- **The category cursor is the panel index everywhere:** `uGUIOption::update`
+  (slot 81) indexes the tab objects by `categoryList+0x274` in four places
+  (hover test on the panel, entering it, its row cursor), and so do
+  `sub_141E89CB0`, `sub_141E89E00`, `sub_141E89EA0`, the categories object's
+  slots 6-9 (`sub_141E8C4E0`, `C530`, `C680`, `C6E0`), `sub_141E8CDD0`
+  (calls showCategory), `sub_141E8EB40` and `sub_141E8EC90`. Seven tab
+  objects are embedded at fixed offsets, so a taller category list cannot
+  work: every row past the panels would index past them.
+- **A free list in the layout:** `options.gui` has a `camera` panel
+  (`a_window_camera`, `btnlist_camera`, `cursor_camera`, arrows, number
+  input) that the page's code never names (buildCategories uses settings,
+  display, audio, language, display_G, controls, default).
+- **Panel height follows the rows:** fillCategoryRows scales the panel's
+  window (tab+48) by `rows * 1.44` on Y.
+- **Sliders:** the row filler (`sub_141E8D890`) takes the row's slider child
+  by object index (53 `slider_audio`, else 88 `slider_display`), so only
+  rows of the audio and display panels have one. It turns the slider on
+  (`sub_141E8E410(row, entry, msg_config, slider, msg_slider_01,
+  msg_slider_00, text_config_L)`) only for kind 1 ids 3, 4, 5, 29, kind 0
+  ids 45-48 and 50-53, and kind 2 type bytes 3 and 14 (value text
+  `%02.01f`); the default branch clears the row flags. Row flags: +84,
+  +85 (opens a sub-window: kind 1 ids 6 and 33, kind 2 type 40), +86 (star
+  `null_star` shown), +87 (kind 1 id 34).
+- **Pop-up list:** `a_window_select` / `btnlist_select` with check-mark rows
+  (`menu_language` template), for rows with flag +85; contents from code
+  (not studied further yet).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
