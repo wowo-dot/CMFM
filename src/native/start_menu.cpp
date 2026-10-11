@@ -63,8 +63,13 @@ std::uint64_t item_action_detour(void* menu, std::uint32_t id, void* arg) {
     return g_item_action_next(menu, id, arg);
 }
 
-std::uintptr_t tab_slot(std::uintptr_t list_rva) {
+// The System tab's entry in a tab list, and its item table pointer. The
+// check and the swap both use these, so they cannot disagree.
+std::uintptr_t system_entry(std::uintptr_t list_rva) {
     return g_base + list_rva + game::kSystemTabIndex * game::kTabListEntrySize;
+}
+std::uintptr_t system_items_slot(std::uintptr_t list_rva) {
+    return system_entry(list_rva) + game::kTabListItemsOffset;
 }
 
 }  // namespace
@@ -106,9 +111,8 @@ bool start_menu_activate(const Env& env, std::string& why) {
     // The tab lists must name the System tab and point at the expected table.
     const std::uintptr_t system_items = env.base + game::kRvaSystemItems;
     for (const std::uintptr_t rva : {game::kRvaTabList, game::kRvaTabListInQuest}) {
-        const std::uintptr_t entry = env.base + rva + game::kSystemTabIndex * game::kTabListEntrySize;
-        const std::uint32_t label = *reinterpret_cast<const std::uint32_t*>(entry);
-        const std::uint64_t items = *reinterpret_cast<const std::uint64_t*>(entry + 8);
+        const std::uint32_t label = *reinterpret_cast<const std::uint32_t*>(system_entry(rva));
+        const std::uint64_t items = *reinterpret_cast<const std::uint64_t*>(system_items_slot(rva));
         if (label != game::kSystemTabLabel || items != system_items) {
             why = "tab list at RVA " + hex(rva) + " differs: label " + std::to_string(label) + ", items " +
                   hex(items) + " (expected " + std::to_string(game::kSystemTabLabel) + ", " + hex(system_items) + ")";
@@ -132,12 +136,12 @@ bool start_menu_activate(const Env& env, std::string& why) {
 
     const std::uint64_t ours = reinterpret_cast<std::uint64_t>(&g_items[0]);
     std::string fail;
-    if (!g_patch_tabs.apply("tab list", tab_slot(game::kRvaTabList), system_items, ours, fail)) {
+    if (!g_patch_tabs.apply("tab list", system_items_slot(game::kRvaTabList), system_items, ours, fail)) {
         why = "tab list: " + fail;
         return false;
     }
-    if (!g_patch_tabs_in_quest.apply("tab list (quest)", tab_slot(game::kRvaTabListInQuest), system_items, ours,
-                                     fail)) {
+    if (!g_patch_tabs_in_quest.apply("tab list (quest)", system_items_slot(game::kRvaTabListInQuest), system_items,
+                                     ours, fail)) {
         std::string ignored;
         g_patch_tabs.restore(ignored);
         why = "tab list (quest): " + fail;

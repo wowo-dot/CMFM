@@ -26,6 +26,11 @@ inline constexpr std::uintptr_t kRvaTabListInQuest = 0x3481820;
 inline constexpr std::uint32_t kSystemTabIndex = 4;
 inline constexpr std::uint32_t kSystemTabLabel = 3;
 inline constexpr std::uintptr_t kTabListEntrySize = 16;
+inline constexpr std::uintptr_t kTabListItemsOffset = 8;  // the item table pointer within an entry
+// The System tab's item table pointer in each list (run 20261011-native-m1
+// patched the label field instead; these pin the right slots).
+static_assert(kRvaTabList + kSystemTabIndex * kTabListEntrySize + kTabListItemsOffset == 0x34818B8);
+static_assert(kRvaTabListInQuest + kSystemTabIndex * kTabListEntrySize + kTabListItemsOffset == 0x3481868);
 // The System tab's item table in .data: 71, 10, 72, 73, 74, 75, end marker.
 inline constexpr std::uintptr_t kRvaSystemItems = 0x3FC0E40;
 inline constexpr std::uint32_t kSystemItemsMaxRead = 16;
