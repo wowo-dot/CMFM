@@ -217,8 +217,11 @@ void validates_pages() {
     bad.settings[3].default_value.f = 3.0;
     check(refused(page_of(bad), "default"), "float default out of range");
     bad = demo_page(&f);
-    bad.settings[0].flags = 0x10;
+    bad.settings[0].flags = 0x20;
     check(refused(page_of(bad), "flags"), "unknown flag");
+    bad = demo_page(&f);
+    bad.settings[0].flags = CMFM_FLAG_LIVE;
+    check(refused(page_of(bad), "LIVE is for TEXT"), "LIVE only on TEXT");
     bad = demo_page(&f);
     bad.settings[0].type = 9;
     check(refused(page_of(bad), "type"), "unknown type");
@@ -858,6 +861,28 @@ void resets_a_page() {
     check(refused(page_of(bad), "CMFM's"), "reserved ids refused");
 }
 
+void rereads_live_lines() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.settings[4].flags = CMFM_FLAG_LIVE;  // Status: "Opened N times"
+    Menu m;
+    check(add(m, page_of(d)), "LIVE accepted on TEXT");
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* status = find(model, 1, "Status");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    m.send(CMFM_EVENT_OPENED);
+    m.refresh();
+    check(m.is_live(id(status)) && !m.is_live(id(toggle)), "only the flagged TEXT row is live");
+    const int texts = f.texts;
+    check(!m.reread_text(id(status)) && f.texts == texts + 1, "asked again; unchanged text: no change");
+    f.opened = 7;
+    check(m.reread_text(id(status)) && same(value_text(model, status, 0), "Opened 7 times"),
+          "a changed line is reported and shown");
+    check(!m.reread_text(id(toggle)), "other rows are never reread");
+}
+
 }  // namespace
 
 int main() {
@@ -882,6 +907,7 @@ int main() {
     shows_page_headers();
     hides_locked_rows();
     resets_a_page();
+    rereads_live_lines();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

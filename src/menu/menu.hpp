@@ -141,6 +141,10 @@ public:
     bool is_locked(std::uint32_t setting_id) const;
     // Locked with CMFM_FLAG_HIDE_LOCKED: the row is left out of the panel.
     bool is_hidden(std::uint32_t setting_id) const;
+    // TEXT rows with CMFM_FLAG_LIVE: reread_text asks get_text again and says
+    // whether the line changed.
+    bool is_live(std::uint32_t setting_id) const;
+    bool reread_text(std::uint32_t setting_id);
     std::uint32_t lock_revision() const { return lock_revision_; }
 
     // Tab t's header above its rows: "Overview", or the page's title, its

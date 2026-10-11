@@ -114,8 +114,12 @@ bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::s
     if (!text_ok(in.help, kMaxHelp, true, s.help)) {
         return fail("help longer than 200 bytes");
     }
-    if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS | CMFM_FLAG_HIDE_LOCKED)) != 0) {
+    if ((in.flags &
+         ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS | CMFM_FLAG_HIDE_LOCKED | CMFM_FLAG_LIVE)) != 0) {
         return fail("unknown flags");
+    }
+    if ((in.flags & CMFM_FLAG_LIVE) != 0 && in.type != CMFM_TYPE_TEXT) {
+        return fail("LIVE is for TEXT settings");
     }
     if ((in.flags & (CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0 && in.type != CMFM_TYPE_CHOICE) {
         return fail("LIST and ARROWS are for CHOICE settings");
@@ -611,6 +615,32 @@ void Menu::refresh_locks() {
             set_help(r, r.base_help.c_str());
         }
     }
+}
+
+bool Menu::is_live(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return false;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    return s.type == CMFM_TYPE_TEXT && (s.flags & CMFM_FLAG_LIVE) != 0;
+}
+
+bool Menu::reread_text(std::uint32_t setting_id) {
+    const std::size_t i = row_index(setting_id);
+    if (i >= rows_.size() || !is_live(setting_id)) {
+        return false;
+    }
+    Row& r = rows_[i];
+    const Page& p = pages_[r.page];
+    char text[CMFM_MAX_TEXT] = {};
+    p.get_text(p.user, p.settings[r.setting].id, text, sizeof text);
+    text[sizeof text - 1] = '\0';
+    if (std::strcmp(text, r.text) == 0) {
+        return false;
+    }
+    std::memcpy(r.text, text, sizeof text);
+    return true;
 }
 
 void Menu::refresh_texts() {

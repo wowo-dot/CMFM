@@ -37,9 +37,9 @@ if (menu == NULL) {
   always works.
 - **Version:** ask for the version whose features you use: 1.1 is the
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
-  header (rows that hide). Within a major version CMFM only adds: later
-  CMFMs keep accepting your pages, and an older CMFM returns NULL when you
-  ask for more than it has.
+  header (rows that hide, live lines, CMFM's reset row). Within a major
+  version CMFM only adds: later CMFMs keep accepting your pages, and an
+  older CMFM returns NULL when you ask for more than it has.
 
 ## 2. Describing your page
 
@@ -115,6 +115,9 @@ at run time goes through the callbacks (values, TEXT lines, locks).
   back.
 - `CMFM_FLAG_LIST`, `CMFM_FLAG_ARROWS`: CHOICE only, one or the other (see
   the table).
+- `CMFM_FLAG_LIVE` (since 1.2, TEXT only): CMFM asks `get_text` about four
+  times a second while the line is on screen, so counters and states stay
+  current. Keep `get_text` quick (no file access, no locks held long).
 - `CMFM_FLAG_HIDE_LOCKED` (since 1.2, any type): while your `locked`
   callback says the row is locked, the row is **hidden** instead of greyed.
   CMFM asks again after every change, so rows come and go as other settings
@@ -152,7 +155,7 @@ call `add_page`. `get` runs every time a row is drawn.
 | `get(user, id, value)` | unless every row is TEXT | every draw of the row | fill `value` from your current state |
 | `set(user, id, value)` | unless every row is TEXT | the player picked a value (in range, validated) | apply it (now, or after a restart for RESTART rows) and keep it for your config file; `CMFM_ERROR` keeps the old value |
 | `validate(user, id, value, why, size)` | no | before `set` | refuse a combination: return `CMFM_ERROR` with a short reason, shown in the help line |
-| `get_text(user, id, text, size)` | if a row is TEXT | right after `CMFM_EVENT_OPENED` | write the line (cut at 128 bytes) |
+| `get_text(user, id, text, size)` | if a row is TEXT | right after `CMFM_EVENT_OPENED`; for LIVE lines also four times a second while shown | write the line (cut at 128 bytes) |
 | `on_event(user, event)` | no | `CMFM_EVENT_OPENED`, `CMFM_EVENT_CLOSED` | read fresh status at OPENED; save your config file at CLOSED |
 | `press(user, id)` | if a row is BUTTON | Confirm (after Yes) | run the action; CMFM reads every value and text of the page again afterwards |
 | `locked(user, id, why, size)` | no | when a page opens and after every change CMFM makes | return nonzero to grey the row and refuse changes; write the reason (help line) |

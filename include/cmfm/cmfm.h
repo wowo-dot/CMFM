@@ -111,6 +111,10 @@ typedef uint32_t cmfm_flags_t;
  * only that upscaler's settings). SECTION and TEXT rows with this flag are
  * asked too; to hide a section, flag and lock its heading and its rows. */
 #define CMFM_FLAG_HIDE_LOCKED 0x8u
+/* Since 1.2, TEXT only: CMFM asks `get_text` again about four times a second
+ * while the line is on screen (counters, states, debug values), not only when
+ * the page opens. Keep `get_text` quick. */
+#define CMFM_FLAG_LIVE 0x10u
 
 /* Limits of CMFM's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */

@@ -10,6 +10,7 @@
 #include "native/panel_window.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -329,6 +330,8 @@ void update_scrollbars();
 void drag_scrollbars(void* unit);
 bool scroll_dragging();
 void wheel_split(void* unit, int steps);
+void refresh_live_rows(void* unit);
+std::size_t panel_visible();
 std::uint64_t panel_hidden_now();
 void rebuild_panel(void* unit);
 void fill_split_panel(void* unit);
@@ -605,8 +608,43 @@ std::uint64_t page_update(void* unit) {
             decorate_panel(unit);
         }
         update_sliders(unit);  // the game moved them in this update (keys, mouse, setter)
+        refresh_live_rows(unit);
     }
     return result;
+}
+
+// Live TEXT lines (CMFM_FLAG_LIVE) the panel shows, read again four times a
+// second; a changed line gets its value text written the way the game's tab
+// refresh writes it (the text filler without the label: no row looks, so
+// nothing restarts its animation).
+void refresh_live_rows(void* unit) {
+    using clock = std::chrono::steady_clock;
+    static clock::time_point next{};
+    const clock::time_point now = clock::now();
+    if (now < next) {
+        return;
+    }
+    next = now + std::chrono::milliseconds(250);
+    char* tab = tab_object(unit, game::kSplitPanel);
+    bool refresh = false;
+    for (std::size_t r = 0; r < panel_visible(); ++r) {
+        const auto id = static_cast<std::uint32_t>(g_panel_rows[r].setting_id);
+        if (!menu::service_is_live(id) || !menu::service_reread_text(id)) {
+            continue;
+        }
+        char* row_object = tab + (r + 1) * game::kRowObjectSize;
+        void* row = field<void*>(row_object, game::kRowInstance);
+        void* value = field<void*>(row_object, game::kRowValueObject);
+        if (g_row_text != nullptr && row != nullptr && value != nullptr) {
+            g_row_text(row, nullptr, value, &g_panel_rows[r]);
+        } else {
+            refresh = true;
+        }
+    }
+    if (refresh && g_tab_refresh != nullptr) {
+        g_tab_refresh(tab);
+        decorate_panel(unit);
+    }
 }
 
 void start_window(void* unit, void* categories) {

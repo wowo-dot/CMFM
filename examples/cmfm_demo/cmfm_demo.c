@@ -16,16 +16,19 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <wchar.h>
 
 enum {
     ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
-    ID_QUALITY, ID_PRESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY
+    ID_QUALITY, ID_PRESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY, ID_LIVE,
+    ID_CLOCK
 };
 
 #define DEMO_VERSION "0.1.0" /* the plugin's version: Astera Loader's info and the page's header */
 
 static const al_api_t* g_api;
+static time_t g_start; /* the live clock counts from the plugin's start */
 static al_plugin_t* g_self;
 static wchar_t g_ini[1024];
 
@@ -190,6 +193,9 @@ static void CMFM_CALL demo_text(void* user, uint32_t id, char* text, uint32_t te
     (void)user;
     if (id == ID_STATUS) {
         snprintf(text, text_size, "Opened %d time%s", g_opened, g_opened == 1 ? "" : "s");
+    } else if (id == ID_CLOCK) { /* live: asked four times a second while it shows */
+        const long seconds = (long)difftime(time(NULL), g_start);
+        snprintf(text, text_size, "%02ld:%02ld:%02ld since start", seconds / 3600, seconds / 60 % 60, seconds % 60);
     }
 }
 
@@ -283,7 +289,7 @@ static const char* const kXessQualities[] = {"Ultra quality", "Quality", "Balanc
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[16];
+    cmfm_setting_t s[18];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
@@ -291,7 +297,7 @@ static void add_page(void) {
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 16; ++i) {
+    for (int i = 0; i < 18; ++i) {
         s[i].size = sizeof s[i];
     }
     s[0].id = ID_BASICS;
@@ -412,7 +418,17 @@ static void add_page(void) {
     s[15].choice_count = 4;
     s[15].default_value.i = 1;
 
-    page.setting_count = 16;
+    s[16].id = ID_LIVE;
+    s[16].type = CMFM_TYPE_SECTION;
+    s[16].label = "Live";
+
+    s[17].id = ID_CLOCK;
+    s[17].type = CMFM_TYPE_TEXT;
+    s[17].flags = CMFM_FLAG_LIVE;
+    s[17].label = "Demo clock";
+    s[17].help = "A line read again four times a second while it shows (since 1.2).";
+
+    page.setting_count = 18;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;
@@ -455,6 +471,7 @@ AL_PLUGIN_EXPORT const al_plugin_info_t* AL_CALL al_plugin_info(void) {
 AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* api, const al_init_t* init) {
     g_api = api;
     g_self = init->self;
+    g_start = time(NULL);
     api->set_status(init->self, AL_STATUS_ACTIVE, NULL);
     if (api->size < offsetof(al_api_t, get_interface) + sizeof(api->get_interface)) {
         api->set_status(init->self, AL_STATUS_DEGRADED, "this Astera Loader has no services");
