@@ -23,22 +23,22 @@ each part works go into `docs/research/native-menu.md`.
 
 ## Next: the rest of the first draft (agreed 2026-10-11)
 
-5. **Scrollbars, for the mod list and the panel.**
+5. **Scrollbars, for the mod list and the panel.** Done (tag
+   `design-step-5`, run `scrollbar-2`).
    - 5a. Done (run `20261011-longpage-1`): the panel does not scroll. With 24
      rows it runs past the bottom of the screen (rows 1-15 fit, the help line
      covers row 16). The panel needs a window over its rows, like the mod
      list, and a scrollbar too.
-   - 5b. Built (commit 93bbd30, run `scrollbar-1` to come): the game's own
+   - 5b. Done (commit 93bbd30): the game's own
      scrollbar pair (`ui\common\scrollbar`, as in the PC graphics settings)
      grafted into CMFM's layout next to the mod list and next to the panel;
      `tools/gui/` now grows layouts (docs/research/gui-format.md).
-   - 5c. Built (commit ff12f3f, run `panelwindow-1`): the panel holds at
+   - 5c. Done (commits ff12f3f, 5ebcaea): the panel holds at
      most 14 rows; the cursor moving past the edge moves the window (the
      mod list's method, chosen by the user).
-   - 5d. Built (commit 93bbd30): each bar follows its list's window and
-     shows only while the list scrolls. Display only; the game's bar can be
-     dragged (its `updateMouse`, docs/research/scrollbar.md), a later extra.
-     The draft's "2 more" line is dropped.
+   - 5d. Done (commits 93bbd30, 5ebcaea): each bar follows its list's
+     window, shows only while the list scrolls, and its thumb can be dragged
+     (the user asked for it). The draft's "2 more" line is dropped.
 6. **The mod's own header** on the right panel: its name, version and state
    ("active", "restart needed"), placed so it does not sit on the first
    row's line (why the panel title was dropped). The version: a new optional

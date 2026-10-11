@@ -994,6 +994,46 @@ study afterwards):**
   its decoration; unlocked, the row filler makes it a slider again. The
   option setter hook also ignores locked rows.
 
+**Long pages and scrollbars (design step 5, runs `longpage-1`,
+`scrollbar-1`, `-2`):**
+- The panel never scrolls: fillCategoryRows sizes its window by rows * 1.44
+  and draws every row (24 ran past the bottom of the screen, rows 1-15
+  fit). CMFM's panel window (`native/panel_window.hpp`) gives the game at
+  most 14 rows of the tab (a table of its own, `g_panel_rows`, with an end
+  row; the row objects keep pointers to these entries).
+- Keys: the button list's key handler (vtable +232, `sub_140B81060`) steps
+  with `sub_140B75BD0` (next) / `sub_140B75C80` (previous) `(list, cursor,
+  steps, wrap, bool* wrapped)` over selectable rows (+0x628 bit 0x2, +1560
+  != 1), then `moveCursor` (+224) moves to the result. CMFM hooks both
+  steps: for the panel list they step over the whole tab and move the
+  window (headings right above the cursor come into view). `moveCursor`
+  does nothing for an unchanged row, so when the window moves under a cursor
+  that keeps its row, CMFM sets the list's cursor field to the row the old
+  setting moved to: the game then runs a real cursor change (sound, row
+  looks, the tab's cursor handler).
+- The tab's cursor handler (slot 10, `sub_141E89CB0(tab, list, row)`): the
+  tab refresh, the row looks, the arrows to `row * 52 + 34`, special rows,
+  and the row's help line (`sub_141E8EA70`).
+- The tab refresh (`sub_141E8EB40`) rewrites only values: per row
+  `sub_140EEA680(row, nullptr, text_config_L, entry)` (or the kind-2
+  variant), the row refresh `sub_141E8E8B0`, sliders (+84) from their
+  setting. The label is written only by the row filler, through the same
+  `sub_140EEA680` given `msg_config` (run `scrollbar-1`: the bar moved, the
+  labels stayed). A scroll writes every row's label that way.
+- Before entries move, CMFM ends every slider row (+84 = 0) and clears +85:
+  the per-frame slider sync (`sub_140EEB860`) would otherwise set the new
+  setting to the old knob position.
+- Scrollbars: CMFM's layout carries the game's track and bar
+  (`docs/research/scrollbar.md`, `tools/gui/make_mods_gui.py`). Found by
+  name, class checked through getDti; shown with `setPlay` only while their
+  list scrolls (setPlay acts only on a change and does not touch children
+  when turning on); total, visible and ratio written on every window move.
+  Every frame the page calls `cGUIInstScrollBar::updateMouse` (RVA
+  0xB89670) for each shown bar: a drag moves the window (the mod list keeps
+  the highlighted mod inside it; the panel keeps its cursor row and runs the
+  cursor handler when it has the focus); otherwise the thumb is put back on
+  whole rows. The bars' own wheel is off (+0x262 = 0).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
