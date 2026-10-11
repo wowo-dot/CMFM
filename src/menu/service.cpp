@@ -111,7 +111,7 @@ bool service_publish(const al_api_t* api, al_plugin_t* self, const char* version
         why = "Astera Loader refused to publish cmfm.menu";
         return false;
     }
-    log_line(0, "cmfm.menu 1.0 published");
+    logf(0, "cmfm.menu %u.%u published", CMFM_VERSION_MAJOR(CMFM_MENU_VERSION), CMFM_VERSION_MINOR(CMFM_MENU_VERSION));
     return true;
 }
 
@@ -200,6 +200,26 @@ void service_reset() {
     if (g_menu && g_model_ok) {
         g_menu->reset_defaults();
     }
+}
+
+bool service_is_section(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_section(setting_id);
+}
+
+bool service_restart_pending(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->restart_pending(setting_id);
+}
+
+bool service_tab_restart_pending(std::size_t tab) {
+    return g_menu && g_model_ok && g_menu->tab_restart_pending(tab);
+}
+
+std::size_t service_restart_count() {
+    return g_menu && g_model_ok ? g_menu->restart_count() : 0;
+}
+
+std::uint32_t service_restart_revision() {
+    return g_menu ? g_menu->restart_revision() : 0;
 }
 
 }  // namespace cmfm::menu

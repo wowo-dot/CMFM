@@ -145,6 +145,9 @@ inline constexpr char kFormatTextPattern[] = "48 85 C9 74 34 48 85 D2 74 25 0F B
 inline constexpr char kGetInstanceFromNamePattern[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 81 90 02 00 00";
 // cGUIInstance::setPlay(instance, bool) at RVA 0x18BAEA0.
 inline constexpr char kSetPlayPattern[] = "48 85 C9 74 50 48 89 5C 24 08 57 48 83 EC 20 0F B6 FA";
+// cGUIObject::setHidden(object, bool) at RVA 0x2343310 (object +88 bit
+// 0x4000000).
+inline constexpr char kSetHiddenPattern[] = "48 83 EC 28 44 8B 41 58 41 8B C0 C1 E8 1A";
 
 // cGUIInstButtonList::moveCursor(list, row) at RVA 0xB74060: the list's cursor
 // move from directional input (vtable slot 28 via a thunk, slot 94); calls
@@ -295,6 +298,15 @@ inline constexpr char kGuiResourceClassName[] = "rGUI";
 // rows carry a slider part).
 inline constexpr char kModListName[] = "btnlist_camera";
 inline constexpr std::size_t kSplitPanel = 2;
+// The split panel's title (initCategory writes the tab title into it) and
+// CMFM's restart line (the camera panel's title, moved above the mod list).
+inline constexpr char kSplitPanelTitle[] = "a_title_menu_audio";
+inline constexpr char kRestartLineName[] = "a_title_menu_camera";
+inline constexpr char kTitleText[] = "msg_sub_title";
+// A panel row's parts (the row filler, RVA 0x1E8D890): the label text and the
+// star icon the title page never shows (CMFM's restart mark).
+inline constexpr char kRowLabelText[] = "msg_config";
+inline constexpr char kRowStar[] = "null_star";
 
 // The mouse on uGUIOption (docs/research/native-menu.md, "Split mode and the
 // mouse"). sub_141E8A510 at RVA 0x1E8A510 asks whether a part of the page was

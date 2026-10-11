@@ -38,4 +38,11 @@ std::uint64_t service_get(std::uint32_t setting_id);
 void service_set(std::uint32_t setting_id, std::int32_t value);
 void service_reset();
 
+// For the Mods page's drawing (game thread; false / 0 without a layout).
+bool service_is_section(std::uint32_t setting_id);
+bool service_restart_pending(std::uint32_t setting_id);
+bool service_tab_restart_pending(std::size_t tab);
+std::size_t service_restart_count();
+std::uint32_t service_restart_revision();
+
 }  // namespace cmfm::menu

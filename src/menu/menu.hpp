@@ -1,9 +1,10 @@
 // CMFM's menu core: the pages plugins added through cmfm.menu (validated
 // copies), laid out as the game's Options rows (native/options_model.hpp):
-// tab 0 is CMFM's status page, then one tab per plugin page (at least 5 tabs
-// for the in-game page, up to 25 for the title page's scrolling list).
-// Values are never stored here: every read and write goes through the page's
-// callbacks.
+// tab 0 is the Overview (CMFM's version and every plugin's state), then one
+// tab per plugin page (at least 5 tabs for the in-game page, up to 25 for
+// the Mods page's list). Values are never stored here: every read and write
+// goes through the page's callbacks. The core remembers only, per setting,
+// the value the session started with, to tell when a restart is pending.
 // Pure logic, single-threaded (the caller serialises), tested in
 // tests/test_menu.cpp.
 #pragma once
@@ -39,7 +40,12 @@ struct Setting {
     double step = 1;
     std::string unit;
     cmfm_value_t default_value = {};
-    std::uint32_t value_count = 0;  // rows' values: 2 for BOOL, 1 for TEXT
+    std::uint32_t value_count = 0;  // rows' values: 2 for BOOL, 1 for TEXT and SECTION
+    // Session state (CMFM_FLAG_RESTART): the value index first read this
+    // session (-1: not read yet), and whether a change away from it waits
+    // for a restart.
+    std::int32_t first_index = -1;
+    bool restart_pending = false;
 };
 
 struct Page {
@@ -85,6 +91,16 @@ public:
     bool set(std::uint32_t setting_id, std::int32_t index);
     void reset_defaults();               // "Set To Default"
 
+    // Rows by setting id (false for ids that are not a plugin setting).
+    bool is_section(std::uint32_t setting_id) const;
+    bool restart_pending(std::uint32_t setting_id) const;
+    // Tab t (1 + page index) has a change waiting for a restart.
+    bool tab_restart_pending(std::size_t tab) const;
+    // Settings waiting for a restart, over every shown page.
+    std::size_t restart_count() const;
+    // Changes whenever a setting's restart state does.
+    std::uint32_t restart_revision() const { return restart_revision_; }
+
 private:
     struct Entry {
         bool page;          // a page (index into pages_) or a refusal
@@ -92,6 +108,7 @@ private:
     };
     struct Row {
         bool status = false;
+        std::int32_t status_page = -1;  // Overview rows: the shown page they describe
         std::size_t page = 0;
         std::size_t setting = 0;
         std::string label;
@@ -106,7 +123,14 @@ private:
     void logf(int level, const char* format, ...) const;
     static void set_help(Row& row, const char* text);
     void compose(std::size_t shown, std::vector<native::RowSpec>& specs);
-    Row* setting_row(std::uint32_t setting_id);  // nullptr for status rows, placeholders, TEXT
+    // The row of a plugin setting (any type): its index in rows_, or
+    // rows_.size() (status rows, placeholders, ids not ours).
+    std::size_t row_index(std::uint32_t setting_id) const;
+    const Row* any_setting_row(std::uint32_t setting_id) const;
+    Row* setting_row(std::uint32_t setting_id);  // nullptr for status rows, placeholders, TEXT, SECTION
+    // After a value change: the restart state and the Overview's text.
+    void note_value(Row& row, std::uint32_t index);
+    void update_status_texts();
 
     std::string version_;
     LogFn log_;
@@ -114,6 +138,7 @@ private:
     std::vector<std::pair<std::string, std::string>> refused_;  // plugin, why
     std::vector<Entry> entries_;
     bool dirty_ = true;
+    std::uint32_t restart_revision_ = 0;
 
     // The last build.
     const native::OptionsModel* model_ = nullptr;

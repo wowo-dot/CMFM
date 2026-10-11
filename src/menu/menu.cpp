@@ -11,8 +11,13 @@ namespace cmfm::menu {
 namespace {
 
 constexpr char kRestartNote[] = "Takes effect after restarting the game.";
+// Section headings in the game's own text colour tags (as its message files
+// write them).
+constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
+constexpr char kSectionEnd[] = "</STYL>";
 const char* const kOffOn[] = {"Off", "On"};
 const char* const kDash[] = {"-"};
+const char* const kNoValue[] = {""};
 const native::RowSpec kEmptyRow = {"Empty", "No mod uses this tab.", kDash, 1, 0};
 
 // A string of 1..limit bytes (or 0..limit when empty is allowed).
@@ -162,6 +167,13 @@ bool copy_setting(const cmfm_setting_t& in, Setting& s, std::string& why) {
         case CMFM_TYPE_TEXT:
             s.value_count = 1;
             return true;
+        case CMFM_TYPE_SECTION:
+            if (in.flags != 0) {
+                return fail("a SECTION takes no flags");
+            }
+            s.value_count = 1;
+            s.help.clear();
+            return true;
         default:
             return fail("unknown type");
     }
@@ -214,7 +226,15 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
                 return false;
             }
         }
-        (in->type == CMFM_TYPE_TEXT ? any_text : any_value) = true;
+        if (in->type == CMFM_TYPE_TEXT) {
+            any_text = true;
+        } else if (in->type != CMFM_TYPE_SECTION) {
+            any_value = true;
+        }
+    }
+    if (!any_value && !any_text) {
+        why = "needs a setting besides its sections";
+        return false;
     }
     if (any_value && (page->get == nullptr || page->set == nullptr)) {
         why = "get and set callbacks needed";
@@ -287,7 +307,7 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
         set_help(r, help.c_str());
     };
     status("CMFM", version_.empty() ? "-" : version_.c_str(),
-           "Configuration Menu For Mods. Settings that mods add appear on the next tabs.");
+           "Configuration Menu For Mods. Each mod that supports it has an entry in this list.");
     if (entries_.empty()) {
         status("No mod pages yet", "-", "Mods that support CMFM add their settings here.");
     }
@@ -303,11 +323,15 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             status(plugin.empty() ? std::string("(unnamed)") : plugin, "Refused", "Refused: " + why);
         } else if (en.index < shown) {
             const Page& p = pages_[en.index];
-            status(p.plugin, "Shown",
-                   "Tab \"" + p.title + "\": " + std::to_string(p.settings.size()) + " setting(s).");
+            std::size_t count = 0;
+            for (const Setting& s : p.settings) {
+                count += s.type != CMFM_TYPE_SECTION;
+            }
+            status(p.title, "Active", "From " + p.plugin + ": " + std::to_string(count) + " setting(s).");
+            rows_.back().status_page = static_cast<std::int32_t>(en.index);
         } else {
             const Page& p = pages_[en.index];
-            status(p.plugin, "Not shown", not_shown_why_[en.index]);
+            status(p.title, "Not shown", "From " + p.plugin + ". " + not_shown_why_[en.index]);
         }
     }
 
@@ -319,7 +343,10 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             r.page = p;
             r.setting = i;
             r.label = s.label;
-            if (s.type == CMFM_TYPE_TEXT) {
+            if (s.type == CMFM_TYPE_SECTION) {
+                r.label = kSectionStart + s.label + kSectionEnd;
+                r.value_ptrs = {kNoValue[0]};
+            } else if (s.type == CMFM_TYPE_TEXT) {
                 r.value_ptrs = {r.text};
             } else if (s.type == CMFM_TYPE_BOOL) {
                 r.value_ptrs = {kOffOn[0], kOffOn[1]};
@@ -351,8 +378,8 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     }
 
     tab_count_ = 1 + shown < native::kTabCount ? native::kTabCount : 1 + shown;
-    tab_names_[0] = "CMFM";
-    tab_helps_[0] = "Which mods added settings, and what CMFM did with them.";
+    tab_names_[0] = "Overview";
+    tab_helps_[0] = "CMFM's version and every mod: active, waiting for a restart, or refused.";
     for (std::size_t t = 1; t < tab_count_; ++t) {
         if (t - 1 < shown) {
             const Page& p = pages_[t - 1];
@@ -394,24 +421,91 @@ bool Menu::build(native::OptionsModel& model, std::string& why) {
     model_ = &model;
     shown_ = shown;
     dirty_ = false;
+    update_status_texts();
     logf(0, "menu built: %zu page(s) shown, %zu added, %zu refused, %zu rows", shown, pages_.size(),
          refused_.size(), model.row_count());
     return true;
 }
 
-Menu::Row* Menu::setting_row(std::uint32_t setting_id) {
+std::size_t Menu::row_index(std::uint32_t setting_id) const {
     if (model_ == nullptr) {
-        return nullptr;
+        return rows_.size();
     }
     const std::int32_t src = model_->source(setting_id);
-    if (src < 0 || static_cast<std::size_t>(src) >= rows_.size()) {
+    if (src < 0 || static_cast<std::size_t>(src) >= rows_.size() || rows_[static_cast<std::size_t>(src)].status) {
+        return rows_.size();
+    }
+    return static_cast<std::size_t>(src);
+}
+
+const Menu::Row* Menu::any_setting_row(std::uint32_t setting_id) const {
+    const std::size_t i = row_index(setting_id);
+    return i < rows_.size() ? &rows_[i] : nullptr;
+}
+
+Menu::Row* Menu::setting_row(std::uint32_t setting_id) {
+    const std::size_t i = row_index(setting_id);
+    if (i == rows_.size()) {
         return nullptr;
     }
-    Row& r = rows_[static_cast<std::size_t>(src)];
-    if (r.status || pages_[r.page].settings[r.setting].type == CMFM_TYPE_TEXT) {
-        return nullptr;
+    const cmfm_type_t type = pages_[rows_[i].page].settings[rows_[i].setting].type;
+    return type == CMFM_TYPE_TEXT || type == CMFM_TYPE_SECTION ? nullptr : &rows_[i];
+}
+
+void Menu::note_value(Row& row, std::uint32_t index) {
+    Setting& s = pages_[row.page].settings[row.setting];
+    if ((s.flags & CMFM_FLAG_RESTART) == 0) {
+        return;
     }
-    return &r;
+    const bool pending = s.first_index < 0 || static_cast<std::uint32_t>(s.first_index) != index;
+    if (pending != s.restart_pending) {
+        s.restart_pending = pending;
+        ++restart_revision_;
+        update_status_texts();
+        logf(0, "%s: \"%s\" %s", pages_[row.page].plugin.c_str(), s.label.c_str(),
+             pending ? "waits for a restart" : "back to the value the game started with");
+    }
+}
+
+void Menu::update_status_texts() {
+    for (Row& r : rows_) {
+        if (r.status_page >= 0) {
+            const bool pending = tab_restart_pending(1 + static_cast<std::size_t>(r.status_page));
+            std::snprintf(r.text, sizeof r.text, "%s", pending ? "Restart needed" : "Active");
+        }
+    }
+}
+
+bool Menu::is_section(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].type == CMFM_TYPE_SECTION;
+}
+
+bool Menu::restart_pending(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].restart_pending;
+}
+
+bool Menu::tab_restart_pending(std::size_t tab) const {
+    if (tab == 0 || tab - 1 >= shown_) {
+        return false;
+    }
+    for (const Setting& s : pages_[tab - 1].settings) {
+        if (s.restart_pending) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::size_t Menu::restart_count() const {
+    std::size_t n = 0;
+    for (std::size_t p = 0; p < shown_; ++p) {
+        for (const Setting& s : pages_[p].settings) {
+            n += s.restart_pending;
+        }
+    }
+    return n;
 }
 
 void Menu::refresh() {
@@ -444,8 +538,8 @@ std::uint32_t Menu::get(std::uint32_t setting_id) {
     if (r == nullptr) {
         return 0;
     }
-    const Page& p = pages_[r->page];
-    const Setting& s = p.settings[r->setting];
+    Page& p = pages_[r->page];
+    Setting& s = p.settings[r->setting];
     cmfm_value_t v = {};
     if (p.get(p.user, s.id, &v) != CMFM_OK) {
         if (!r->get_failed) {
@@ -454,7 +548,11 @@ std::uint32_t Menu::get(std::uint32_t setting_id) {
         }
         return 0;
     }
-    return index_of(s, v);
+    const std::uint32_t index = index_of(s, v);
+    if (s.first_index < 0) {
+        s.first_index = static_cast<std::int32_t>(index);  // the value the session started with
+    }
+    return index;
 }
 
 bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
@@ -471,6 +569,9 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     const cmfm_value_t v = value_at(s, static_cast<std::uint32_t>(index));
     const char* name = r->value_ptrs[static_cast<std::size_t>(index)];
+    if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0) {
+        get(setting_id);  // the value before the first change
+    }
     if (p.validate != nullptr) {
         char why[kMaxHelp + 1] = {};
         if (p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) {
@@ -489,6 +590,7 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     }
     set_help(*r, r->base_help.c_str());
     logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name);
+    note_value(*r, static_cast<std::uint32_t>(index));
     return true;
 }
 
@@ -499,12 +601,17 @@ void Menu::reset_defaults() {
         if (r.status) {
             continue;
         }
-        const Page& p = pages_[r.page];
-        const Setting& s = p.settings[r.setting];
-        if (s.type == CMFM_TYPE_TEXT) {
+        Page& p = pages_[r.page];
+        Setting& s = p.settings[r.setting];
+        if (s.type == CMFM_TYPE_TEXT || s.type == CMFM_TYPE_SECTION) {
             continue;
         }
-        const cmfm_value_t v = value_at(s, index_of(s, s.default_value));
+        cmfm_value_t current = {};
+        if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0 && p.get(p.user, s.id, &current) == CMFM_OK) {
+            s.first_index = static_cast<std::int32_t>(index_of(s, current));  // the value before the reset
+        }
+        const std::uint32_t index = index_of(s, s.default_value);
+        const cmfm_value_t v = value_at(s, index);
         char why[kMaxHelp + 1] = {};
         if ((p.validate != nullptr && p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) ||
             p.set(p.user, s.id, &v) != CMFM_OK) {
@@ -512,6 +619,7 @@ void Menu::reset_defaults() {
             continue;
         }
         set_help(r, r.base_help.c_str());
+        note_value(r, index);
         ++done;
     }
     logf(0, "Set To Default: %zu setting(s) back to their defaults, %zu refused", done, refused);

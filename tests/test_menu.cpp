@@ -260,7 +260,7 @@ void lays_out_the_status_page() {
     Menu m("0.1.0-dev");
     std::string why;
     check(m.build(model, why) && m.used_tabs() == 1, "no pages: only the status tab");
-    check(same(model.tab_name(0), "CMFM") && same(model.tab_name(1), "-"), "tab names");
+    check(same(model.tab_name(0), "Overview") && same(model.tab_name(1), "-"), "tab names");
     const native::GameOptionRow* r = find(model, 0, "CMFM");
     check(r != nullptr && same(value_text(model, r, 0), "0.1.0-dev"), "CMFM's version row");
     check(find(model, 0, "No mod pages yet") != nullptr, "says there are no pages");
@@ -277,9 +277,10 @@ void shows_a_page() {
     std::string why;
     check(m.build(model, why) && !m.dirty() && m.used_tabs() == 2, "built with one page");
     check(same(model.tab_name(1), "Demo") && same(model.tab_help(1), "A fake page."), "the page's tab");
-    const native::GameOptionRow* status = find(model, 0, "fake");
-    check(status && same(value_text(model, status, 0), "Shown") && std::strstr(help_text(model, status), "Demo"),
-          "status row for the page");
+    const native::GameOptionRow* status = find(model, 0, "Demo");
+    check(status && same(value_text(model, status, 0), "Active") && std::strstr(help_text(model, status), "fake") &&
+              std::strstr(help_text(model, status), "6 setting"),
+          "Overview row for the page");
 
     const native::GameOptionRow* toggle = find(model, 1, "Toggle");
     const native::GameOptionRow* percent = find(model, 1, "Percent");
@@ -369,7 +370,7 @@ void lists_every_page_on_the_status_tab() {
     std::size_t refusals = 0;
     for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
         const char* v = value_text(model, r, 0);
-        shown += same(v, "Shown");
+        shown += same(v, "Active");
         refusals += same(v, "Refused");
     }
     check(shown == 5 && refusals == 1, "status: 5 shown, 1 refused");
@@ -449,6 +450,94 @@ void drops_pages_that_do_not_fit() {
     check(not_shown == 3, "the others are listed as not shown");
 }
 
+void shows_sections() {
+    static OptionsModel model;
+    Fake f;
+    cmfm_setting_t s[4] = {setting(1, CMFM_TYPE_SECTION, "Upscaling"), setting(kToggle, CMFM_TYPE_BOOL, "Toggle"),
+                           setting(2, CMFM_TYPE_SECTION, "Frame generation"),
+                           setting(kRestart, CMFM_TYPE_BOOL, "Restart thing")};
+    cmfm_page_t page = {};
+    page.size = sizeof page;
+    page.plugin = "sections";
+    page.title = "Sections";
+    page.settings = s;
+    page.setting_count = 4;
+    page.user = &f;
+    page.get = fake_get;
+    page.set = fake_set;
+    check(!refused(page, ""), "a page with sections is valid");
+    s[0].flags = CMFM_FLAG_RESTART;
+    check(refused(page, "no flags"), "a section takes no flags");
+    s[0].flags = 0;
+    cmfm_setting_t only[1] = {setting(1, CMFM_TYPE_SECTION, "Alone")};
+    cmfm_page_t empty = page;
+    empty.settings = only;
+    empty.setting_count = 1;
+    check(refused(empty, "besides its sections"), "a page of sections only is refused");
+
+    Menu m;
+    add(m, page);
+    std::string why;
+    check(m.build(model, why), "built with sections");
+    const native::GameOptionRow* heading = find(model, 1, "<STYL MOJI_YELLOW_DEFAULT>Upscaling</STYL>");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    check(heading && heading->value_count == 1 && same(value_text(model, heading, 0), ""), "a heading row, no value");
+    check(heading && m.is_section(id(heading)) && toggle && !m.is_section(id(toggle)), "sections are told apart");
+    check(heading && m.get(id(heading)) == 0 && !m.set(id(heading), 0), "a heading has no value");
+    const native::GameOptionRow* status = find(model, 0, "Sections");
+    check(status && std::strstr(help_text(model, status), "2 setting"), "the Overview counts settings, not sections");
+    const int sets = f.sets;
+    m.reset_defaults();
+    check(f.sets == sets + 2, "Set To Default skips the headings");
+}
+
+void tracks_restart_changes() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo d = demo_page(&f);
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* restart = find(model, 1, "Restart thing");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    const native::GameOptionRow* status = find(model, 0, "Demo");
+    const std::uint32_t r0 = m.restart_revision();
+    check(m.restart_count() == 0 && !m.tab_restart_pending(1), "nothing pending at first");
+
+    check(m.get(id(restart)) == 0, "the game started with Off");
+    check(m.set(id(toggle), 1) && m.restart_count() == 0 && m.restart_revision() == r0, "a live setting never waits");
+    check(m.set(id(restart), 1) && m.restart_pending(id(restart)) && m.tab_restart_pending(1) &&
+              !m.tab_restart_pending(0) && m.restart_count() == 1 && m.restart_revision() != r0,
+          "a changed restart setting waits");
+    check(same(value_text(model, status, 0), "Restart needed"), "the Overview says so");
+    const std::uint32_t r1 = m.restart_revision();
+    check(m.set(id(restart), 1) && m.restart_revision() == r1, "the same value again changes nothing");
+    check(m.set(id(restart), 0) && !m.restart_pending(id(restart)) && m.restart_count() == 0 &&
+              m.restart_revision() != r1 && same(value_text(model, status, 0), "Active"),
+          "back to the start value: nothing waits");
+
+    m.reset_defaults();  // the restart setting's default is On
+    check(m.restart_pending(id(restart)) && m.restart_count() == 1, "Set To Default can make one wait");
+    m.build(model, why);  // a rebuild keeps the session's state
+    check(m.restart_count() == 1 && same(value_text(model, find(model, 0, "Demo"), 0), "Restart needed"),
+          "kept across a rebuild");
+}
+
+void reads_the_start_value_before_a_first_change() {
+    static OptionsModel model;
+    Fake f;
+    f.values[slot(kRestart)].i = 1;
+    Menu m;
+    Demo d = demo_page(&f);
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* restart = find(model, 1, "Restart thing");
+    check(m.set(id(restart), 1) && !m.restart_pending(id(restart)), "set to the value it had: not pending");
+    check(m.set(id(restart), 0) && m.restart_pending(id(restart)), "a real change waits");
+}
+
 }  // namespace
 
 int main() {
@@ -462,6 +551,9 @@ int main() {
     keeps_five_tabs_for_the_in_game_page();
     stops_at_24_pages();
     drops_pages_that_do_not_fit();
+    shows_sections();
+    tracks_restart_changes();
+    reads_the_start_value_before_a_first_change();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

@@ -1,4 +1,4 @@
-/* CMFM menu interface "cmfm.menu", version 1.0. C ABI, 64-bit Windows.
+/* CMFM menu interface "cmfm.menu", version 1.1. C ABI, 64-bit Windows.
  *
  * CMFM (Configuration Menu For Mods) is an Astera Loader plugin that shows
  * other plugins' settings inside Monster Hunter: World's own menus: "Mods"
@@ -20,7 +20,9 @@
  * changes are additive only: new fields at the end of structs, so `size`
  * grows. Structs a plugin passes in start with `size`; CMFM reads a field
  * only when `size` covers it. Check the table's `size` before calling a
- * function added after the version you built for.
+ * function added after the version you built for. A plugin that uses a
+ * feature marked "since 1.1" asks for CMFM_MAKE_VERSION(1, 1) (or checks the
+ * table's `version`); a CMFM 1.0 refuses pages that use one.
  *
  * Threads:
  *   - add_page may be called from any thread at any time. A page added while
@@ -34,10 +36,12 @@
  * like. `user` and the callbacks must stay valid until the process exits
  * (Astera Loader never unloads a plugin).
  *
- * What a page looks like: CMFM's own status page comes first, then one tab
- * per plugin page in the order pages were added (four tabs today; further
- * pages are listed as not shown on the status page). Each setting is a row:
- * its label on the left, its value on the right, its help line at the bottom.
+ * What a page looks like: the Mods page lists "Overview" (CMFM's version and
+ * every plugin's state) and then one entry per plugin page, by its title, in
+ * the order pages were added (24 at most; further pages are listed as not
+ * shown on the Overview). The highlighted entry's settings show next to the
+ * list, one row each: the label on the left, the value on the right, the
+ * help line at the bottom. SECTION rows group the rows below them.
  */
 #ifndef CMFM_H
 #define CMFM_H
@@ -53,7 +57,7 @@ extern "C" {
 #define CMFM_VERSION_MINOR(version) ((uint32_t)(version) & 0xffffu)
 
 #define CMFM_MENU_INTERFACE "cmfm.menu"
-#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 0)
+#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 1)
 
 /* x64 Windows has one calling convention; this names it for readers. */
 #define CMFM_CALL __cdecl
@@ -69,10 +73,18 @@ typedef uint32_t cmfm_type_t;
 #define CMFM_TYPE_INT 3u    /* value.i from min to max in steps of `step` */
 #define CMFM_TYPE_FLOAT 4u  /* value.f from min to max in steps of `step` */
 #define CMFM_TYPE_TEXT 5u   /* a read-only line: the label and a text from get_text */
+/* Since 1.1: a heading over the settings that follow it, up to the next
+ * SECTION. Only `id` and `label` are used (flags 0); the cursor skips it. A
+ * page needs at least one setting besides its sections. */
+#define CMFM_TYPE_SECTION 6u
 
 /* Setting flags. */
 typedef uint32_t cmfm_flags_t;
-#define CMFM_FLAG_RESTART 0x1u /* takes effect after the game restarts; CMFM says so in the help line */
+/* Takes effect after the game restarts. CMFM says so in the help line; once
+ * the player changes the value away from the one the game started with, CMFM
+ * marks the row, the page's title and the Overview until the game restarts
+ * (or the value goes back). */
+#define CMFM_FLAG_RESTART 0x1u
 
 /* Limits of CMFM 1.0's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */

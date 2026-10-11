@@ -11,6 +11,7 @@ using GetObjectFn = void* (*)(void* root, const char* name);
 using FormatTextFn = std::uint64_t (*)(void* object, const char* text);
 using GetInstanceFn = void* (*)(void* unit, const char* name);
 using SetPlayFn = void (*)(void* instance, bool play);
+using SetHiddenFn = std::uint8_t (*)(void* object, bool hidden);
 
 SetRowCountFn g_set_row_count = nullptr;
 SetCursorFn g_set_cursor = nullptr;
@@ -18,6 +19,7 @@ GetObjectFn g_get_object = nullptr;
 FormatTextFn g_format_text = nullptr;
 GetInstanceFn g_get_instance = nullptr;
 SetPlayFn g_set_play = nullptr;
+SetHiddenFn g_set_hidden = nullptr;
 
 }  // namespace
 
@@ -42,7 +44,9 @@ bool gui_register(const Env& env, std::string& why) {
                               why) &&
            find_game_function(env, "getInstanceFromName", game::kGetInstanceFromNamePattern,
                               reinterpret_cast<void**>(&g_get_instance), why) &&
-           find_game_function(env, "setPlay", game::kSetPlayPattern, reinterpret_cast<void**>(&g_set_play), why);
+           find_game_function(env, "setPlay", game::kSetPlayPattern, reinterpret_cast<void**>(&g_set_play), why) &&
+           find_game_function(env, "setHidden", game::kSetHiddenPattern, reinterpret_cast<void**>(&g_set_hidden),
+                              why);
 }
 
 void gui_set_row_count(void* list, std::uint64_t count) {
@@ -67,6 +71,21 @@ void gui_format_text(void* object, const char* text) {
 
 void gui_set_play(void* instance, bool play) {
     g_set_play(instance, play);
+}
+
+void gui_set_hidden(void* object, bool hidden) {
+    g_set_hidden(object, hidden);
+}
+
+bool set_instance_text(void* unit, const char* instance_name, const char* object_name, const char* text) {
+    void* instance = g_get_instance(unit, instance_name);
+    void* root = instance != nullptr ? field<void*>(instance, game::kInstRoot) : nullptr;
+    void* object = root != nullptr ? g_get_object(root, object_name) : nullptr;
+    if (object == nullptr) {
+        return false;
+    }
+    g_format_text(object, text);
+    return true;
 }
 
 void* list_row(void* list, std::uint32_t row) {

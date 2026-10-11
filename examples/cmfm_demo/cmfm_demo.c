@@ -1,9 +1,10 @@
 /* cmfm_demo: an Astera Loader plugin that adds a page to CMFM's Mods menu.
  * The example for plugin authors (plain C), and CMFM's test client.
  *
- * It shows every setting type of cmfm.menu 1.0, keeps its values in its
- * own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the source of truth),
- * refuses one combination in `validate`, and saves when the Mods page closes.
+ * It shows every setting type of cmfm.menu 1.1 (sections since 1.1), keeps
+ * its values in its own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the
+ * source of truth), refuses one combination in `validate`, and saves when
+ * the Mods page closes.
  * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
  * of a long list of mods).
  *
@@ -17,7 +18,7 @@
 #include <string.h>
 #include <wchar.h>
 
-enum { ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS };
+enum { ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER };
 
 static const al_api_t* g_api;
 static al_plugin_t* g_self;
@@ -189,68 +190,80 @@ static const char* const kChoices[] = {"Alpha", "Beta", "Gamma"};
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[6];
+    cmfm_setting_t s[9];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
-        logline(AL_LOG_INFO, "CMFM is not installed; running without the menu");
+        logline(AL_LOG_INFO, "CMFM is not installed or older than 1.1; running without the menu");
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 9; ++i) {
         s[i].size = sizeof s[i];
     }
-    s[0].id = ID_TOGGLE;
-    s[0].type = CMFM_TYPE_BOOL;
-    s[0].label = "Demo toggle";
-    s[0].help = "Turns the demo's pretend feature on or off.";
+    s[0].id = ID_BASICS;
+    s[0].type = CMFM_TYPE_SECTION;
+    s[0].label = "Basics";
 
-    s[1].id = ID_CHOICE;
-    s[1].type = CMFM_TYPE_CHOICE;
-    s[1].label = "Demo choice";
-    s[1].help = "Picks one of three values. Gamma needs Demo toggle on.";
-    s[1].choices = kChoices;
-    s[1].choice_count = 3;
+    s[1].id = ID_TOGGLE;
+    s[1].type = CMFM_TYPE_BOOL;
+    s[1].label = "Demo toggle";
+    s[1].help = "Turns the demo's pretend feature on or off.";
 
-    s[2].id = ID_PERCENT;
-    s[2].type = CMFM_TYPE_INT;
-    s[2].label = "Demo percent";
-    s[2].help = "A number from 0 to 100 in steps of 10.";
-    s[2].min = 0;
-    s[2].max = 100;
-    s[2].step = 10;
-    s[2].unit = "%";
-    s[2].default_value.i = 50;
+    s[2].id = ID_CHOICE;
+    s[2].type = CMFM_TYPE_CHOICE;
+    s[2].label = "Demo choice";
+    s[2].help = "Picks one of three values. Gamma needs Demo toggle on.";
+    s[2].choices = kChoices;
+    s[2].choice_count = 3;
 
-    s[3].id = ID_SCALE;
-    s[3].type = CMFM_TYPE_FLOAT;
-    s[3].label = "Demo scale";
-    s[3].help = "A number from 0.50 to 2.00 in steps of 0.25.";
-    s[3].min = 0.5;
-    s[3].max = 2.0;
-    s[3].step = 0.25;
-    s[3].decimals = 2;
-    s[3].unit = "x";
-    s[3].default_value.f = 1.0;
+    s[3].id = ID_NUMBERS;
+    s[3].type = CMFM_TYPE_SECTION;
+    s[3].label = "Numbers";
 
-    s[4].id = ID_RESTART;
-    s[4].type = CMFM_TYPE_BOOL;
-    s[4].flags = CMFM_FLAG_RESTART;
-    s[4].label = "Demo restart";
-    s[4].help = "Pretends to need a restart.";
+    s[4].id = ID_PERCENT;
+    s[4].type = CMFM_TYPE_INT;
+    s[4].label = "Demo percent";
+    s[4].help = "A number from 0 to 100 in steps of 10.";
+    s[4].min = 0;
+    s[4].max = 100;
+    s[4].step = 10;
+    s[4].unit = "%";
+    s[4].default_value.i = 50;
 
-    s[5].id = ID_STATUS;
-    s[5].type = CMFM_TYPE_TEXT;
-    s[5].label = "Demo status";
-    s[5].help = "A read-only line the plugin writes.";
+    s[5].id = ID_SCALE;
+    s[5].type = CMFM_TYPE_FLOAT;
+    s[5].label = "Demo scale";
+    s[5].help = "A number from 0.50 to 2.00 in steps of 0.25.";
+    s[5].min = 0.5;
+    s[5].max = 2.0;
+    s[5].step = 0.25;
+    s[5].decimals = 2;
+    s[5].unit = "x";
+    s[5].default_value.f = 1.0;
+
+    s[6].id = ID_OTHER;
+    s[6].type = CMFM_TYPE_SECTION;
+    s[6].label = "Other";
+
+    s[7].id = ID_RESTART;
+    s[7].type = CMFM_TYPE_BOOL;
+    s[7].flags = CMFM_FLAG_RESTART;
+    s[7].label = "Demo restart";
+    s[7].help = "Pretends to need a restart.";
+
+    s[8].id = ID_STATUS;
+    s[8].type = CMFM_TYPE_TEXT;
+    s[8].label = "Demo status";
+    s[8].help = "A read-only line the plugin writes.";
 
     memset(&page, 0, sizeof page);
     page.size = sizeof page;
     page.plugin = "cmfm_demo";
     page.title = "Demo";
-    page.help = "CMFM's demo plugin: one setting of each type.";
+    page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
     page.settings = s;
-    page.setting_count = 6;
+    page.setting_count = 9;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;

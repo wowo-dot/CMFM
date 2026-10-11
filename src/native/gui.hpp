@@ -27,11 +27,16 @@ bool gui_register(const Env& env, std::string& why);
 void gui_set_row_count(void* list, std::uint64_t count);
 void gui_set_cursor(void* list, std::uint32_t row);
 // uGUI::getInstanceFromName, cGUIObjRoot::getObjectFromName,
-// cGUIObjSizeAdjustMessage::formatText, cGUIInstance::setPlay.
+// cGUIObjSizeAdjustMessage::formatText, cGUIInstance::setPlay,
+// cGUIObject::setHidden.
 void* gui_get_instance(void* unit, const char* name);
 void* gui_get_object(void* root, const char* name);
 void gui_format_text(void* object, const char* text);
 void gui_set_play(void* instance, bool play);
+void gui_set_hidden(void* object, bool hidden);
+// Writes `text` into a named text object of a named instance of the unit's
+// layout. False if either is missing.
+bool set_instance_text(void* unit, const char* instance_name, const char* object_name, const char* text);
 
 // A list's row instance, or nullptr past the row count.
 void* list_row(void* list, std::uint32_t row);

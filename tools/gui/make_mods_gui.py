@@ -9,7 +9,9 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
   template, cursor, spacing), 11 rows;
 - the game's category list stays (the page's code needs it) but moves off
   screen; CMFM keeps its cursor on the audio panel, which shows the
-  highlighted mod's settings.
+  highlighted mod's settings;
+- the camera panel's title text moves above the mod list: CMFM's line for
+  changes that wait for a game restart (empty otherwise).
 
     py -3.12 -B tools/gui/make_mods_gui.py "<extract>/chunk/ui/title/options.gui"
 """
@@ -98,6 +100,17 @@ def build(gui):
     print("the camera panel's number control no longer writes into the row template (its object 2 is no")
     print("longer a text in the category row style; run 20261011-split-1 crashed in formatText at setup)")
     b.number("num_input_camera", "MsgInstID", 38, -1)
+    print("the camera panel's title (a text of its own, 300 x 50, centred) becomes the restart line,")
+    print("under the header above the mod list")
+    b.links("a_window_camera", "a_title_menu_camera", None)
+    b.links("a_title_menu_camera", "a_line_camera", None)
+    b.relink("a_window_camera", "a_line_camera", None)
+    b.relink("a_title_menu_camera", None, None)
+    b.relink("btnlist_menu", "a_title_menu_camera", "cursor_menu")
+    if len(b.s.walk()) != before:
+        raise ValueError("the tree lost or gained instances")
+    b.number("a_title_menu_camera", "PosX", 408.0, 200.0)
+    b.number("a_title_menu_camera", "PosY", 6.0, -90.0)
 
 
 def main():

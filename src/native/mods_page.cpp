@@ -93,6 +93,9 @@ std::atomic<bool> g_split{false};
 std::atomic<void*> g_mod_list{nullptr};  // while the page shows CMFM's menu
 std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
 std::size_t g_mod_top = 0;               // the first tab in the mod list's window
+std::uint32_t g_restart_seen = 0;        // the menu's restart revision the page shows
+char g_panel_title[160];
+char g_restart_line[96];
 
 // Short lines on user actions only (no allocation).
 void logf(al_log_level_t level, const char* format, ...) {
@@ -202,6 +205,8 @@ bool with_tables(const OptionsModel& model, Build build) {
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
 bool split_view();
 void select_tab(void* unit, std::size_t index);
+void decorate_panel(void* unit);
+void show_restart_line(void* unit);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -319,34 +324,6 @@ void hold_player(void* unit) {
     }
 }
 
-// Diagnostic for split mode (temporary): one log line whenever the page's
-// input state changes (focus, the category cursor, which lists take input,
-// their cursors).
-char g_state_line[256];
-void log_split_state(void* unit) {
-    void* categories = field<void*>(unit, game::kOptCategoryList);
-    void* mods = g_mod_list.load(std::memory_order_acquire);
-    if (categories == nullptr || mods == nullptr) {
-        return;
-    }
-    char line[256];
-    int n = std::snprintf(line, sizeof line, "focus %d | cat cur %u off %u | mods cur %u off %u |",
-                          field<std::int32_t>(unit, game::kOptFocus), field<std::uint32_t>(categories, game::kListCursor),
-                          field<std::uint8_t>(categories, game::kListInactive), field<std::uint32_t>(mods, game::kListCursor),
-                          field<std::uint8_t>(mods, game::kListInactive));
-    for (std::size_t t = 0; t < game::kTitleViewTabs && n > 0 && n < static_cast<int>(sizeof line); ++t) {
-        void* list = field<void*>(tab_object(unit, t), game::kTabList);
-        n += std::snprintf(line + n, sizeof line - n, " t%zu cur %u off %u rows %u", t,
-                           list ? field<std::uint32_t>(list, game::kListCursor) : 0u,
-                           list ? field<std::uint8_t>(list, game::kListInactive) : 9u,
-                           list ? field<std::uint32_t>(list, game::kListRowCount) : 0u);
-    }
-    if (std::strcmp(line, g_state_line) != 0) {
-        std::memcpy(g_state_line, line, sizeof line);
-        logf(AL_LOG_INFO, "Mods page state: %s", line);
-    }
-}
-
 // Split mode: the page enters the panel under the category cursor, and only
 // the split panel is shown, so the cursor stays there (a Confirm on any other
 // row would enter a hidden panel and keep the input there; run
@@ -438,7 +415,12 @@ std::uint64_t page_update(void* unit) {
     if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
         keep_panel_cursor(unit);
         track_mouse(unit);
-        log_split_state(unit);
+        const std::uint32_t revision = menu::service_restart_revision();
+        if (revision != g_restart_seen) {
+            g_restart_seen = revision;
+            decorate_panel(unit);
+            show_restart_line(unit);
+        }
     }
     if (g_hold_player.load(std::memory_order_relaxed)) {
         hold_player(unit);
@@ -507,12 +489,7 @@ BuildCategoriesFn build_categories(void* unit) {
 }
 
 void set_header(void* unit, const char* text) {
-    void* instance = gui_get_instance(unit, "a_title_options");
-    void* root = instance != nullptr ? field<void*>(instance, game::kInstRoot) : nullptr;
-    void* object = root != nullptr ? gui_get_object(root, "msg_title") : nullptr;
-    if (object != nullptr) {
-        gui_format_text(object, text);
-    }
+    set_instance_text(unit, "a_title_options", "msg_title", text);
 }
 
 // ---- Split mode: the mod list and the panel of the highlighted tab ----
@@ -573,6 +550,70 @@ void fill_split_panel(void* unit) {
     });
     show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
                          static_cast<std::int32_t>(game::kSplitPanel));
+    decorate_panel(unit);
+}
+
+// What the game's row filler does not know about CMFM's rows, after every
+// fill of the split panel and whenever a restart state changes: section
+// headings the cursor skips (the row's "selectable" flag off, as the list's
+// moves and hover test it), the restart mark (the row's star icon) on
+// settings waiting for a restart, and the panel's title with the note.
+void decorate_panel(void* unit) {
+    char* tab = tab_object(unit, game::kSplitPanel);
+    void* list = field<void*>(tab, game::kTabList);
+    if (list == nullptr) {
+        return;
+    }
+    const OptionsModel& model = menu::service_model();
+    const std::size_t selected = g_selected.load(std::memory_order_relaxed);
+    const GameOptionRow* rows = model.table(selected);
+    const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
+    std::int32_t first = -1;  // the first row the cursor may take
+    std::uint32_t known = 0;  // rows with a table entry
+    for (std::uint32_t r = 0; r < count && rows[r].kind != kRowTableEnd; ++r) {
+        known = r + 1;
+        void* row = list_row(list, r);
+        if (row == nullptr) {
+            continue;
+        }
+        const auto id = static_cast<std::uint32_t>(rows[r].setting_id);
+        const bool section = menu::service_is_section(id);
+        std::uint32_t& flags = field<std::uint32_t>(row, game::kInstFlags);
+        flags = section ? flags & ~game::kInstFlagActive : flags | game::kInstFlagActive;
+        if (!section && first < 0) {
+            first = static_cast<std::int32_t>(r);
+        }
+        void* root = field<void*>(row, game::kInstRoot);
+        if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
+            gui_set_hidden(star, !menu::service_restart_pending(id));
+        }
+    }
+    if (first >= 0) {
+        const std::uint32_t cursor = field<std::uint32_t>(list, game::kListCursor);
+        if (cursor < known && menu::service_is_section(static_cast<std::uint32_t>(rows[cursor].setting_id))) {
+            gui_set_cursor(list, static_cast<std::uint32_t>(first));
+        }
+        field<std::int32_t>(list, game::kListStartRow) = first;
+    }
+    const char* title = model.tab_name(selected);
+    if (menu::service_tab_restart_pending(selected)) {
+        std::snprintf(g_panel_title, sizeof g_panel_title, "%s  <STYL MOJI_YELLOW_DEFAULT>Restart needed</STYL>",
+                      title);
+        title = g_panel_title;
+    }
+    set_instance_text(unit, game::kSplitPanelTitle, game::kTitleText, title);
+}
+
+// The line above the mod list: empty unless changes wait for a restart.
+void show_restart_line(void* unit) {
+    const std::size_t n = menu::service_restart_count();
+    if (n == 0) {
+        g_restart_line[0] = '\0';
+    } else {
+        std::snprintf(g_restart_line, sizeof g_restart_line,
+                      "<STYL MOJI_YELLOW_DEFAULT>Restart the game to apply %zu change%s</STYL>", n, n == 1 ? "" : "s");
+    }
+    set_instance_text(unit, game::kRestartLineName, game::kTitleText, g_restart_line);
 }
 
 void select_tab(void* unit, std::size_t index) {
@@ -696,6 +737,9 @@ std::uint64_t page_open(void* unit) {
         show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
                              static_cast<std::int32_t>(game::kSplitPanel));
         show_mod_list();
+        g_restart_seen = menu::service_restart_revision();
+        decorate_panel(unit);
+        show_restart_line(unit);
     }
     if (!on) {
         logf(AL_LOG_WARNING, "Mods page: CMFM's page could not be filled; closing it");
