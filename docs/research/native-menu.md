@@ -472,6 +472,17 @@ writes each row's two texts by row index (texts 13/0, 13/1, file 20 id 7,
 ...). A "Mods" row below Options means an 8th row and translating row
 indices in those callbacks (not built).
 
+Flow: the cursor callback stores an **item id** at `+10488` from the row
+(Start Game 0, Gallery 2, Steam Store 3, Options 4, Credits 5, Support 6
+when its condition holds); Confirm goes through the button handler, which
+acts on that item id; the Quit row is special: the selected callback
+compares the row with `+12332` and opens a Yes/No (text 23/0x171). Only
+0x141F01800 touches the list directly (a reset of `+560`). A Mods row at
+index 4 therefore needs: `DuplicateNum` 8, the cursor mapping shifted (our
+row -> a new item id, rows below -1), `+12332` moved to 7, our item id
+handled where Confirm acts on item ids (not found yet), and rows 4-7
+relabelled after `play()` writes the labels.
+
 **Title Options** (`uGUIOption`, `ui\title\options`): each of its tab
 sub-objects (0x968 bytes at `+0x2918`, tab index at `+80`) builds its list
 in 0x141E8DDD0 from **`off_143FC0480[tab]`** (`.data`, writable; 6 pointers:
