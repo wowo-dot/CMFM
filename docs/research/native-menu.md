@@ -958,6 +958,41 @@ study afterwards):**
   row; hooks on the row decide (open: focus 2, cursor on the current value)
   and on the list's decide (set the value; the game then closes the list).
 
+**Buttons and locked rows (design step 4, runs `buttons-1` to `-3`):**
+- The game's Yes/No question: `sMhGUI::DisplayYesNoDialog(sMhGUI, request)`
+  (RVA 0x1AE2050) copies a 0x90-byte request: +0x08 text, +0x10 / +0x14 the
+  screen's centre (width and height at RVA 0x3FC0560 / 0x3FC0564, halved),
+  +0x20 three floats from RVA 0x503C430, +0x3C kind 2 (Yes/No), +0x48 a
+  `std::function` (vtable, capture) and +0x80 a pointer to it. The title
+  page's Default (`sub_141E8A890`) builds it with a lambda (vtable RVA
+  0x347DF98: copy 0x1E893E0, call 0x1E89600) that captures the categories
+  object; its body `sub_141E88AA0(capture*, ?, answer)` resets every option
+  on 0 (Yes).
+- CMFM: Confirm on a button row goes through the row decide hook. Without a
+  question it presses at once; with one it builds the same request with the
+  same lambda (vtables checked first) and CMFM's text, and hooks the
+  lambda's body: when the capture is CMFM's page (which never asks the
+  Default question itself), Yes presses the button and the game's reset
+  never runs. After a press the tab refresh (`sub_141E8EB40`) re-reads and
+  re-writes every row (the mod may have changed any value or text).
+- Greyed rows: the row look (`sub_141E8D200`) asks the option rows' enabled
+  check (`sub_140EEAE80(row entry, int* reason, flag)`, RVA 0xEEAE80); false
+  plays animation 9 and text colour 7, and the row takes no Confirm and shows
+  no arrows. For CMFM's ids the hook answers the page's `locked`; the help
+  line gives the reason (CMFM writes it into the row's help).
+- Why a locked slider flickered (`buttons-2`): the row look restarts each
+  row's animation on every call (`sub_140B73110` plays a sequence without
+  checking what already plays). For a slider row it first plays the slider
+  (`setPlay(slider, 1)`); for a disabled row it then restarts animation 9,
+  which hides the row's parts. Every cursor move showed the slider and hid
+  it again. The game never greys a row it drives as a slider.
+- CMFM: a locked number row is no slider (`slider_steps` 0): it shows its
+  value as text, greyed like any locked row. When locks change, CMFM clears
+  +84 on such rows, stops their slider (+1708 = 0, not playing), hides
+  `msg_slider_00`, runs the tab refresh (which writes the value text), then
+  its decoration; unlocked, the row filler makes it a slider again. The
+  option setter hook also ignores locked rows.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
