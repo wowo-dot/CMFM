@@ -45,6 +45,8 @@ add_library(cmfm SHARED
     src/plugin.cpp
     src/menu/service.cpp
     src/native/data_patch.cpp
+    src/native/gui.cpp
+    src/native/mods_page.cpp
     src/native/options_view.cpp
     src/native/page_class.cpp
     src/native/start_menu.cpp

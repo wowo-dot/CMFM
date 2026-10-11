@@ -58,6 +58,16 @@ static_assert(kRvaTabListInQuest + kSystemTabIndex * kTabListEntrySize + kTabLis
 inline constexpr std::uintptr_t kRvaSystemItems = 0x3FC0E40;
 inline constexpr std::uint32_t kSystemItemsMaxRead = 16;
 
+// uGUIStartMenu's vtable and the fields its Options action (onItemAction
+// case 71) sets around opening the Options page: no dialog pending (76), a
+// page of the menu's own open (byte; sMhGUI keeps menu mode on while it is
+// set, which holds the hunter's input), no item action (-1).
+inline constexpr std::uintptr_t kRvaStartMenuVtable = 0x3481908;
+inline constexpr std::size_t kStartMenuDialog = 0x2BA8;
+inline constexpr std::int32_t kStartMenuNoDialog = 76;
+inline constexpr std::size_t kStartMenuChildOpen = 0x29BC;
+inline constexpr std::size_t kStartMenuAction = 0x2960;
+
 // Start menu item ids.
 inline constexpr std::int32_t kItemOptions = 71;  // opens uGUIMenuOption
 inline constexpr std::int32_t kItemMods = 77;     // ours: 76 is the end marker
@@ -224,6 +234,8 @@ inline constexpr char kRequestClosePattern[] =
 
 // cUnit fields.
 inline constexpr std::size_t kUnitState = 12;  // byte: & 0xE while alive (2 new, 8 running; 16 killed)
+inline constexpr std::size_t kUnitFlags = 20;
+inline constexpr std::uint32_t kUnitFlagKeep = 8;  // sUnit::kill refuses the unit (group 0 pages, scene units)
 
 // uGUIOption's class description (MtDTI in .data, filled by MtDti::ctor
 // before WinMain) and vtable (93 slots in .rdata; no RTTI before it).

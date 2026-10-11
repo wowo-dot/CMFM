@@ -712,8 +712,60 @@ five (category rows 5 and 6 are Key Config and Default in code).
   showCategory (CMFM's page only); list moveCursor (CMFM's list only). The
   uGUIOption open/close/update hooks are gone.
 
-Still to do: the Start menu (in game) opens the same class; a layout of
-CMFM's own (decision 10) through slot 71.
+Tested in run `20261011-own-page-1` (tag own-page-1).
+
+**The Start menu and pages in game (study, step 2):**
+- **How the Start menu opens Options** (onItemAction case 71): `+0x2BA8 = 76`
+  (no dialog; done for every item), `sMhGUI::open_uGUIMenuOption(sMhGUI,
+  &menu, &menu, 0)` pushes an open request into sMhGUI's queue (+0x8F68,
+  processed in `sub_141AD9D20`: when the predicate functor allows,
+  `requestOpen(unit, opener)` then functor 1 with the unit), then pushes a
+  **return record** on sMhGUI's return stack (+952, count +5176, 128-byte
+  records built by `sub_141AE90E0(record, menu, child)`) whose functor
+  (`off_143482660`, `sub_1410A3B00`) is `requestOpen(menu, 0)`; the top
+  record fires on the first frame the child's state machine is in state 3
+  (closing: `+7428 == 3 && +7424 != 3`). Then `menu+0x29BC = 1` (byte),
+  `requestClose(menu, 0)`, `menu+0x2960 = -1`.
+- **Why CMFM cannot reuse that path:** functor 1 for uGUIMenuOption
+  (`sub_141EC9220`) writes `unit+10484 = 0` and the byte `unit+10488 = 1`;
+  on a uGUIOption, +10488 is the categories object's vtable pointer.
+- **Menu mode:** sMhGUI computes per frame `+83664` = Start menu open or its
+  `+0x29BC` set; sMhKeyboard::handleInput and other input code read it. So
+  while a page the menu opened is up, the game stays in menu mode (the
+  hunter does not move). The menu clears `+0x29BC` when it opens again.
+- **Close timing:** `sub_141FB55E0` (begin close) sets `+7428 = 3` and calls
+  slot 91 (the close handler) on the same frame, the frame the return record
+  fires. Slot 72 (force close, used for kept pages at a scene change through
+  message 75) runs begin-close and then slot 87 (closed), so slot 91 runs
+  there too. At the title scene's end the game kills the units first (the
+  Start menu is then no longer alive) and sends message 75 after.
+- **Opener message:** slot 87 sends the opener (+8448) message 68; the
+  generic uMhGUI handler (slot 20, `sub_141FB7D30`) only acts on 75 (scene
+  change: drop the opener, force-close kept open pages).
+- **uGUIOption's open handler** (`sub_141E8AF60`) links two pages through
+  sMhGUI's link queue (+20192/+36704): the first `uGUIKeyboardConfig2` in
+  sMhGUI's list -> page+30720, then `sub_140549220(it)` copies the saved key
+  config into it; `uGUIKeyConfigMySetPc` -> page+30728, `sub_14054EC50(it)`.
+  Neither functor checks for null, so the page must only open where both
+  exist: the title (its own pages) and in game (registry group 1, indexes 94
+  and 95, created with the Start menu).
+- All GUI classes allocate from allocator 27 (class flags), the common pages
+  of group 0 included, so a page kept for the session is ordinary.
+
+**Step 2 design (built, not yet tested):** CMFM's page is made once, at the
+first title, and marked kept (`+20 |= 8`, like group 0), so the title and
+the Start menu share it. Start menu > Mods (item 77): if the page is
+running, CMFM does what case 71 does to the menu with its own page (no
+open-request queue, no return record): `+0x2BA8 = 76`, `requestOpen(page,
+0)`, `+0x29BC = 1`, `requestClose(menu, 0)`, `+0x2960 = -1`, and keeps a
+tracked reference to the menu. The page's close handler opens the menu again
+(`requestOpen(menu, 0)`) while that menu is alive and still has `+0x29BC`
+set. Without a page the old in-game view (uGUIMenuOption with CMFM's rows)
+is the fallback. Code: `src/native/mods_page.cpp` (the page's content and
+both entry points), `src/native/gui.cpp` (shared GUI helpers),
+`title_menu.cpp` (title row and scene flow only).
+
+Still to do: a layout of CMFM's own (decision 10) through slot 71.
 
 ## Answers so far
 

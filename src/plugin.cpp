@@ -1,13 +1,15 @@
 // CMFM: the in-game settings menu for MHW mods, an Astera Loader plugin.
 // It publishes "cmfm.menu" (include/cmfm/cmfm.h) for other plugins' settings
 // pages, and shows them natively (decisions.md items 7-9): a "Mods" entry in
-// the Start menu's System tab (the game's Options page with CMFM's rows) and
-// on the title screen (a page of CMFM's own). Exe 421810 only; on any other exe, or
+// the Start menu's System tab and on the title screen, both opening a page of
+// CMFM's own (in game, the game's Options page with CMFM's rows is the
+// fallback). Exe 421810 only; on any other exe, or
 // when a check fails, CMFM leaves that part alone and reports DEGRADED with
 // the reason (cmfm.menu stays available; pages are then not shown).
 #include "al/al_plugin.h"
 #include "menu/service.hpp"
 #include "native/game_421810.hpp"
+#include "native/mods_page.hpp"
 #include "native/options_view.hpp"
 #include "native/start_menu.hpp"
 #include "native/title_menu.hpp"
@@ -44,6 +46,7 @@ const al_api_t* g_api = nullptr;
 cmfm::native::Env g_env = {};
 bool g_native = false;  // hooks registered; activate at WIN_MAIN
 bool g_view = false;    // options view hooks registered; check at WIN_MAIN
+bool g_page = false;    // CMFM's page registered; check at WIN_MAIN
 bool g_title = false;   // title hooks registered; check at WIN_MAIN
 
 void log(al_log_level_t level, const std::string& line) {
@@ -69,6 +72,11 @@ void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
             log(AL_LOG_WARNING, "Mods page off, Mods opens the plain Options page: " + why);
             problems = "Mods page off: " + why;
         }
+        if (g_page && !cmfm::native::mods_page_check(g_env, why)) {
+            g_page = false;
+            log(AL_LOG_WARNING, "CMFM's page off: " + why);
+            problems += (problems.empty() ? "" : "; ") + std::string("CMFM's page off: ") + why;
+        }
         if (g_title && !cmfm::native::title_menu_check(g_env, why)) {
             g_title = false;
             log(AL_LOG_WARNING, "title Mods off: " + why);
@@ -81,6 +89,7 @@ void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
         }
     } else if (phase == AL_PHASE_SHUTDOWN && g_native) {
         cmfm::native::title_menu_restore(g_env);
+        cmfm::native::mods_page_restore(g_env);
         cmfm::native::options_view_restore(g_env);
         cmfm::native::start_menu_restore(g_env);
     }
@@ -140,6 +149,11 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
     g_view = cmfm::native::options_view_register(g_env, why);
     if (!g_view) {
         log(AL_LOG_WARNING, "Mods page off, Mods opens the plain Options page: " + why);
+        return AL_OK;
+    }
+    g_page = cmfm::native::mods_page_register(g_env, why);
+    if (!g_page) {
+        log(AL_LOG_WARNING, "CMFM's page off (Mods opens the Options page with CMFM's rows; title Mods off): " + why);
         return AL_OK;
     }
     g_title = cmfm::native::title_menu_register(g_env, why);

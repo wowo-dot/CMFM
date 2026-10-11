@@ -1,6 +1,7 @@
 #include "native/page_class.hpp"
 
 #include "native/game_421810.hpp"
+#include "native/gui.hpp"
 
 #include <cstdarg>
 #include <cstddef>
@@ -24,13 +25,7 @@ struct Dti {
 static_assert(sizeof(Dti) == 0x38);
 static_assert(offsetof(Dti, parent) == 0x20 && offsetof(Dti, flags) == 0x30 && offsetof(Dti, id) == 0x34);
 
-// A tracked reference: the unit's destructor zeroes all three fields.
-struct UnitRef {
-    void* unit;
-    void* next;
-    void* prev;
-};
-static_assert(sizeof(UnitRef) == 24);
+static_assert(sizeof(GameRef) == 24);
 
 using DtiNewFn = void* (*)(const void* dti);
 using DtiCtorFn = void* (*)(const void* dti, void* memory);
@@ -38,8 +33,9 @@ using DtiCtorArrayFn = void* (*)(const void* dti, void* memory, std::uint32_t co
 using AddBottomFn = std::uint8_t (*)(void* units, std::int32_t line, void* unit, std::uint64_t group_bits,
                                      std::uint8_t unused);
 using RefLockFn = void* (*)();
-using SetRefFn = void (*)(void* lock, void* unit, UnitRef* slot);
-using ClearRefFn = void (*)(void* lock, UnitRef* slot);
+using SetRefFn = void (*)(void* lock, void* unit, GameRef* slot);
+using ClearRefFn = void (*)(void* lock, GameRef* slot);
+using RequestOpenFn = void (*)(void* unit, void* opener);
 using RequestCloseFn = std::uint32_t (*)(void* unit, std::uint8_t now);
 
 // The game's class ids: crc32 without the final inversion, 31 bits.
@@ -65,6 +61,7 @@ AddBottomFn g_add_bottom = nullptr;
 RefLockFn g_ref_lock = nullptr;
 SetRefFn g_set_ref = nullptr;
 ClearRefFn g_clear_ref = nullptr;
+RequestOpenFn g_request_open = nullptr;
 RequestCloseFn g_request_close = nullptr;
 void* g_found_update = nullptr;
 void* g_found_open = nullptr;
@@ -77,7 +74,7 @@ void* g_vtable[game::kOptionPageVtableSlots] = {};
 UnitFn g_next_update = nullptr;
 UnitFn g_next_open = nullptr;
 UnitFn g_next_close = nullptr;
-UnitRef g_ref = {};
+GameRef g_ref = {};
 bool g_ready = false;
 
 void logf(al_log_level_t level, const char* format, ...) {
@@ -90,13 +87,7 @@ void logf(al_log_level_t level, const char* format, ...) {
 }
 
 bool find(const char* name, const char* pattern, void** out, std::string& why) {
-    void* match = nullptr;
-    if (g_env.scanner == nullptr || g_env.scanner->find(g_env.self, pattern, AL_SCAN_CODE, &match, 1) != 1) {
-        why = std::string("game function not found: ") + name;
-        return false;
-    }
-    *out = match;
-    return true;
+    return find_game_function(g_env, name, pattern, out, why);
 }
 
 // The target of `call rel32` at `at`, or 0.
@@ -180,6 +171,7 @@ bool page_class_register(const Env& env, std::string& why) {
     g_ref_lock = reinterpret_cast<RefLockFn>(lock);
     g_set_ref = reinterpret_cast<SetRefFn>(set_ref);
     g_clear_ref = reinterpret_cast<ClearRefFn>(clear_ref);
+    g_request_open = reinterpret_cast<RequestOpenFn>(request_open);
     g_request_close = reinterpret_cast<RequestCloseFn>(request_close);
     return true;
 }
@@ -228,12 +220,29 @@ bool page_class_check(const Env& env, const PageHandlers& handlers, std::string&
     return true;
 }
 
-void* page_alive() {
-    void* unit = *static_cast<void* volatile*>(&g_ref.unit);
-    if (unit == nullptr || (static_cast<const std::uint8_t*>(unit)[game::kUnitState] & 0xE) == 0) {
-        return nullptr;
+bool unit_alive(const void* unit) {
+    return unit != nullptr && (static_cast<const std::uint8_t*>(unit)[game::kUnitState] & 0xE) != 0;
+}
+
+bool unit_running(const void* unit) {
+    return unit != nullptr && (static_cast<const std::uint8_t*>(unit)[game::kUnitState] & 0x8) != 0;
+}
+
+void game_ref_set(GameRef& ref, void* unit) {
+    if (unit != nullptr) {
+        g_set_ref(g_ref_lock(), unit, &ref);
+    } else if (ref.unit != nullptr) {
+        g_clear_ref(g_ref_lock(), &ref);
     }
-    return unit;
+}
+
+void* game_ref_alive(const GameRef& ref) {
+    void* unit = *static_cast<void* const volatile*>(&ref.unit);
+    return unit_alive(unit) ? unit : nullptr;
+}
+
+void* page_alive() {
+    return game_ref_alive(g_ref);
 }
 
 void* page_create(std::string& why) {
@@ -253,6 +262,8 @@ void* page_create(std::string& why) {
         return nullptr;
     }
     g_add_bottom(units, game::kGuiMoveLine, unit, game::kGuiGroupBits, 0);
+    // Like the game's common pages (group 0): no scene change kills it.
+    *reinterpret_cast<std::uint32_t*>(static_cast<char*>(unit) + game::kUnitFlags) |= game::kUnitFlagKeep;
     g_set_ref(g_ref_lock(), unit, &g_ref);
     if (g_ref.unit != unit) {
         // setRef does nothing while the game has references switched off; the
@@ -276,7 +287,11 @@ UnitFn page_next(std::size_t slot) {
     }
 }
 
-void page_request_close(void* unit) {
+void gui_request_open(void* unit, void* opener) {
+    g_request_open(unit, opener);
+}
+
+void gui_request_close(void* unit) {
     g_request_close(unit, 0);
 }
 

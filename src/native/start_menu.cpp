@@ -4,7 +4,7 @@
 #include "native/game_421810.hpp"
 #include "native/options_view.hpp"
 #include "native/system_items.hpp"
-#include "native/title_menu.hpp"
+#include "native/mods_page.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -60,8 +60,8 @@ const char* get_message_detour(void* self, std::uint32_t id) {
             return text;
         }
     }
-    // The title Options' category labels while the title Mods page is on.
-    if (const char* text = title_menu_text(self, id)) {
+    // The category labels while CMFM's page shows CMFM's menu.
+    if (const char* text = mods_page_text(self, id)) {
         return text;
     }
     return g_get_message_next(self, id);
@@ -70,8 +70,13 @@ const char* get_message_detour(void* self, std::uint32_t id) {
 std::uint64_t item_action_detour(void* menu, std::uint32_t id, void* arg) {
     if (id == static_cast<std::uint32_t>(game::kItemMods)) {
         g_mods_selected.fetch_add(1, std::memory_order_relaxed);
-        // The Options page in mode 0, with CMFM's tables when the view is
-        // ready; the plain Options page otherwise.
+        // CMFM's page when it is ready (the menu closes and opens again when
+        // the page closes, as for Options).
+        if (mods_page_open_from_start_menu(menu)) {
+            return 0;
+        }
+        // Otherwise the Options page in mode 0, with CMFM's tables when the
+        // view is ready; the plain Options page otherwise.
         options_view_enter();
         return g_item_action_next(menu, static_cast<std::uint32_t>(game::kItemOptions), arg);
     }

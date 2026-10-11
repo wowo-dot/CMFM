@@ -1,7 +1,7 @@
-// The "Mods" entry in the Start menu's System tab (decisions.md item 8),
-// prototype 1: the entry is shown below Options with our label and help
-// line, and selecting it runs the game's own Options action until the CMFM
-// page exists. Exe 421810 only.
+// The "Mods" entry in the Start menu's System tab (decisions.md item 8): the
+// entry is shown below Options with our label and help line, and opens
+// CMFM's page (mods_page.hpp); without it, the game's Options page with
+// CMFM's rows (options_view.hpp). Exe 421810 only.
 #pragma once
 
 #include "al/al_plugin.h"
