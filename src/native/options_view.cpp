@@ -14,13 +14,18 @@ namespace {
 using GetFn = std::uint64_t (*)(std::int32_t kind, std::uint32_t id);
 using SetFn = std::uint64_t (*)(std::int32_t kind, std::uint32_t id, std::int32_t value);
 using CloseFn = std::uint64_t (*)(void* page);
+using DefaultsFn = void (*)(void* closure, void* unknown, std::int32_t* answer);
+using RefreshFn = void (*)(void* page);
 
 GetFn g_get_next = nullptr;
 SetFn g_set_next = nullptr;
 CloseFn g_close_next = nullptr;
+DefaultsFn g_defaults_next = nullptr;
+RefreshFn g_refresh = nullptr;  // uGUIMenuOption::refreshRows, found by pattern
 std::uint32_t g_get_hook = 0;
 std::uint32_t g_set_hook = 0;
 std::uint32_t g_close_hook = 0;
+std::uint32_t g_defaults_hook = 0;
 Env g_env = {};
 bool g_ready = false;
 std::atomic<bool> g_view{false};
@@ -88,6 +93,23 @@ std::uint64_t close_detour(void* page) {
     return result;
 }
 
+// "Set To Default" answered. In the CMFM view the game's handler must not
+// run: in mode 0 it resets every game and system option.
+void defaults_detour(void* closure, void* unknown, std::int32_t* answer) {
+    if (!g_view.load(std::memory_order_acquire)) {
+        g_defaults_next(closure, unknown, answer);
+        return;
+    }
+    if (answer != nullptr && *answer == 0) {  // Yes
+        g_model.reset();
+        void* page = *reinterpret_cast<void* const*>(static_cast<char*>(closure) + 8);
+        if (g_refresh != nullptr && page != nullptr) {
+            g_refresh(page);
+        }
+        logf(AL_LOG_INFO, "options view: Set To Default reset the CMFM rows only");
+    }
+}
+
 bool register_hook(const char* name, const char* pattern, void* detour, void** next, std::uint32_t& handle) {
     al_hook_t h = {sizeof(al_hook_t)};
     h.name = name;
@@ -113,8 +135,11 @@ bool options_view_register(const Env& env, std::string& why) {
                        reinterpret_cast<void**>(&g_set_next), g_set_hook) ||
         !register_hook("CMFM:uGUIMenuOption::close", game::kMenuOptionClosePattern,
                        reinterpret_cast<void*>(&close_detour), reinterpret_cast<void**>(&g_close_next),
-                       g_close_hook)) {
-        for (const std::uint32_t h : {g_get_hook, g_set_hook, g_close_hook}) {
+                       g_close_hook) ||
+        !register_hook("CMFM:uGUIMenuOption::setToDefault", game::kMenuOptionDefaultsPattern,
+                       reinterpret_cast<void*>(&defaults_detour), reinterpret_cast<void**>(&g_defaults_next),
+                       g_defaults_hook)) {
+        for (const std::uint32_t h : {g_get_hook, g_set_hook, g_close_hook, g_defaults_hook}) {
             if (h != 0) {
                 g_env.hooks->set_enabled(g_env.self, h, 0);
             }
@@ -122,13 +147,23 @@ bool options_view_register(const Env& env, std::string& why) {
         why = "an options view hook was refused (see the lines above)";
         return false;
     }
-    logf(AL_LOG_INFO, "options view: hooks registered (option get, option set, Options close); %u test rows",
+    // The redraw after Set To Default; optional (rows otherwise update on
+    // their next redraw).
+    void* match = nullptr;
+    if (g_env.scanner != nullptr &&
+        g_env.scanner->find(g_env.self, game::kMenuOptionRefreshPattern, AL_SCAN_CODE, &match, 1) == 1) {
+        g_refresh = reinterpret_cast<RefreshFn>(match);
+    } else {
+        logf(AL_LOG_WARNING, "options view: refreshRows not found; Set To Default redraws later");
+    }
+    logf(AL_LOG_INFO,
+         "options view: hooks registered (option get, option set, Options close, Set To Default); %u rows",
          static_cast<unsigned>(g_model.row_count()));
     return true;
 }
 
 bool options_view_check(const Env& env, std::string& why) {
-    for (const std::uint32_t h : {g_get_hook, g_set_hook, g_close_hook}) {
+    for (const std::uint32_t h : {g_get_hook, g_set_hook, g_close_hook, g_defaults_hook}) {
         if (env.hooks->state(env.self, h) != AL_HOOK_ACTIVE) {
             why = "the options view hooks are not active";
             return false;

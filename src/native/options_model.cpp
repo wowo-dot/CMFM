@@ -125,6 +125,12 @@ bool OptionsModel::get(std::uint32_t setting_id, std::uint32_t& value) const {
     return true;
 }
 
+void OptionsModel::reset() {
+    for (std::size_t i = 0; i < count_; ++i) {
+        values_[i] = specs_[i].initial;
+    }
+}
+
 bool OptionsModel::set(std::uint32_t setting_id, std::uint32_t value) {
     if (setting_id >= count_ || value >= specs_[setting_id].value_count) {
         return false;

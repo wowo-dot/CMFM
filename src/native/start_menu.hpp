@@ -16,6 +16,7 @@ struct Env {
     al_plugin_t* self;
     const al_hooks_t* hooks;
     std::uintptr_t base;  // the game exe's base
+    const al_scanner_t* scanner;  // may be NULL
 };
 
 // al_plugin_init: registers the two hooks. False (with `why`) if either

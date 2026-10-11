@@ -23,6 +23,13 @@ inline constexpr char kOptionGetPattern[] = "48 89 5C 24 08 57 48 83 EC 20 33 DB
 inline constexpr char kOptionSetPattern[] = "48 89 5C 24 08 57 48 83 EC 20 41 8B D8 8B FA 83 E9 01";
 // uGUIMenuOption::close (vtable slot 91) at RVA 0x1E80D40.
 inline constexpr char kMenuOptionClosePattern[] = "40 53 48 83 EC 20 48 8B D9 0F B6 89 40 2C 00 00";
+// The Options page's "Set To Default" answer (closure, ?, int* answer) at
+// RVA 0x1E800A0: on Yes in mode 0 it resets ALL game and system options
+// (run 20261011-native-m2b), whatever rows are shown.
+inline constexpr char kMenuOptionDefaultsPattern[] =
+    "40 53 48 83 EC 20 41 83 38 00 48 8B D9 0F 85 ?? ?? ?? ?? 48 8B 51 08 48 8B 0D";
+// uGUIMenuOption::refreshRows(page) at RVA 0x1E82170 (called, not hooked).
+inline constexpr char kMenuOptionRefreshPattern[] = "40 56 41 54 41 57 48 83 EC 40";
 
 // OptionTabTables in .data (writable): 7 row-table pointers, [0..4] the five
 // Options tabs of mode 0, with these original tables.

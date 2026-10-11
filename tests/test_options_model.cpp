@@ -74,6 +74,9 @@ void gets_and_sets() {
     check(!m.set(1, 3) && m.get(1, v) && v == 2, "out of range refused, value kept");
     check(!m.set(3, 1) && m.set(3, 0), "placeholder accepts only its one value");
     check(!m.set(7, 0) && !m.get(7, v), "unknown row refused");
+    m.set(0, 0);
+    m.reset();
+    check(m.get(0, v) && v == 1 && m.get(1, v) && v == 0, "reset restores the initial values");
 }
 
 void rejects_bad_specs() {

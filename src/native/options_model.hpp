@@ -66,6 +66,8 @@ public:
     bool get(std::uint32_t setting_id, std::uint32_t& value) const;
     // False if the row or value is out of range; nothing changes then.
     bool set(std::uint32_t setting_id, std::uint32_t value);
+    // Every row back to its initial value (the page's "Set To Default").
+    void reset();
     const OptionSpec* spec(std::uint32_t setting_id) const {
         return setting_id < count_ ? &specs_[setting_id] : nullptr;
     }
