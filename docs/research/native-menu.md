@@ -440,6 +440,25 @@ tables:
 Hooks then: text, action, getter, setter, close (5). Sliders, read-only
 lines and rows that open sub-pages come after.
 
+### Prototype 2 in game (runs 20261011-native-m2, -m2b)
+
+- **The Mods page works**: header "Mods", tab "CMFM", the test rows with
+  their values, our help lines, value changes (logged by the setter hook),
+  the game's tables back on close, real Options unaffected.
+- **Every tab needs a row.** The Options list's cursor callback
+  (0x141E806B0) reads the row in slot 0 (`page+0x29A8`) at +0x10 without a
+  null check; an empty tab crashed (m2). The tab switch (0x141E80990)
+  resets the page counter and the cursor to row 0, so one row per tab is
+  enough. OptionsModel gives empty tabs a one-value placeholder row.
+- **Set To Default resets everything.** The page's Set To Default answer
+  (0x141E800A0, a closure with the page at +8) resets, in mode 0, all game
+  options in the save (`sub_141358130(save, 1)`) and all system options
+  (`sub_1413289C0(sUserData+224, 0, 0)`), then re-applies graphics settings
+  4 and 5; mode 1 resets the Accept/Reply group (`sub_141358130(save, 2)`).
+  Pressed in the Mods view (m2b) it reset the player's real options. A
+  sixth hook now answers it in the view: Yes resets CMFM's rows only and
+  redraws through `refreshRows` (pattern `40 56 41 54 41 57 48 83 EC 40`).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
