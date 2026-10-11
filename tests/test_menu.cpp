@@ -401,6 +401,7 @@ void lists_every_page_on_the_status_tab() {
     Demo d[5] = {demo_page(&f[0], "One"), demo_page(&f[1], "Two"), demo_page(&f[2], "Three"),
                  demo_page(&f[3], "Four"), demo_page(&f[4], "Five")};
     for (Demo& x : d) {
+        x.page.mod = x.page.title;  // five mods of one plugin
         add(m, page_of(x));
     }
     Demo bad = demo_page(&f[0]);
@@ -439,6 +440,7 @@ void shows_1024_pages() {
     static OptionsModel model;
     static Fake f;
     static cmfm_setting_t one[1];
+    static char names[1026][16];
     one[0] = setting(kToggle, CMFM_TYPE_BOOL, "One");
     Menu m;
     for (int p = 0; p < 1026; ++p) {
@@ -446,6 +448,8 @@ void shows_1024_pages() {
         page.size = sizeof page;
         page.plugin = "many";
         page.title = "Many";
+        std::snprintf(names[p], sizeof names[p], "Mod %d", p);
+        page.mod = names[p];  // a mod each
         page.settings = one;
         page.setting_count = 1;
         page.user = &f;
@@ -774,9 +778,12 @@ void shows_page_headers() {
     Menu m;
     Demo a = demo_page(&f, "DLSS");
     a.page.version = "0.15.0";
+    a.page.mod = "DLSS";  // three mods of one plugin
     Demo b = demo_page(&f, "Other");
     b.page.version = "beta 2";
+    b.page.mod = "Other";
     Demo c = demo_page(&f, "Plain");
+    c.page.mod = "Plain";
     add(m, page_of(a));
     add(m, page_of(b));
     add(m, page_of(c));
@@ -797,6 +804,9 @@ void shows_page_headers() {
     Demo d = demo_page(&f);
     d.page.version = "0123456789012345678901234";  // 25 bytes
     check(refused(page_of(d), "version"), "a version longer than 24 bytes is refused");
+    d = demo_page(&f);
+    d.page.mod = "0123456789012345678901234";
+    check(refused(page_of(d), "mod name"), "a mod name longer than 24 bytes is refused");
     Demo e = demo_page(&f);
     e.page.version = "1.0";
     e.page.size = offsetof(cmfm_page_t, version);  // built before the field existed
@@ -914,6 +924,60 @@ void rereads_live_lines() {
     check(m.reread_text(id(status)) && same(value_text(model, status, 0), "Opened 7 times"),
           "a changed line is reported and shown");
     check(!m.reread_text(id(toggle)), "other rows are never reread");
+}
+
+void groups_pages_into_mods() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    // Plugin "dlss": two pages of the mod "DLSS" (the second page's own name
+    // matches), one debug mod of its own; plugin "fake": two pages without a
+    // name, so one mod named after its first page; added interleaved.
+    Demo up = demo_page(&f, "Upscaling");
+    up.page.plugin = "dlss";
+    up.page.mod = "DLSS";
+    up.page.version = "0.15.0";
+    Demo plain = demo_page(&f, "Plain one");
+    Demo fg = demo_page(&f, "Frame gen");
+    fg.page.plugin = "dlss";
+    fg.page.mod = "DLSS";
+    Demo plain2 = demo_page(&f, "Plain two");
+    Demo debug = demo_page(&f, "Debug");
+    debug.page.plugin = "dlss";
+    debug.page.mod = "DLSS debug";
+    for (Demo* d : {&up, &plain, &fg, &plain2, &debug}) {
+        add(m, page_of(*d));
+    }
+    std::string why;
+    check(m.build(model, why) && m.used_tabs() == 6, "five pages, five tabs");
+    const auto& mods = m.mods();
+    check(mods.size() == 4 && same(mods[0].name.c_str(), "Overview") && mods[0].tabs.size() == 1, "the Overview first");
+    check(same(mods[1].name.c_str(), "DLSS") && mods[1].tabs.size() == 2 && mods[1].tabs[0] == 1 && mods[1].tabs[1] == 3,
+          "DLSS: its two pages, in order");
+    check(same(mods[2].name.c_str(), "Plain one") && mods[2].tabs.size() == 2 && mods[2].tabs[1] == 4,
+          "pages without a name: one mod named after its first page");
+    check(same(mods[3].name.c_str(), "DLSS debug") && mods[3].tabs.size() == 1, "another name of the plugin: a mod");
+    check(m.mod_of_tab(3) == 1 && m.mod_of_tab(4) == 2 && m.mod_of_tab(0) == 0, "tabs know their mod");
+    check(same(m.tab_header(1), "DLSS \xC2\xB7 Upscaling \xC2\xB7 v0.15.0") &&
+              same(m.tab_header(3), "DLSS \xC2\xB7 Frame gen") && same(m.tab_header(5), "Debug"),
+          "headers: the mod and the page; a single page alone");
+    std::size_t rows = 0;
+    const native::GameOptionRow* dlss = nullptr;
+    for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r, ++rows) {
+        if (same(model.label_text(static_cast<std::uint32_t>(r->label_id)), "DLSS")) {
+            dlss = r;
+        }
+    }
+    check(rows == 4, "the Overview: CMFM and one row per mod");
+    check(dlss != nullptr && std::strstr(help_text(model, dlss), "on 2 pages") != nullptr,
+          "a mod's row counts its pages");
+    const native::GameOptionRow* restart = find(model, 3, "Restart thing");
+    m.get(id(restart));
+    m.set(id(restart), 1);
+    check(dlss != nullptr && same(value_text(model, dlss, 0), "Restart needed"), "any page's restart marks the mod");
+    const int opened = f.opened;
+    m.send(CMFM_EVENT_OPENED);
+    check(f.opened == opened + 1, "five pages sharing on_event and user hear an event once");
 }
 
 void holds_long_pages() {
@@ -1096,6 +1160,7 @@ int main() {
     resets_a_page();
     names_keys();
     binds_keys();
+    groups_pages_into_mods();
     holds_long_pages();
     rereads_live_lines();
     if (g_failures == 0) {

@@ -2,7 +2,8 @@
  * The example for plugin authors (plain C), and CMFM's test client.
  *
  * It shows every setting type of cmfm.menu 1.2 (rows that hide, live lines and
- * key bindings since 1.2; its hotkey is a real Astera Loader hotkey), keeps
+ * key bindings since 1.2; its hotkey is a real Astera Loader hotkey) on three
+ * pages of one mod, "Demo" (a dropdown in the mod list since 1.2), keeps
  * its values in its own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
@@ -335,6 +336,7 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
         page.size = sizeof page;
         page.plugin = "cmfm_demo";
         page.title = title;
+        page.mod = title; /* since 1.2: a mod each, not pages of "Demo" */
         page.settings = s;
         page.setting_count = count;
         page.user = (void*)(intptr_t)n;
@@ -444,13 +446,6 @@ static void add_page(void) {
     s[10].button = "High";
     s[10].confirm = "Apply the demo's High preset?";
 
-    memset(&page, 0, sizeof page);
-    page.size = sizeof page;
-    page.plugin = "cmfm_demo";
-    page.title = "Demo";
-    page.version = DEMO_VERSION; /* since 1.1: shown in the page's header */
-    page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
-    page.settings = s;
     s[11].id = ID_UPSCALING;
     s[11].type = CMFM_TYPE_SECTION;
     s[11].label = "Upscaling";
@@ -517,22 +512,47 @@ static void add_page(void) {
     s[20].label = "Hotkey presses";
     s[20].help = "Counts presses of Demo hotkey.";
 
-    page.setting_count = DEMO_SETTINGS;
-    page.get = demo_get;
-    page.set = demo_set;
-    page.validate = demo_validate;
-    page.get_text = demo_text;
-    page.on_event = demo_event;
-    page.press = demo_press;
-    page.locked = demo_locked;
-    /* CMFM copies the page: the local arrays may go away after this. */
-    if (menu->add_page(&page, why, sizeof why) == 0) {
-        char line[256];
-        snprintf(line, sizeof line, "CMFM refused the page: %s", why);
-        logline(AL_LOG_WARNING, line);
-        return;
+    /* Three pages of one mod (since 1.2, `mod`): the mod list shows "Demo"
+     * once, its pages in a dropdown, the first the default. The callbacks
+     * serve every page (the ids are unique over the plugin). */
+    {
+        static const struct {
+            const char* title;
+            const char* help;
+            int first;
+            int count;
+        } kPages[] = {
+            {"General", "CMFM's demo plugin: one setting of each type.", 0, 11},
+            {"Upscaling", "Rows that hide: only the chosen upscaler's setting shows (since 1.2).", 11, 5},
+            {"Live and keys", "A live line and a real hotkey (since 1.2).", 16, 5},
+        };
+        for (size_t p = 0; p < sizeof kPages / sizeof kPages[0]; ++p) {
+            memset(&page, 0, sizeof page);
+            page.size = sizeof page;
+            page.plugin = "cmfm_demo";
+            page.mod = "Demo";
+            page.title = kPages[p].title;
+            page.version = DEMO_VERSION; /* since 1.1: shown in the page's header */
+            page.help = kPages[p].help;
+            page.settings = &s[kPages[p].first];
+            page.setting_count = (uint32_t)kPages[p].count;
+            page.get = demo_get;
+            page.set = demo_set;
+            page.validate = demo_validate;
+            page.get_text = demo_text;
+            page.on_event = demo_event;
+            page.press = demo_press;
+            page.locked = demo_locked;
+            /* CMFM copies the page: the local arrays may go away after this. */
+            if (menu->add_page(&page, why, sizeof why) == 0) {
+                char line[256];
+                snprintf(line, sizeof line, "CMFM refused the page %s: %s", kPages[p].title, why);
+                logline(AL_LOG_WARNING, line);
+                return;
+            }
+        }
     }
-    logline(AL_LOG_INFO, "page added to CMFM");
+    logline(AL_LOG_INFO, "pages added to CMFM");
     add_extra_pages(menu);
 }
 

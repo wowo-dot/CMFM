@@ -1130,6 +1130,27 @@ each fill, on open and when a restart state changes.
   answered with the row's current help line, since the help bar redraws only
   when its id changes (as for the mod list's 9996 / 9997).
 
+## The mod list as mods and pages (roadmap 1.2 item 7; run `modlist-1`)
+
+- The select philosophy needs the category list's Confirm (the keys) to go
+  to the mod list first. It is slot 8 of the categories object (at
+  `uGUIOption + 0x28F8`; its vtable, 11 slots, sits right before
+  uGUIOption's at RVA 0x347D9C8): a thunk to `sub_141E8A890(categories,
+  category)`, which for categories 0-4 calls the focus setter
+  `sub_141E8CDD0(unit, 1)` (the panel takes the focus), 5 opens Key Config
+  and 6 the Default question. The page's update (`sub_141E8EF50`) calls
+  `sub_141E8A890` directly for a click on the panel, so a replaced slot 8
+  catches the keys only.
+- CMFM's own page gets a copy of that vtable with slot 8 replaced (as it
+  already has its own copy of uGUIOption's vtable, `page_class`); the game's
+  Options pages keep the game's. Checked on every open (the object must hold
+  the game's vtable with the Confirm expected), put back on unload. Without
+  it the mod list selects as its cursor moves, as before.
+- The highlight is the mod list's own cursor (`gui_set_cursor`); the hidden
+  category list's moves set it, the pointer sets it, the wheel and the
+  scrollbar move only the window. Q / E and pad LB / RB are read through
+  `al.input` (`key_down`, `pad_state`) in the page's update, as edges.
+
 ## No caps (static, 2026-10-12; run `caps-1`)
 
 Every shared limit CMFM had (200 rows over all mods, about 900 label and

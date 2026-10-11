@@ -314,6 +314,11 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         return false;
     }
     out.flags = flags;
+    const char* mod = page->size >= offsetof(cmfm_page_t, mod) + sizeof page->mod ? page->mod : nullptr;
+    if (!text_ok(mod, kMaxTitle, true, out.mod)) {
+        why = "mod name longer than 24 bytes";
+        return false;
+    }
     const char* version =
         page->size >= offsetof(cmfm_page_t, version) + sizeof page->version ? page->version : nullptr;
     if (!text_ok(version, kMaxVersion, true, out.version)) {
@@ -394,6 +399,7 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     for (std::size_t p = 0; p < shown; ++p) {
         setting_rows += pages_[p].settings.size();
     }
+    group_mods(shown);
     rows_.clear();
     rows_.reserve(1 + entry_rows + setting_rows);  // stable addresses for the model
 
@@ -422,13 +428,24 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             const auto& [plugin, why] = refused_[en.index];
             status(plugin.empty() ? std::string("(unnamed)") : plugin, "Refused", "Refused: " + why);
         } else if (en.index < shown) {
-            const Page& p = pages_[en.index];
-            std::size_t count = 0;
-            for (const Setting& s : p.settings) {
-                count += s.type != CMFM_TYPE_SECTION && s.id != kResetId;
+            // One row per mod, at its first page.
+            const std::size_t m = tab_mod_[1 + en.index];
+            const Mod& mod = mods_[m];
+            if (mod.tabs.front() != 1 + en.index) {
+                continue;
             }
-            status(p.title, "Active", "From " + p.plugin + ": " + std::to_string(count) + " setting(s).");
-            rows_.back().status_page = static_cast<std::int32_t>(en.index);
+            std::size_t count = 0;
+            for (const std::size_t t : mod.tabs) {
+                for (const Setting& s : pages_[t - 1].settings) {
+                    count += s.type != CMFM_TYPE_SECTION && s.id != kResetId;
+                }
+            }
+            std::string help = "From " + mod.plugin + ": " + std::to_string(count) + " setting(s)";
+            if (mod.tabs.size() > 1) {
+                help += " on " + std::to_string(mod.tabs.size()) + " pages";
+            }
+            status(mod.name, "Active", help + ".");
+            rows_.back().status_mod = static_cast<std::int32_t>(m);
         } else {
             const Page& p = pages_[en.index];
             status(p.title, "Not shown", "From " + p.plugin + ". " + not_shown_why_[en.index]);
@@ -714,8 +731,8 @@ void Menu::note_value(Row& row, std::uint32_t index) {
 
 void Menu::update_status_texts() {
     for (Row& r : rows_) {
-        if (r.status_page >= 0) {
-            const bool pending = tab_restart_pending(1 + static_cast<std::size_t>(r.status_page));
+        if (r.status_mod >= 0) {
+            const bool pending = mod_restart_pending(static_cast<std::size_t>(r.status_mod));
             std::snprintf(r.text, sizeof r.text, "%s", pending ? "Restart needed" : "Active");
         }
     }
@@ -743,13 +760,47 @@ bool Menu::tab_restart_pending(std::size_t tab) const {
     return false;
 }
 
+void Menu::group_mods(std::size_t shown) {
+    mods_.clear();
+    tab_mod_.assign(1 + shown, 0);
+    mods_.push_back({"Overview", "", {0}});
+    for (std::size_t p = 0; p < shown; ++p) {
+        const Page& page = pages_[p];
+        std::size_t m = 1;
+        for (; m < mods_.size(); ++m) {
+            const Page& first = pages_[mods_[m].tabs.front() - 1];
+            if (first.plugin == page.plugin && first.mod == page.mod) {
+                break;
+            }
+        }
+        if (m == mods_.size()) {
+            mods_.push_back({page.mod.empty() ? page.title : page.mod, page.plugin, {}});
+        }
+        mods_[m].tabs.push_back(1 + p);
+        tab_mod_[1 + p] = m;
+    }
+}
+
+bool Menu::mod_restart_pending(std::size_t mod) const {
+    if (mod >= mods_.size()) {
+        return false;
+    }
+    for (const std::size_t t : mods_[mod].tabs) {
+        if (tab_restart_pending(t)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const char* Menu::tab_header(std::size_t tab) {
     header_.clear();
     if (tab == 0) {
         header_ = "Overview";
     } else if (tab - 1 < shown_) {
         const Page& p = pages_[tab - 1];
-        header_ = p.title;
+        const Mod& mod = mods_[mod_of_tab(tab)];
+        header_ = mod.tabs.size() > 1 ? mod.name + " \xC2\xB7 " + p.title : p.title;
         if (!p.version.empty()) {
             header_ += " \xC2\xB7 ";  // middle dot
             if (p.version[0] >= '0' && p.version[0] <= '9') {
@@ -989,9 +1040,16 @@ const char* Menu::row_help(std::uint32_t setting_id) const {
 }
 
 void Menu::send(cmfm_event_t event) {
+    // Once per on_event and user pair: the pages of one mod that share them
+    // hear an event once.
     for (std::size_t p = 0; p < shown_; ++p) {
-        if (pages_[p].on_event != nullptr) {
-            pages_[p].on_event(pages_[p].user, event);
+        const Page& page = pages_[p];
+        bool sent = page.on_event == nullptr;
+        for (std::size_t q = 0; q < p && !sent; ++q) {
+            sent = pages_[q].on_event == page.on_event && pages_[q].user == page.user;
+        }
+        if (!sent) {
+            page.on_event(page.user, event);
         }
     }
 }

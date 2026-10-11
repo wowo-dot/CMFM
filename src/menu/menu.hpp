@@ -74,6 +74,16 @@ struct Page {
     cmfm_press_fn press = nullptr;    // since 1.1
     cmfm_locked_fn locked = nullptr;  // since 1.1
     std::uint32_t flags = 0;          // since 1.2: CMFM_PAGE_...
+    std::string mod;                  // since 1.2; may be empty
+};
+
+// A mod in the mod list (since 1.2): the shown pages of one plugin with the
+// same `mod` name, as menu tabs, the first the default. Mod 0 is the
+// Overview (tab 0).
+struct Mod {
+    std::string name;
+    std::string plugin;  // empty for the Overview
+    std::vector<std::size_t> tabs;
 };
 
 // CMFM's own row at the end of a page (CMFM_PAGE_NO_RESET): a BUTTON that
@@ -105,7 +115,7 @@ public:
 
     // While a Mods page is open, on the game's menu thread:
     void refresh();                      // TEXT rows' texts, help lines as written
-    void send(cmfm_event_t event);       // to every shown page
+    void send(cmfm_event_t event);       // to every shown page (once per on_event and user)
     std::uint32_t get(std::uint32_t setting_id);  // the row's value index
     bool set(std::uint32_t setting_id, std::int32_t index);
     void reset_defaults();               // "Set To Default"
@@ -167,11 +177,17 @@ public:
     bool reread_text(std::uint32_t setting_id);
     std::uint32_t lock_revision() const { return lock_revision_; }
 
-    // Tab t's header above its rows: "Overview", or the page's title, its
+    // Tab t's header above its rows: "Overview", or the page's title (the
+    // mod's name and the page's title for a mod with several pages), its
     // version ("v" added before a leading digit) and "Restart needed" while
     // a change waits for a restart; empty for unused tabs. Valid until the
     // next call.
     const char* tab_header(std::size_t tab);
+
+    // The mods of the last build (the Overview first), and the mod that
+    // shows tab t.
+    const std::vector<Mod>& mods() const { return mods_; }
+    std::size_t mod_of_tab(std::size_t tab) const { return tab < tab_mod_.size() ? tab_mod_[tab] : 0; }
 
 private:
     struct Entry {
@@ -180,7 +196,7 @@ private:
     };
     struct Row {
         bool status = false;
-        std::int32_t status_page = -1;  // Overview rows: the shown page they describe
+        std::int32_t status_mod = -1;  // Overview rows: the mod they describe
         std::size_t page = 0;
         std::size_t setting = 0;
         std::string label;
@@ -199,6 +215,8 @@ private:
 
     void logf(int level, const char* format, ...) const;
     static void set_help(Row& row, const char* text);
+    void group_mods(std::size_t shown);  // mods_ and tab_mod_ from the shown pages
+    bool mod_restart_pending(std::size_t mod) const;
     void compose(std::size_t shown, std::vector<native::RowSpec>& specs);
     // The row of a plugin setting (any type): its index in rows_, or
     // rows_.size() (status rows, placeholders, ids not ours).
@@ -235,6 +253,8 @@ private:
     std::size_t shown_ = 0;
     std::vector<std::string> not_shown_why_;  // per page; empty if shown
     std::size_t tab_count_ = native::kTabCount;
+    std::vector<Mod> mods_;
+    std::vector<std::size_t> tab_mod_;
     std::vector<std::string> tab_names_;
     std::vector<std::string> tab_helps_;
     std::string header_;  // the last tab_header

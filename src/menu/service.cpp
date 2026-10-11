@@ -285,6 +285,15 @@ bool service_hidden(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_hidden(setting_id);
 }
 
+const std::vector<Mod>& service_mods() {
+    static const std::vector<Mod> kNone;
+    return g_menu && g_model_ok ? g_menu->mods() : kNone;
+}
+
+std::size_t service_mod_of_tab(std::size_t tab) {
+    return g_menu && g_model_ok ? g_menu->mod_of_tab(tab) : 0;
+}
+
 bool service_is_key(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_key(setting_id);
 }

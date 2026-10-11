@@ -6,6 +6,7 @@
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
 #include "native/gui.hpp"
+#include "native/mod_list.hpp"
 #include "native/options_model.hpp"
 #include "native/options_view.hpp"
 #include "native/page_class.hpp"
@@ -213,6 +214,22 @@ struct SavedWrap {
 // Edge rows with an arrow when more tabs lie beyond them.
 char g_label_up[96];
 char g_label_down[96];
+
+// The mod list (roadmap 1.2 item 7, native/mod_list.hpp): one entry per mod
+// and dropdowns of their pages. The highlight (the pointer, the arrow keys)
+// and what the panel shows (a click, Confirm, Q / E) are apart.
+ModList g_list;
+std::size_t g_highlight = 0;  // the list row the mod list's cursor is on
+constexpr std::size_t kMaxListRows = 32;  // visible rows (the layout has 11)
+char g_row_labels[kMaxListRows][128];
+std::string g_highlight_help;  // the help line for the highlighted row
+// CMFM's copy of the categories object's vtable, for CMFM's own page only:
+// slot 8, the category list's Confirm (the keys; a click on the panel calls
+// the function behind it directly), goes to the mod list first.
+void* g_categories_vtable[game::kCategoriesVtableSlots] = {};
+PanelFocusFn g_category_confirm_next = nullptr;
+bool g_select_mode = false;  // Confirm selects in the mod list (else the cursor's moves select)
+bool g_page_keys[2] = {};    // Q / LB, E / RB held in the last update
 // Split mode (CMFM's own layout, docs/research/native-menu.md "Layout
 // study"): the mod list (the layout's spare camera list, styled like the
 // category list) shows every menu tab; the page's category list, off screen,
@@ -334,7 +351,12 @@ bool with_tables(const OptionsModel& model, Build build) {
 
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
 bool split_view();
-void select_tab(void* unit, std::size_t index);
+void show_selected(void* unit, bool keep_focus);
+void set_highlight(void* unit, std::size_t row);
+bool activate_row(void* unit, std::size_t row);
+void select_highlight(void* unit);
+void enter_panel(void* unit);
+void page_keys(void* unit);
 // looks_cursor: the cursor row the row looks were given (the list stores a
 // moved cursor only after its cursor callback); -1: the list's.
 void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
@@ -409,13 +431,16 @@ std::uint64_t list_move_detour(void* list, std::int32_t row) {
     if (list == g_window_list.load(std::memory_order_acquire) && split_view() &&
         g_mod_list.load(std::memory_order_acquire) != nullptr) {
         // Split mode: the category cursor stays on the audio panel; the move
-        // goes to the mod list (wrapping at both ends).
+        // goes to the mod list's highlight (wrapping at both ends). It selects
+        // only without CMFM's Confirm (g_select_mode off).
         const std::int32_t old = field<std::int32_t>(list, game::kListCursor);
-        const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-        if (row != old && entries > 1) {
-            const std::size_t selected = g_selected.load(std::memory_order_relaxed);
-            select_tab(g_view_unit.load(std::memory_order_acquire),
-                       row > old ? (selected + 1) % entries : (selected + entries - 1) % entries);
+        const std::size_t rows = g_list.rows().size();
+        if (row != old && rows > 1) {
+            void* unit = g_view_unit.load(std::memory_order_acquire);
+            set_highlight(unit, row > old ? (g_highlight + 1) % rows : (g_highlight + rows - 1) % rows);
+            if (!g_select_mode) {
+                select_highlight(unit);
+            }
         }
         return 0;
     }
@@ -518,10 +543,10 @@ PanelFocusFn focus_function(void* object, std::size_t slot, std::uintptr_t rva, 
 
 // Split mode, the mouse with both sides live, as on the game's page: over the
 // mod list it highlights the entry under the pointer (and takes the focus
-// back from the panel, as Back does); moving onto the panel gives it the
-// focus (the game's page waits for a click there; the page's update still
-// does that too). Only on mouse activity, and only while the page has the
-// input (the helpers answer nothing otherwise).
+// back from the panel, as Back does) and a click selects it (activate_row);
+// moving onto the panel gives it the focus (the game's page waits for a click
+// there; the page's update still does that too). Only on mouse activity, and
+// only while the page has the input (the helpers answer nothing otherwise).
 void track_mouse(void* unit) {
     void* list = g_mod_list.load(std::memory_order_acquire);
     const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
@@ -529,7 +554,8 @@ void track_mouse(void* unit) {
         return;
     }
     const bool moved = g_mouse_moved(unit, nullptr) != 0;
-    if (!moved && g_mouse_click(unit, nullptr) == 0) {
+    const bool clicked = g_mouse_click(unit, nullptr) != 0;
+    if (!moved && !clicked) {
         return;
     }
     alignas(16) float position[4] = {};
@@ -546,7 +572,13 @@ void track_mouse(void* unit) {
                 leave(tab, 0);
             }
         }
-        select_tab(unit, g_mod_top + r);
+        const std::size_t at = g_mod_top + r;
+        set_highlight(unit, at);
+        if (!g_select_mode) {
+            select_highlight(unit);  // the old way: the pointer selects
+        } else if (clicked && activate_row(unit, at)) {
+            enter_panel(unit);
+        }
         return;
     }
     void* categories = field<void*>(unit, game::kOptCategoryList);
@@ -556,10 +588,7 @@ void track_mouse(void* unit) {
         g_mouse_hit(unit, window, position, nullptr) == 0) {
         return;
     }
-    void* owner = static_cast<char*>(unit) + game::kOptCategories;
-    if (PanelFocusFn enter = focus_function(owner, game::kEnterPanelSlot, game::kRvaEnterPanel, "the category Confirm")) {
-        enter(owner, static_cast<std::int32_t>(game::kSplitPanel));
-    }
+    enter_panel(unit);
 }
 
 // CMFM's page, vtable slot 81: every frame while it is open (state 2; the
@@ -577,6 +606,7 @@ std::uint64_t page_update(void* unit) {
         if (!scroll_dragging()) {
             track_mouse(unit);  // the pointer may cross the mod list while it holds a thumb
         }
+        page_keys(unit);
         const std::uint32_t revision = menu::service_restart_revision();
         if (revision != g_restart_seen) {
             g_restart_seen = revision;
@@ -725,45 +755,143 @@ bool split_view() {
     return g_split.load(std::memory_order_relaxed) && g_view.load(std::memory_order_acquire);
 }
 
-// The mod list's rows: the tabs in its window, arrows on the edge rows when
-// more lie beyond, the highlight on the selected tab.
+// The mod list's rows in its window: each mod's entry (a mod with several
+// pages marked with a triangle: down while folded, up while its dropdown is
+// open) and the open dropdown's pages, indented; the entry or page that shows
+// in light green; the cursor on the highlighted row. The scrollbar says when
+// more rows lie beyond.
 void show_mod_list() {
     void* list = g_mod_list.load(std::memory_order_acquire);
     if (list == nullptr) {
         return;
     }
+    const std::vector<menu::Mod>& mods = menu::service_mods();
     const OptionsModel& model = menu::service_model();
-    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
-    const std::size_t rows = entries < visible ? entries : visible;
-    if (field<std::uint32_t>(list, game::kListRowCount) != rows) {
-        cursor_to_top(list);
-        gui_set_row_count(list, rows);
+    const std::vector<ListRow>& rows = g_list.rows();
+    std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    visible = visible < kMaxListRows ? visible : kMaxListRows;
+    const std::size_t count = rows.size() < visible ? rows.size() : visible;
+    if (g_mod_top + count > rows.size()) {
+        g_mod_top = rows.size() - count;
     }
-    for (std::size_t r = 0; r < rows; ++r) {
+    if (field<std::uint32_t>(list, game::kListRowCount) != count) {
+        cursor_to_top(list);
+        gui_set_row_count(list, count);
+    }
+    const std::size_t shown = g_list.shown_row();
+    for (std::size_t r = 0; r < count; ++r) {
         void* row = list_row(list, static_cast<std::uint32_t>(r));
-        if (row == nullptr) {
+        const ListRow& lr = rows[g_mod_top + r];
+        if (row == nullptr || lr.mod >= mods.size()) {
             continue;
         }
-        const char* label = model.tab_name(g_mod_top + r);
-        if (r == 0 && g_mod_top > 0) {
-            std::snprintf(g_label_up, sizeof g_label_up, "\xE2\x96\xB2 %s", label);  // up-pointing triangle
-            label = g_label_up;
-        } else if (r == rows - 1 && g_mod_top + rows < entries) {
-            std::snprintf(g_label_down, sizeof g_label_down, "%s \xE2\x96\xBC", label);  // down-pointing triangle
-            label = g_label_down;
+        const menu::Mod& mod = mods[lr.mod];
+        std::string text;
+        if (lr.page < 0) {
+            text = mod.name;
+            if (mod.tabs.size() > 1) {
+                text += g_list.open() == lr.mod ? "  \xE2\x96\xB2" : "  \xE2\x96\xBC";  // up / down triangle
+            }
+        } else {
+            const char* title = model.tab_name(mod.tabs[static_cast<std::size_t>(lr.page)]);
+            text = std::string("      ") + (title != nullptr ? title : "");
         }
-        set_row_text(row, "msg_1", nullptr, label);
+        if (g_mod_top + r == shown) {
+            text = "<STYL MOJI_LIGHTGREEN_DEFAULT>" + text + "</STYL>";
+        }
+        std::snprintf(g_row_labels[r], sizeof g_row_labels[r], "%s", text.c_str());
+        set_row_text(row, "msg_1", nullptr, g_row_labels[r]);
         field<std::uint32_t>(row, game::kInstFlags) |= game::kInstFlagActive | game::kInstFlagEnabled;
         gui_set_play(row, true);
     }
-    const std::size_t cursor = g_selected.load(std::memory_order_relaxed) - g_mod_top;
-    if (cursor < rows) {
-        gui_set_cursor(list, static_cast<std::uint32_t>(cursor));
+    if (g_highlight >= g_mod_top && g_highlight < g_mod_top + count) {
+        const auto cursor = static_cast<std::uint32_t>(g_highlight - g_mod_top);
+        gui_set_cursor(list, cursor);
         // Where the list's opening animation leaves the cursor.
         field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(cursor);
     }
     update_scrollbars();
+}
+
+std::size_t list_visible() {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    return list != nullptr ? field<std::uint32_t>(list, game::kListDuplicateNum) : 0;
+}
+
+// The window follows the highlight (and never runs past the last row).
+void keep_highlight_in_view() {
+    const std::size_t rows = g_list.rows().size();
+    const std::size_t visible = list_visible();
+    if (rows == 0 || visible == 0) {
+        g_highlight = 0;
+        g_mod_top = 0;
+        return;
+    }
+    if (g_highlight >= rows) {
+        g_highlight = rows - 1;
+    }
+    if (g_highlight < g_mod_top) {
+        g_mod_top = g_highlight;
+    } else if (g_highlight >= g_mod_top + visible) {
+        g_mod_top = g_highlight - visible + 1;
+    }
+    const std::size_t last_top = rows > visible ? rows - visible : 0;
+    if (g_mod_top > last_top) {
+        g_mod_top = last_top;
+    }
+}
+
+// The cursor to list row `row`: the list and its help line follow; nothing
+// else changes (the select philosophy).
+void set_highlight(void* unit, std::size_t row) {
+    if (row == g_highlight || row >= g_list.rows().size()) {
+        return;
+    }
+    g_highlight = row;
+    keep_highlight_in_view();
+    show_mod_list();
+    request_split_help(unit);
+}
+
+// A click or Confirm on list row `row` (ModList::activate): the panel shows
+// what it selected, or its dropdown folds or opens; the cursor stays on the
+// entry or page it was on. True if that row showed already: the panel takes
+// the focus then.
+bool activate_row(void* unit, std::size_t row) {
+    if (row >= g_list.rows().size()) {
+        return false;
+    }
+    const ListRow target = g_list.rows()[row];
+    const ModList::Result result = g_list.activate(row);
+    std::size_t at = g_list.row_of(target.mod, target.page);
+    g_highlight = at != ModList::kNone ? at : g_list.row_of(target.mod, -1);
+    keep_highlight_in_view();
+    if (result.changed) {
+        show_selected(unit, false);
+    } else {
+        show_mod_list();
+    }
+    request_split_help(unit);
+    return result.enter;
+}
+
+// Without CMFM's Confirm: the highlighted row shows at once (its mod's
+// dropdown open), as the list behaved before.
+void select_highlight(void* unit) {
+    const std::vector<ListRow>& rows = g_list.rows();
+    if (g_highlight >= rows.size()) {
+        return;
+    }
+    const ListRow lr = rows[g_highlight];
+    const std::size_t page = lr.page < 0 ? 0 : static_cast<std::size_t>(lr.page);
+    if (lr.mod == g_list.shown_mod() && page == g_list.shown_page()) {
+        return;
+    }
+    g_list.select(lr.mod, page);
+    const std::size_t at = g_list.row_of(lr.mod, lr.page);
+    g_highlight = at != ModList::kNone ? at : g_list.shown_row();
+    keep_highlight_in_view();
+    show_selected(unit, false);
 }
 
 // ---- Split mode: the panel's window over a long tab ----
@@ -988,27 +1116,19 @@ std::size_t scroll_top(const ScrollBar& b, std::size_t total, std::size_t visibl
     return static_cast<std::size_t>(top);
 }
 
-// The mod list's window dragged to `top`: the highlighted mod stays inside
-// it (the nearest one in the window), so the panel follows when it changes.
+// The mod list's window dragged to `top`: only the window moves; the
+// highlight stays inside it (nothing is selected).
 void drag_mod_list(void* unit, std::size_t top) {
-    void* list = g_mod_list.load(std::memory_order_acquire);
-    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    const std::size_t visible = list_visible();
     g_mod_top = top;
-    std::size_t selected = g_selected.load(std::memory_order_relaxed);
-    selected = selected < top ? top : selected >= top + visible ? top + visible - 1 : selected;
-    if (selected == g_selected.load(std::memory_order_relaxed)) {
-        show_mod_list();
-        return;
+    if (g_highlight < top) {
+        g_highlight = top;
+    } else if (visible > 0 && g_highlight >= top + visible) {
+        g_highlight = top + visible - 1;
     }
-    if (field<std::int32_t>(unit, game::kOptFocus) == 1) {
-        char* tab = tab_object(unit, game::kSplitPanel);
-        if (PanelFocusFn leave = focus_function(tab, game::kLeavePanelSlot, game::kRvaLeavePanel, "a panel's Back")) {
-            leave(tab, 0);
-        }
-    }
-    g_selected.store(selected, std::memory_order_relaxed);
+    keep_highlight_in_view();
     show_mod_list();
-    fill_split_panel(unit);
+    request_split_help(unit);
 }
 
 // The panel's window dragged to `top`: the cursor keeps its row (on the
@@ -1048,16 +1168,16 @@ void drag_scrollbars(void* unit) {
     if (g_scroll_mouse == nullptr || list == nullptr) {
         return;
     }
-    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-    const std::size_t list_visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    const std::size_t entries = g_list.rows().size();
+    const std::size_t list_rows = field<std::uint32_t>(list, game::kListDuplicateNum);
     if (g_list_bar.shown) {
         if (g_scroll_mouse(g_list_bar.bar) != 0) {
-            const std::size_t top = scroll_top(g_list_bar, entries, list_visible);
+            const std::size_t top = scroll_top(g_list_bar, entries, list_rows);
             if (top != g_mod_top) {
                 drag_mod_list(unit, top);
             }
         } else {
-            show_scroll(g_list_bar, entries, list_visible, g_mod_top);
+            show_scroll(g_list_bar, entries, list_rows, g_mod_top);
         }
     }
     if (g_panel_bar.shown) {
@@ -1075,9 +1195,8 @@ void drag_scrollbars(void* unit) {
 // The wheel in split mode (wheel up, positive, goes towards the top; no
 // wrap): for the list under the pointer (the panel's window or a mod row),
 // else for the one with the focus. A long panel scrolls its rows as a drag
-// on its thumb does (a panel that fits has nothing to scroll); the mod list
-// selects an earlier or later mod, leaving the panel first if it had the
-// focus (as the mouse over a mod row does).
+// on its thumb does (a panel that fits has nothing to scroll); the mod list's
+// window scrolls, the highlight staying inside it (nothing is selected).
 void wheel_split(void* unit, int steps) {
     const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
     void* list = g_mod_list.load(std::memory_order_acquire);
@@ -1111,19 +1230,17 @@ void wheel_split(void* unit, int steps) {
         }
         return;
     }
-    std::int64_t next = static_cast<std::int64_t>(g_selected.load(std::memory_order_relaxed)) - steps;
-    const std::int64_t last = static_cast<std::int64_t>(g_entries.load(std::memory_order_relaxed)) - 1;
-    next = next < 0 ? 0 : next > last ? last : next;
-    if (static_cast<std::size_t>(next) == g_selected.load(std::memory_order_relaxed)) {
+    const std::size_t rows = g_list.rows().size();
+    const std::size_t visible = list_visible();
+    if (rows <= visible) {
         return;
     }
-    if (focus == 1) {
-        char* tab = tab_object(unit, game::kSplitPanel);
-        if (PanelFocusFn leave = focus_function(tab, game::kLeavePanelSlot, game::kRvaLeavePanel, "a panel's Back")) {
-            leave(tab, 0);
-        }
+    std::int64_t next = static_cast<std::int64_t>(g_mod_top) - steps;
+    const auto last = static_cast<std::int64_t>(rows - visible);
+    next = next < 0 ? 0 : next > last ? last : next;
+    if (static_cast<std::size_t>(next) != g_mod_top) {
+        drag_mod_list(unit, static_cast<std::size_t>(next));
     }
-    select_tab(unit, static_cast<std::size_t>(next));
 }
 
 // Both bars as the mod list's and the panel's windows stand (after any
@@ -1143,8 +1260,7 @@ void update_scrollbars() {
                  "without them", list_ok ? "ok" : "none", panel_ok ? "ok" : "none");
         }
     }
-    show_scroll(g_list_bar, g_entries.load(std::memory_order_relaxed),
-                field<std::uint32_t>(list, game::kListDuplicateNum), g_mod_top);
+    show_scroll(g_list_bar, g_list.rows().size(), field<std::uint32_t>(list, game::kListDuplicateNum), g_mod_top);
     show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
 }
 
@@ -1215,10 +1331,27 @@ void rebuild_panel(void* unit) {
     show_panel_header(unit);
 }
 
-// The help line for the highlighted mod, with one of CMFM's two ids in turn
-// (mods_page_text answers both with the mod's description): the help bar
-// redraws only when the id changes.
+// The mod list's help line: the highlighted row's (a mod's: its first page's
+// help, and how many pages it has; a page's: its help), with one of CMFM's
+// two ids in turn (mods_page_text answers both): the help bar redraws only
+// when the id changes.
 void request_split_help(void* unit) {
+    const OptionsModel& model = menu::service_model();
+    const std::vector<menu::Mod>& mods = menu::service_mods();
+    const std::vector<ListRow>& rows = g_list.rows();
+    if (g_highlight < rows.size() && rows[g_highlight].mod < mods.size()) {
+        const ListRow& lr = rows[g_highlight];
+        const menu::Mod& mod = mods[lr.mod];
+        const std::size_t tab = mod.tabs[lr.page < 0 ? 0 : static_cast<std::size_t>(lr.page)];
+        const char* help = model.tab_help(tab);
+        g_highlight_help = help != nullptr ? help : "";
+        if (lr.page < 0 && mod.tabs.size() > 1) {
+            g_highlight_help += " " + std::to_string(mod.tabs.size()) + " pages (Q / E switch between them).";
+        }
+    } else {
+        const char* help = model.tab_help(g_selected.load(std::memory_order_relaxed));
+        g_highlight_help = help != nullptr ? help : "";
+    }
     void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
     if (g_help_request == nullptr || manager == nullptr) {
         return;
@@ -1524,21 +1657,128 @@ void show_panel_header(void* unit) {
                       menu::service_tab_header(g_selected.load(std::memory_order_relaxed)));
 }
 
-void select_tab(void* unit, std::size_t index) {
-    void* list = g_mod_list.load(std::memory_order_acquire);
-    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-    if (list == nullptr || index >= entries || index == g_selected.load(std::memory_order_relaxed)) {
+// The panel shows the mod list's selection (ModList's shown mod and page).
+// `keep_focus` (Q / E inside the panel): the panel keeps the focus, its
+// cursor on the new page's first row.
+void show_selected(void* unit, bool keep_focus) {
+    const std::vector<menu::Mod>& mods = menu::service_mods();
+    if (g_list.shown_mod() >= mods.size() || g_list.shown_page() >= mods[g_list.shown_mod()].tabs.size()) {
         return;
     }
-    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
-    if (index < g_mod_top) {
-        g_mod_top = index;
-    } else if (index >= g_mod_top + visible) {
-        g_mod_top = index - visible + 1;
-    }
-    g_selected.store(index, std::memory_order_relaxed);
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    g_selected.store(mods[g_list.shown_mod()].tabs[g_list.shown_page()], std::memory_order_relaxed);
     show_mod_list();
     fill_split_panel(unit);
+    if (keep_focus && focus == 1 && g_set_focus != nullptr) {
+        g_set_focus(unit, 1);
+        if (void* list = panel_list(unit)) {
+            const std::int32_t start = field<std::int32_t>(list, game::kListStartRow);
+            if (start >= 0) {
+                gui_set_cursor(list, static_cast<std::uint32_t>(start));
+                decorate_panel(unit, start);
+            }
+        }
+    }
+}
+
+// The panel takes the focus (the game's own category Confirm).
+void enter_panel(void* unit) {
+    void* owner = static_cast<char*>(unit) + game::kOptCategories;
+    PanelFocusFn enter = g_select_mode ? g_category_confirm_next
+                                       : focus_function(owner, game::kEnterPanelSlot, game::kRvaEnterPanel,
+                                                        "the category Confirm");
+    if (enter != nullptr) {
+        enter(owner, static_cast<std::int32_t>(game::kSplitPanel));
+    }
+}
+
+// Q / E (pad LB / RB): the shown mod's previous or next page, from the mod
+// list or inside the panel (which keeps the focus); not while a key binding
+// waits, a question is open or the pick list has the focus.
+void page_keys(void* unit) {
+    const al_input_t* input = g_env.input;
+    bool held[2] = {false, false};
+    if (input != nullptr) {
+        constexpr std::uint32_t kQ = 0x51, kE = 0x45;
+        held[0] = input->key_down(g_env.self, kQ) != 0;
+        held[1] = input->key_down(g_env.self, kE) != 0;
+        for (std::uint32_t slot = 0; slot < 4; ++slot) {
+            al_pad_state_t pad = {};
+            pad.size = sizeof pad;
+            if (input->pad_state(g_env.self, slot, &pad) == AL_OK && pad.connected != 0) {
+                held[0] = held[0] || (pad.buttons & AL_PAD_LEFT_SHOULDER) != 0;
+                held[1] = held[1] || (pad.buttons & AL_PAD_RIGHT_SHOULDER) != 0;
+            }
+        }
+    }
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    const bool usable = g_key_wait.id < 0 && g_pending_button < 0 && (focus == 0 || focus == 1);
+    for (int d = 0; d < 2; ++d) {
+        const bool pressed = held[d] && !g_page_keys[d];
+        g_page_keys[d] = held[d];
+        if (pressed && usable && g_list.step_page(d == 0 ? -1 : 1).changed) {
+            g_highlight = g_list.shown_row();
+            keep_highlight_in_view();
+            show_selected(unit, true);
+            request_split_help(unit);
+        }
+    }
+}
+
+// The category list's Confirm on CMFM's page (slot 8 of the categories
+// object, CMFM's copy of its vtable): the mod list's highlighted row is
+// activated; only a row that showed already passes on to the game's Confirm
+// (the panel takes the focus).
+std::uint64_t category_confirm_detour(void* categories, std::int32_t category) {
+    void* unit = field<void*>(categories, game::kCategoriesUnit);
+    if (split_view() && unit == g_view_unit.load(std::memory_order_acquire) &&
+        g_mod_list.load(std::memory_order_acquire) != nullptr && g_key_wait.id < 0 &&
+        !activate_row(unit, g_highlight)) {
+        return 0;
+    }
+    return g_category_confirm_next(categories, category);
+}
+
+// CMFM's page gets CMFM's copy of the categories object's vtable (slot 8
+// replaced); false (logged once) if the object does not hold the game's
+// vtable with the Confirm expected, and the mod list then selects as its
+// cursor moves.
+bool own_categories(void* unit) {
+    void* owner = static_cast<char*>(unit) + game::kOptCategories;
+    void* const*& vtable = field<void* const*>(owner, 0);
+    if (vtable == g_categories_vtable) {
+        return true;
+    }
+    auto* const* game_vtable = reinterpret_cast<void* const*>(g_env.base + game::kRvaCategoriesVtable);
+    if (vtable != game_vtable ||
+        reinterpret_cast<std::uintptr_t>(game_vtable[game::kEnterPanelSlot]) != g_env.base + game::kRvaEnterPanel) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            logf(AL_LOG_WARNING, "Mods page: the category list's Confirm is not where expected; the mod list selects "
+                 "as its cursor moves");
+        }
+        return false;
+    }
+    if (g_category_confirm_next == nullptr) {
+        std::memcpy(g_categories_vtable, game_vtable, sizeof g_categories_vtable);
+        g_category_confirm_next = reinterpret_cast<PanelFocusFn>(game_vtable[game::kEnterPanelSlot]);
+        g_categories_vtable[game::kEnterPanelSlot] = reinterpret_cast<void*>(&category_confirm_detour);
+    }
+    vtable = g_categories_vtable;
+    return true;
+}
+
+// Unload: CMFM's page gets the game's vtable back.
+void release_categories() {
+    void* page = page_alive();
+    if (page == nullptr) {
+        return;
+    }
+    void* const*& vtable = field<void* const*>(static_cast<char*>(page) + game::kOptCategories, 0);
+    if (vtable == g_categories_vtable) {
+        vtable = reinterpret_cast<void* const*>(g_env.base + game::kRvaCategoriesVtable);
+    }
 }
 
 // Fills CMFM's page with CMFM's menu: the status tab and the plugin pages,
@@ -1567,11 +1807,28 @@ bool enter_view(void* unit) {
             menu::service_abort();
             return false;
         }
-        // The last selection again, if it still exists.
-        if (g_selected.load(std::memory_order_relaxed) >= g_entries.load(std::memory_order_relaxed)) {
+        // One entry per mod; the last selection again, if it still exists.
+        const std::vector<menu::Mod>& mods = menu::service_mods();
+        std::vector<std::size_t> pages;
+        for (const menu::Mod& m : mods) {
+            pages.push_back(m.tabs.size());
+        }
+        g_list.reset(std::move(pages));
+        const std::size_t last = g_selected.load(std::memory_order_relaxed);
+        bool kept = false;
+        if (last < g_entries.load(std::memory_order_relaxed)) {
+            const std::size_t m = menu::service_mod_of_tab(last);
+            for (std::size_t p = 0; m < mods.size() && p < mods[m].tabs.size(); ++p) {
+                kept = kept || (mods[m].tabs[p] == last && g_list.select(m, p));
+            }
+        }
+        if (!kept) {
             g_selected.store(0, std::memory_order_relaxed);
             g_mod_top = 0;
         }
+        g_highlight = g_list.shown_row();
+        g_page_keys[0] = g_page_keys[1] = true;  // a key held while the page opens does not count
+        g_select_mode = own_categories(unit);
     }
     if (!prepare_rebuild(unit)) {
         menu::service_abort();
@@ -1624,11 +1881,11 @@ bool enter_view(void* unit) {
         g_pick_count = 0;
         g_pick_filled = -1;
         const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
-        if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
-            g_mod_top = g_selected.load(std::memory_order_relaxed) - visible + 1;
-        }
+        keep_highlight_in_view();
         show_mod_list();
-        logf(AL_LOG_INFO, "Mods page: mod list on (%zu tabs, %zu rows visible)", entries, visible);
+        logf(AL_LOG_INFO, "Mods page: mod list on (%zu mods, %zu pages, %zu rows visible; %s)",
+             menu::service_mods().size(), entries, visible,
+             g_select_mode ? "click or Confirm selects" : "the cursor selects");
     } else if (entries > game::kTitleViewTabs) {
         start_window(unit, categories);
     }
@@ -2419,7 +2676,7 @@ const char* mods_page_text(void* message_file_ptr, std::uint32_t id) {
             }
         }
         if (id == game::kSplitHelpIds[0] || id == game::kSplitHelpIds[1]) {
-            return menu::service_model().tab_help(g_selected.load(std::memory_order_relaxed));
+            return g_highlight_help.c_str();
         }
         if ((id == game::kRowHelpIds[0] || id == game::kRowHelpIds[1]) && g_row_help >= 0) {
             return menu::service_row_help(static_cast<std::uint32_t>(g_row_help));
@@ -2438,6 +2695,7 @@ void mods_page_restore(const Env&) {
     }
     restore_tables();
     game_ref_set(g_return_menu, nullptr);
+    release_categories();
     page_release();
     logf(AL_LOG_INFO, "Mods page: done; %u page(s) made, opened from the Start menu %u time(s)", g_pages_created,
          g_opened_in_game);

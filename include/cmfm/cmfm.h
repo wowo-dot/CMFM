@@ -37,9 +37,12 @@
  * (Astera Loader never unloads a plugin).
  *
  * What a page looks like: the Mods page lists "Overview" (CMFM's version and
- * every plugin's state) and then one entry per plugin page, by its title, in
- * the order pages were added (1024 at most since 1.2, 24 before; further
- * pages are listed as not shown on the Overview). The highlighted entry's settings show next to the
+ * every mod's state) and then one entry per mod, in the order their first
+ * pages were added (1024 pages at most since 1.2, 24 before; further pages
+ * are listed as not shown on the Overview). Since 1.2 a mod is the pages of
+ * one plugin (with the same `mod` name, see cmfm_page_t): a mod with several
+ * pages opens a dropdown of them under its entry, its first page the
+ * default; before 1.2 each page had an entry of its own. The highlighted entry's settings show next to the
  * list, one row each: the label on the left, the value on the right, the
  * help line at the bottom. SECTION rows group the rows below them. Above the
  * rows, the page's header: its title, its version (since 1.1) and "Restart
@@ -220,6 +223,8 @@ typedef uint32_t cmfm_event_t;
 #define CMFM_EVENT_OPENED 1u /* a Mods page opened (title screen or in game) */
 #define CMFM_EVENT_CLOSED 2u /* it closed: a good moment to save the config file */
 
+/* Since 1.2 an event goes once to each distinct on_event and user pair: the
+ * pages of one mod that share them hear it once (before 1.2, once per page). */
 typedef void(CMFM_CALL* cmfm_event_fn)(void* user, cmfm_event_t event);
 
 typedef struct cmfm_page_t {
@@ -247,6 +252,11 @@ typedef struct cmfm_page_t {
     /* Since 1.2. */
     uint32_t flags;     /* CMFM_PAGE_... */
     uint32_t reserved3; /* 0 */
+    /* The mod's name in the mod list, 24 bytes at most, e.g. "DLSS" for pages
+     * "Upscaling" and "Frame generation"; NULL: the title of the mod's first
+     * page. Pages of one plugin with the same name (or all without one) form
+     * one mod; a plugin may make several mods with different names. */
+    const char* mod;
 } cmfm_page_t;
 
 typedef struct cmfm_menu_t {

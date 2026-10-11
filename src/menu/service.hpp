@@ -6,6 +6,7 @@
 #pragma once
 
 #include "al/al_plugin.h"
+#include "menu/menu.hpp"
 #include "native/options_model.hpp"
 
 #include <cstdint>
@@ -45,6 +46,10 @@ std::size_t service_restart_count();
 // Tab t's header (Menu::tab_header); "" without a menu. Valid until the next
 // call.
 const char* service_tab_header(std::size_t tab);
+// The mods of the last build (Menu::mods; empty without a menu), and the mod
+// that shows tab t.
+const std::vector<Mod>& service_mods();
+std::size_t service_mod_of_tab(std::size_t tab);
 // A number row's value text (Menu::value_text); nullptr for other rows.
 const char* service_value_text(std::uint32_t setting_id, std::uint32_t index);
 std::uint32_t service_restart_revision();

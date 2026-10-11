@@ -104,7 +104,8 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    pick list's 14 rows and the slider's 101 positions (Later: long pick
    lists, finer sliders).
 7. **One entry per mod, its pages in a dropdown** (designed with the user,
-   2026-10-12, from two mockups). The mod list shows one entry per mod (the
+   2026-10-12, from two mockups). Built, awaiting its test (run
+   `modlist-1`). The mod list shows one entry per mod (the
    pages of one Astera Loader plugin); a mod with several pages opens a
    dropdown under its entry listing every page, the default (first) one
    included. A select philosophy: hover and the arrow keys only highlight;

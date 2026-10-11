@@ -38,15 +38,19 @@ if (menu == NULL) {
 - **Version:** ask for the version whose features you use: 1.1 is the
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
   header (rows that hide, live lines, key bindings, CMFM's reset row,
-  pages of up to 1024 settings, no shared limits between mods). Within a major
+  pages of up to 1024 settings, no shared limits between mods, several
+  pages as one mod). Within a major
   version CMFM only adds: later CMFMs keep accepting your pages, and an
   older CMFM returns NULL when you ask for more than it has.
 
 ## 2. Describing your page
 
-One page per plugin is usual (a plugin may add several, each with its own
-entry in the mod list). Fill a `cmfm_page_t` and an array of
-`cmfm_setting_t`, then call `menu->add_page`:
+Fill a `cmfm_page_t` and an array of `cmfm_setting_t`, then call
+`menu->add_page`. A plugin may add several pages: since 1.2 they form one mod
+in the mod list, an entry with a dropdown of its pages, the first one the
+default (section 4). Give them a `mod` name ("DLSS" for pages "Upscaling" and
+"Frame generation"), or the first page's title names the mod; pages with
+different `mod` names make separate mods (a debug mod of its own, say).
 
 ```c
 static const char* const kModes[] = {"Off", "2x", "3x", "4x"};
@@ -74,6 +78,7 @@ page.plugin = "my_mod";             /* your Astera Loader name */
 page.title = "My mod";              /* the mod list entry, 24 bytes at most */
 page.help = "What this mod does, in one line.";
 page.version = "1.2.0";             /* shown in the page's header */
+page.mod = "My mod";                /* since 1.2: the mod list entry of your pages; may be NULL */
 page.settings = s;
 page.setting_count = 2;
 page.user = &my_state;              /* passed to every callback */
@@ -131,7 +136,7 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 | What | Limit |
 |---|---|
 | settings per page | 1 to 1024 (headings count; 24 before 1.2) |
-| plugin name / title / version | 64 / 24 / 24 bytes |
+| plugin name / title / version / mod name | 64 / 24 / 24 / 24 bytes |
 | label / help | 64 / 200 bytes |
 | CHOICE names | 1 to 32, each 32 bytes at most |
 | INT/FLOAT values | (max - min) / step + 1, at most 101; INT needs whole min, max, step |
@@ -159,7 +164,7 @@ call `add_page`. `get` runs every time a row is drawn.
 | `set(user, id, value)` | unless every row is TEXT | the player picked a value (in range, validated) | apply it (now, or after a restart for RESTART rows) and keep it for your config file; `CMFM_ERROR` keeps the old value |
 | `validate(user, id, value, why, size)` | no | before `set` | refuse a combination: return `CMFM_ERROR` with a short reason, shown in the help line |
 | `get_text(user, id, text, size)` | if a row is TEXT | right after `CMFM_EVENT_OPENED`; for LIVE lines also four times a second while shown | write the line (cut at 128 bytes) |
-| `on_event(user, event)` | no | `CMFM_EVENT_OPENED`, `CMFM_EVENT_CLOSED` | read fresh status at OPENED; save your config file at CLOSED |
+| `on_event(user, event)` | no | `CMFM_EVENT_OPENED`, `CMFM_EVENT_CLOSED`; since 1.2 once per distinct `on_event` and `user` (pages of one mod sharing them hear it once) | read fresh status at OPENED; save your config file at CLOSED |
 | `press(user, id)` | if a row is BUTTON | Confirm (after Yes) | run the action; CMFM reads every value and text of the page again afterwards |
 | `locked(user, id, why, size)` | no | when a page opens and after every change CMFM makes | return nonzero to grey the row and refuse changes; write the reason (help line) |
 
@@ -203,9 +208,16 @@ call `add_page`. `get` runs every time a row is drawn.
 
 - **The mod list** on the left: "Overview" first (CMFM's version and every
   mod's state: Active, Restart needed, Refused with the reason, or Not
-  shown), then one entry per page by its title, in the order pages were
-  added. It scrolls with a scrollbar when it is long.
-- **The page's header** above the panel: your title, your `version` and
+  shown), then one entry per mod, in the order their first pages were
+  added. It scrolls with a scrollbar when it is long. A mod with several
+  pages is marked with a triangle and opens a dropdown of all its pages
+  under its entry when selected (one dropdown at a time). Hovering and the
+  arrow keys only highlight; a click or Confirm selects (a mod always opens
+  on its default page; Confirm on what already shows enters the panel).
+  Q / E (pad LB / RB) switch between the selected mod's pages, also from
+  inside the panel. What shows is marked in light green.
+- **The page's header** above the panel: your title (the mod's name and
+  the page's title for a mod with several pages), your `version` and
   "Restart needed" while one of your changes waits for a restart.
 - **The rows**, one per setting, at most 14 at a time; a longer page
   scrolls (keys, mouse wheel, its scrollbar). Keep the important settings

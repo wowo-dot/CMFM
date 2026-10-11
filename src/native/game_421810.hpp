@@ -502,6 +502,12 @@ inline constexpr char kMouseMovedPattern[] =
 // slot 9 of a tab object (RVA 0x1E89AB0, focus back to the category list).
 inline constexpr std::uintptr_t kRvaEnterPanel = 0x1E89C40;
 inline constexpr std::size_t kEnterPanelSlot = 8;
+// The categories object's vtable (11 slots, right before uGUIOption's at
+// RVA 0x347DA20): CMFM's own page gets a copy with slot 8 replaced, so the
+// category list's Confirm (the keys) selects in the mod list first. A click
+// on the panel calls the function behind slot 8 (0x1E8A890) directly.
+inline constexpr std::uintptr_t kRvaCategoriesVtable = 0x347D9C8;
+inline constexpr std::size_t kCategoriesVtableSlots = 11;
 inline constexpr std::uintptr_t kRvaLeavePanel = 0x1E89AB0;
 inline constexpr std::size_t kLeavePanelSlot = 9;
 // A tab object's cursor handler (tab, list, row), slot 10 (RVA 0x1E89CB0), the
