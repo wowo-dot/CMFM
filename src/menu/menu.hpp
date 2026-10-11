@@ -71,7 +71,12 @@ struct Page {
     cmfm_event_fn on_event = nullptr;
     cmfm_press_fn press = nullptr;    // since 1.1
     cmfm_locked_fn locked = nullptr;  // since 1.1
+    std::uint32_t flags = 0;          // since 1.2: CMFM_PAGE_...
 };
+
+// CMFM's own row at the end of a page (CMFM_PAGE_NO_RESET): a BUTTON that
+// resets the page's settings to their defaults.
+inline constexpr std::uint32_t kResetId = CMFM_RESERVED_IDS + 1;
 
 // Checks a plugin's page against cmfm.h's rules and copies it; false with
 // the reason. Reads only the fields `size` covers.
@@ -181,6 +186,10 @@ private:
     void update_status_texts();
     void refresh_locks();  // and the locked rows' help lines
     void refresh_texts();  // TEXT rows
+    // One setting back to its default (validate, set, the restart state);
+    // false if refused or failed, or locked unless `even_locked`.
+    bool reset_setting(Row& row, bool even_locked);
+    void reset_page(std::size_t page);  // CMFM's "Reset to defaults" row
 
     std::string version_;
     LogFn log_;

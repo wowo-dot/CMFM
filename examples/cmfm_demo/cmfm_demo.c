@@ -20,7 +20,7 @@
 
 enum {
     ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
-    ID_QUALITY, ID_RESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY
+    ID_QUALITY, ID_PRESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY
 };
 
 #define DEMO_VERSION "0.1.0" /* the plugin's version: Astera Loader's info and the page's header */
@@ -149,23 +149,19 @@ static cmfm_result_t CMFM_CALL demo_set(void* user, uint32_t id, const cmfm_valu
     return CMFM_OK;
 }
 
-/* Since cmfm.menu 1.1: the button (after the player said Yes to its question). */
+/* Since cmfm.menu 1.1: the button (after the player said Yes to its question).
+ * Resetting to defaults needs no button of the plugin's own since 1.2: CMFM
+ * ends the page with a "Reset to defaults" row that uses the defaults. */
 static cmfm_result_t CMFM_CALL demo_press(void* user, uint32_t id) {
     (void)user;
-    if (id != ID_RESET) {
+    if (id != ID_PRESET) {
         return CMFM_ERROR;
     }
-    g_values.toggle = 0;
-    g_values.choice = 0;
-    g_values.percent = 50;
-    g_values.scale = 1.0;
-    g_values.quality = 3;
-    g_values.upscaler = 0;
-    g_values.dlss_preset = 1;
-    g_values.fsr_sharpness = 50;
-    g_values.xess_quality = 1;
+    g_values.percent = 75;
+    g_values.scale = 1.5;
+    g_values.quality = 4;
     g_dirty = 1;
-    logline(AL_LOG_INFO, "reset to defaults (button)");
+    logline(AL_LOG_INFO, "High preset applied (button)");
     return CMFM_OK;
 }
 
@@ -362,12 +358,12 @@ static void add_page(void) {
     s[9].choice_count = 7;
     s[9].default_value.i = 3;
 
-    s[10].id = ID_RESET;
+    s[10].id = ID_PRESET;
     s[10].type = CMFM_TYPE_BUTTON;
-    s[10].label = "Reset demo";
-    s[10].help = "Puts the demo's settings back to their defaults.";
-    s[10].button = "Reset";
-    s[10].confirm = "Reset the demo's settings to their defaults?";
+    s[10].label = "Apply preset";
+    s[10].help = "Sets the High preset: Demo percent 75%, Demo scale 1.50x, Demo quality High.";
+    s[10].button = "High";
+    s[10].confirm = "Apply the demo's High preset?";
 
     memset(&page, 0, sizeof page);
     page.size = sizeof page;

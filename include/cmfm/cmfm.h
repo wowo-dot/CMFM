@@ -45,6 +45,8 @@
  * rows, the page's header: its title, its version (since 1.1) and "Restart
  * needed" while one of its changes waits for a game restart. A page with
  * more rows than fit (14) scrolls; keep the important settings near the top.
+ * Since 1.2 CMFM ends every page with a "Reset to defaults" row of its own
+ * (see CMFM_PAGE_NO_RESET).
  */
 #ifndef CMFM_H
 #define CMFM_H
@@ -180,6 +182,15 @@ typedef cmfm_result_t(CMFM_CALL* cmfm_press_fn)(void* user, uint32_t id);
  * after every change it makes, so a lock may depend on other settings. */
 typedef uint32_t(CMFM_CALL* cmfm_locked_fn)(void* user, uint32_t id, char* why, uint32_t why_size);
 
+/* Since 1.2, page flags. CMFM ends every page that has a BOOL, CHOICE, INT or
+ * FLOAT setting with a "Reset to defaults" row (after the game's Yes/No
+ * question it sets each of them to its default_value through `set`, after
+ * `validate`; locked and hidden ones too), unless the page already has
+ * CMFM_MAX_SETTINGS settings or sets this flag. Setting ids from
+ * CMFM_RESERVED_IDS up are CMFM's own (the row's); pages may not use them. */
+#define CMFM_PAGE_NO_RESET 0x1u
+#define CMFM_RESERVED_IDS 0xFFFFFF00u
+
 typedef uint32_t cmfm_event_t;
 #define CMFM_EVENT_OPENED 1u /* a Mods page opened (title screen or in game) */
 #define CMFM_EVENT_CLOSED 2u /* it closed: a good moment to save the config file */
@@ -208,6 +219,9 @@ typedef struct cmfm_page_t {
     cmfm_press_fn press;   /* required if a setting is BUTTON */
     cmfm_locked_fn locked; /* may be NULL: nothing is ever locked */
     const char* version;   /* shown in the page's header, e.g. "0.15.0"; may be NULL */
+    /* Since 1.2. */
+    uint32_t flags;     /* CMFM_PAGE_... */
+    uint32_t reserved3; /* 0 */
 } cmfm_page_t;
 
 typedef struct cmfm_menu_t {

@@ -250,6 +250,10 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         if (!copy_setting(*in, stride, out.settings[i], why)) {
             return false;
         }
+        if (in->id >= CMFM_RESERVED_IDS) {
+            why = "setting " + std::to_string(in->id) + ": ids from 0xFFFFFF00 are CMFM's";
+            return false;
+        }
         for (std::uint32_t j = 0; j < i; ++j) {
             if (out.settings[j].id == in->id) {
                 why = "setting " + std::to_string(in->id) + ": id used twice";
@@ -276,6 +280,12 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         why = "get_text callback needed for TEXT settings";
         return false;
     }
+    const std::uint32_t flags = page->size >= offsetof(cmfm_page_t, flags) + sizeof page->flags ? page->flags : 0;
+    if ((flags & ~CMFM_PAGE_NO_RESET) != 0) {
+        why = "unknown page flags";
+        return false;
+    }
+    out.flags = flags;
     const char* version =
         page->size >= offsetof(cmfm_page_t, version) + sizeof page->version ? page->version : nullptr;
     if (!text_ok(version, kMaxVersion, true, out.version)) {
@@ -317,6 +327,22 @@ void Menu::set_help(Row& row, const char* text) {
 }
 
 void Menu::add(Page page) {
+    bool resettable = false;
+    for (const Setting& s : page.settings) {
+        resettable = resettable || s.type == CMFM_TYPE_BOOL || s.type == CMFM_TYPE_CHOICE ||
+                     s.type == CMFM_TYPE_INT || s.type == CMFM_TYPE_FLOAT;
+    }
+    if (resettable && (page.flags & CMFM_PAGE_NO_RESET) == 0 && page.settings.size() < CMFM_MAX_SETTINGS) {
+        Setting reset;
+        reset.id = kResetId;
+        reset.type = CMFM_TYPE_BUTTON;
+        reset.label = "Reset to defaults";
+        reset.help = "Puts every setting of this mod back to its default.";
+        reset.button = "Reset";
+        reset.confirm = "Reset every " + page.title + " setting to its default?";
+        reset.value_count = 1;
+        page.settings.push_back(std::move(reset));
+    }
     entries_.push_back({true, pages_.size()});
     pages_.push_back(std::move(page));
     not_shown_why_.emplace_back();
@@ -372,7 +398,7 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             const Page& p = pages_[en.index];
             std::size_t count = 0;
             for (const Setting& s : p.settings) {
-                count += s.type != CMFM_TYPE_SECTION;
+                count += s.type != CMFM_TYPE_SECTION && s.id != kResetId;
             }
             status(p.title, "Active", "From " + p.plugin + ": " + std::to_string(count) + " setting(s).");
             rows_.back().status_page = static_cast<std::int32_t>(en.index);
@@ -524,6 +550,10 @@ bool Menu::press(std::uint32_t setting_id) {
     }
     const Page& p = pages_[r->page];
     const Setting& s = p.settings[r->setting];
+    if (s.id == kResetId) {
+        reset_page(r->page);
+        return true;
+    }
     if (s.type != CMFM_TYPE_BUTTON || p.press == nullptr) {
         return false;
     }
@@ -561,7 +591,8 @@ void Menu::refresh_locks() {
         Page& p = pages_[r.page];
         Setting& s = p.settings[r.setting];
         const bool hideable = (s.flags & CMFM_FLAG_HIDE_LOCKED) != 0;
-        if (p.locked == nullptr || ((s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_TEXT) && !hideable)) {
+        if (p.locked == nullptr || s.id == kResetId ||
+            ((s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_TEXT) && !hideable)) {
             continue;
         }
         char why[kMaxHelp + 1] = {};
@@ -816,29 +847,67 @@ void Menu::reset_defaults() {
         if (s.type == CMFM_TYPE_TEXT || s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_BUTTON) {
             continue;
         }
-        if (s.locked) {
+        if (reset_setting(r, false)) {
+            ++done;
+        } else {
             ++refused;
-            continue;
         }
-        cmfm_value_t current = {};
-        if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0 && p.get(p.user, s.id, &current) == CMFM_OK) {
-            s.first_index = static_cast<std::int32_t>(index_of(s, current));  // the value before the reset
-        }
-        const std::uint32_t index = index_of(s, s.default_value);
-        const cmfm_value_t v = value_at(s, index);
-        char why[kMaxHelp + 1] = {};
-        if ((p.validate != nullptr && p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) ||
-            p.set(p.user, s.id, &v) != CMFM_OK) {
-            ++refused;
-            continue;
-        }
-        set_help(r, r.base_help.c_str());
-        ++value_revision_;
-        note_value(r, index);
-        ++done;
     }
     refresh_locks();
     logf(0, "Set To Default: %zu setting(s) back to their defaults, %zu refused", done, refused);
+}
+
+bool Menu::reset_setting(Row& r, bool even_locked) {
+    Page& p = pages_[r.page];
+    Setting& s = p.settings[r.setting];
+    if (s.locked && !even_locked) {
+        return false;
+    }
+    cmfm_value_t current = {};
+    if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0 && p.get(p.user, s.id, &current) == CMFM_OK) {
+        s.first_index = static_cast<std::int32_t>(index_of(s, current));  // the value before the reset
+    }
+    const std::uint32_t index = index_of(s, s.default_value);
+    const cmfm_value_t v = value_at(s, index);
+    char why[kMaxHelp + 1] = {};
+    if ((p.validate != nullptr && p.validate(p.user, s.id, &v, why, sizeof why) != CMFM_OK) ||
+        p.set(p.user, s.id, &v) != CMFM_OK) {
+        return false;
+    }
+    set_help(r, r.base_help.c_str());
+    ++value_revision_;
+    note_value(r, index);
+    if (r.shared) {
+        std::snprintf(r.text, sizeof r.text, "%s", number(s, index).c_str());
+    }
+    return true;
+}
+
+void Menu::reset_page(std::size_t page) {
+    std::size_t done = 0;
+    std::size_t kept = 0;
+    // Every setting, locked and hidden ones too (the player asked for the
+    // defaults everywhere; `validate` may still refuse one).
+    for (Row& r : rows_) {
+        if (r.status || r.page != page) {
+            continue;
+        }
+        const Setting& s = pages_[page].settings[r.setting];
+        if (s.type != CMFM_TYPE_BOOL && s.type != CMFM_TYPE_CHOICE && s.type != CMFM_TYPE_INT &&
+            s.type != CMFM_TYPE_FLOAT) {
+            continue;
+        }
+        if (reset_setting(r, true)) {
+            ++done;
+        } else {
+            ++kept;
+        }
+    }
+    ++value_revision_;
+    refresh_texts();
+    refresh_locks();
+    logf(0, "%s: Reset to defaults: %zu setting(s) back to their defaults, %zu refused", pages_[page].plugin.c_str(),
+         done, kept);
 }
 
 }  // namespace cmfm::menu

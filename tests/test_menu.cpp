@@ -808,6 +808,56 @@ void hides_locked_rows() {
     check(!m.is_hidden(9999), "ids not ours are never hidden");
 }
 
+void resets_a_page() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.page.locked = fake_locked;  // Scale locked while the toggle is off
+    Menu m;
+    check(add(m, page_of(d)), "page added");
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* reset = find(model, 1, "Reset to defaults");
+    check(reset != nullptr && m.is_button(id(reset)), "CMFM's reset row ends the page");
+    check(reset != nullptr && id(reset) == static_cast<std::uint32_t>(model.table(1)[6].setting_id),
+          "after the page's six settings");
+    check(reset != nullptr && m.button_question(id(reset)) != nullptr &&
+              std::strstr(m.button_question(id(reset)), "Reset every Demo setting") != nullptr,
+          "with a question naming the page");
+    const native::GameOptionRow* status = find(model, 0, "Demo");
+    check(status && std::strstr(help_text(model, status), "6 setting"), "not counted on the Overview");
+    m.refresh();
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    const native::GameOptionRow* percent = find(model, 1, "Percent");
+    const native::GameOptionRow* scale = find(model, 1, "Scale");
+    m.set(id(toggle), 1);
+    m.set(id(percent), 9);
+    m.set(id(scale), 6);
+    m.set(id(toggle), 0);  // locks Scale at 2.00x
+    check(m.is_locked(id(scale)) && f.values[slot(kScale)].f == 2.0, "Scale locked away from its default");
+    const int sets = f.sets;
+    check(reset != nullptr && m.press(id(reset)), "the reset runs");
+    check(f.values[slot(kToggle)].i == 0 && f.values[slot(kPercent)].i == 50 && f.values[slot(kScale)].f == 1.0 &&
+              f.values[slot(kChoice)].i == 0 && f.values[slot(kRestart)].i == 1,
+          "every setting back to its default, the locked one too");
+    check(f.sets - sets == 5, "through set, once each (not the TEXT line)");
+    check(m.restart_pending(id(find(model, 1, "Restart thing"))), "a restart setting's reset waits for a restart");
+
+    Demo no = demo_page(&f);
+    no.page.flags = CMFM_PAGE_NO_RESET;
+    Menu m2;
+    add(m2, page_of(no));
+    m2.build(model, why);
+    check(find(model, 1, "Reset to defaults") == nullptr, "CMFM_PAGE_NO_RESET: no reset row");
+
+    Demo bad = demo_page(&f);
+    bad.page.flags = 0x2;
+    check(refused(page_of(bad), "page flags"), "unknown page flags refused");
+    bad = demo_page(&f);
+    bad.settings[0].id = CMFM_RESERVED_IDS + 5;
+    check(refused(page_of(bad), "CMFM's"), "reserved ids refused");
+}
+
 }  // namespace
 
 int main() {
@@ -831,6 +881,7 @@ int main() {
     accepts_1_0_sizes();
     shows_page_headers();
     hides_locked_rows();
+    resets_a_page();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

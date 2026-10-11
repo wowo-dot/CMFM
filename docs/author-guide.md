@@ -135,7 +135,8 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 | pages shown | 24 (more are listed on the Overview as not shown) |
 
 A page needs at least one setting besides its headings; ids must be unique
-on the page; a default must lie in range. Strings are UTF-8. The game's own
+on the page (ids from `CMFM_RESERVED_IDS`, 0xFFFFFF00, are CMFM's); a
+default must lie in range. Strings are UTF-8. The game's own
 text styles work in labels, help and TEXT lines, for example
 `<STYL MOJI_YELLOW_DEFAULT>warning</STYL>` (also RED, LIGHTBLUE, ORANGE,
 LIGHTGREEN).
@@ -192,10 +193,12 @@ call `add_page`. `get` runs every time a row is drawn.
   near the top and group the rest with headings.
 - **The help line** at the bottom: the row's help, the reason a value was
   refused or a row is locked, the restart note.
-- **Defaults:** CMFM's page has no "Set To Default" action yet (only the
-  older in-game Options view restores `default_value` through `set`). If
-  players need a reset, offer a BUTTON with a question, as the demo's
-  "Reset demo" does; still fill `default_value`.
+- **Reset to defaults** (since 1.2): CMFM ends your page with a "Reset to
+  defaults" row of its own. After the game's Yes/No question it sets every
+  BOOL, CHOICE, INT and FLOAT setting to its `default_value` through
+  `validate` and `set`, locked and hidden ones too, so fill your defaults
+  carefully. Opt out with `page.flags = CMFM_PAGE_NO_RESET` (for example if
+  you offer your own reset). A page with 24 settings has no room for it.
 
 ## 5. Testing
 
