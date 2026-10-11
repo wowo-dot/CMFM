@@ -5,6 +5,7 @@
 #include "native/game_421810.hpp"
 #include "native/options_model.hpp"
 #include "native/options_view.hpp"
+#include "native/page_class.hpp"
 
 #include <atomic>
 #include <cstdarg>
@@ -18,11 +19,9 @@ namespace {
 using TitlePlayFn = std::uint64_t (*)(void* title);
 using TitleCursorFn = std::uint64_t (*)(void* title, void* old_row, std::int32_t row);
 using TitleDecidedFn = void (*)(void* title, std::int32_t row);
-using OptionsOpenFn = std::uint64_t (*)(void* unit);
-using OptionsCloseFn = std::uint64_t (*)(void* unit);
 using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
 using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
-using OptionsUpdateFn = std::uint64_t (*)(void* unit);
+using SceneFlowsFn = std::uint64_t (*)(void* scene, void* a2, void* a3, void* a4);
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
 // Called.
@@ -37,11 +36,9 @@ using BuildCategoriesFn = void (*)(void* categories, void* unit);
 TitlePlayFn g_play_next = nullptr;
 TitleCursorFn g_cursor_next = nullptr;
 TitleDecidedFn g_decided_next = nullptr;
-OptionsOpenFn g_open_next = nullptr;
-OptionsCloseFn g_close_next = nullptr;
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
-OptionsUpdateFn g_update_next = nullptr;
+SceneFlowsFn g_scene_flows_next = nullptr;
 SetRowCountFn g_set_row_count = nullptr;
 SetCursorFn g_set_cursor = nullptr;
 GetObjectFn g_get_object = nullptr;
@@ -50,7 +47,7 @@ GetInstanceFn g_get_instance = nullptr;
 SetPlayFn g_set_play = nullptr;
 InitCategoryFn g_init_category = nullptr;
 
-enum Hook { kPlay, kCursor, kDecided, kOpen, kClose, kShowCategory, kListMove, kUpdate, kHookCount };
+enum Hook { kPlay, kCursor, kDecided, kShowCategory, kListMove, kSceneFlows, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -58,13 +55,16 @@ std::atomic<bool> g_ready{false};
 // The title unit whose menu has the Mods row, and its Options row.
 std::atomic<void*> g_entry_title{nullptr};
 std::int32_t g_entry_options_row = -1;
-// "Mods" was chosen: the next title Options open shows CMFM's rows.
+// "Mods" was chosen: the title scene's next Options flow opens CMFM's page.
 std::atomic<bool> g_pending{false};
-// The title Options view is on: CMFM's tables are swapped in.
+// The running Options flow is CMFM's: the scene's page is CMFM's during its updates.
+bool g_flow_ours = false;
+// CMFM's page is open with CMFM's rows (the text hook answers).
 std::atomic<bool> g_view{false};
-// The uGUIOption unit whose lists hold CMFM's rows (rebuilt on its next plain open).
-void* g_built_unit = nullptr;
 std::uint32_t g_mods_selected = 0;
+std::uint32_t g_pages_created = 0;
+bool g_create_failed = false;  // logged once; the Options flow then stays the game's
+// TitleOptionTabTables, pointed at CMFM's tables only while CMFM's page builds.
 QwordPatch g_tabs[game::kTitleViewTabs];
 // The category list's window over the menu's tabs: physical row r shows tab
 // g_top + r. The game's code takes the row as the tab object's index, and
@@ -184,6 +184,7 @@ std::uint64_t play_detour(void* title) {
         return g_play_next(title);
     }
     g_entry_title.store(nullptr, std::memory_order_release);
+    g_pending.store(false, std::memory_order_release);
     void* list = field<void*>(title, game::kTitleList);
     if (list != nullptr && field<std::uint32_t>(list, game::kListDuplicateNum) == game::kTitleRows &&
         field<std::uint32_t>(list, game::kListRowCount) == game::kTitleRows) {
@@ -222,9 +223,9 @@ void decided_detour(void* title, std::int32_t row) {
     g_decided_next(title, game_row(row));
 }
 
-// ---- The title Options page ----
+// ---- CMFM's page (a uGUIOption of CMFM's own class, page_class.hpp) ----
 
-// The page's lists must be rebuilt after a table swap. Before that: every
+// The page's lists are rebuilt on every open. Before that: every
 // cursor to row 0 (setRowCount keeps the cursor, and the page reads the row
 // under it unchecked) and the row objects as the constructor leaves them
 // (the game iterates all 24 and would use stale rows beyond the new count).
@@ -271,6 +272,36 @@ bool prepare_rebuild(void* unit) {
     return true;
 }
 
+void restore_tables() {
+    for (QwordPatch& p : g_tabs) {
+        std::string why;
+        if (p.applied() && !p.restore(why)) {
+            logf(AL_LOG_WARNING, "title options: could not restore a tab table: %s", why.c_str());
+        }
+    }
+}
+
+// Runs `build` with TitleOptionTabTables[t] pointing at CMFM's tab top + t:
+// the game reads those tables only while it fills a category's rows
+// (fillCategoryRows), so the game's own Options pages never see CMFM's.
+template <class Build>
+bool with_tables(const OptionsModel& model, std::size_t top, Build build) {
+    for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
+        std::string why;
+        const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model.table(top + t));
+        if (!g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
+            logf(AL_LOG_WARNING, "title options: could not point tab %zu at CMFM's tab %zu: %s", t, top + t,
+                 why.c_str());
+            restore_tables();
+            return false;
+        }
+    }
+    build();
+    restore_tables();
+    return true;
+}
+
 // ---- Scrolling the category list (more than five tabs) ----
 
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
@@ -287,15 +318,17 @@ void refill_window(void* unit) {
     void* categories = field<void*>(unit, game::kOptCategoryList);
     const std::size_t top = g_top.load(std::memory_order_relaxed);
     const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-    for (std::size_t r = 0; r < game::kTitleViewTabs; ++r) {
-        std::string why;
-        if (!g_tabs[r].retarget(reinterpret_cast<std::uint64_t>(model.table(top + r)), why)) {
-            logf(AL_LOG_WARNING, "title options: could not point tab %zu at tab %zu: %s", r, top + r, why.c_str());
-            return;
+    const bool filled = with_tables(model, top, [&] {
+        for (std::size_t r = 0; r < game::kTitleViewTabs; ++r) {
+            prepare_tab(unit, r);
+            g_init_category(tab_object(unit, r), unit, static_cast<std::int32_t>(r), game::kTitleTabNames[r],
+                            model.tab_name(top + r));
         }
-        prepare_tab(unit, r);
-        g_init_category(tab_object(unit, r), unit, static_cast<std::int32_t>(r), game::kTitleTabNames[r],
-                        model.tab_name(top + r));
+    });
+    if (!filled) {
+        return;
+    }
+    for (std::size_t r = 0; r < game::kTitleViewTabs; ++r) {
         const char* label = model.tab_name(top + r);
         if (r == 0 && top > 0) {
             std::snprintf(g_label_up, sizeof g_label_up, "\xE2\x96\xB2 %s", label);  // up-pointing triangle
@@ -360,8 +393,8 @@ std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t messag
     return 1;
 }
 
-// Every frame while the title Options page runs (the menu's own thread).
-std::uint64_t update_detour(void* unit) {
+// CMFM's page, vtable slot 81: every frame while it runs (the menu's thread).
+std::uint64_t page_update(void* unit) {
     if (g_wheel.load(std::memory_order_relaxed) != 0) {
         const int delta = g_wheel.exchange(0, std::memory_order_relaxed) + g_wheel_rest;
         constexpr int kNotch = 120;  // WHEEL_DELTA
@@ -376,7 +409,7 @@ std::uint64_t update_detour(void* unit) {
             scroll_to(unit, static_cast<std::size_t>(next));
         }
     }
-    return g_update_next(unit);
+    return page_next(game::kSlotUpdate)(unit);
 }
 
 void start_window(void* unit, void* categories) {
@@ -395,8 +428,7 @@ void start_window(void* unit, void* categories) {
          g_entries.load(std::memory_order_relaxed), g_saved.wrap);
 }
 
-// Only on the unit CMFM changed: a new uGUIOption (back at the title from the
-// game) starts with the game's own values.
+// Only on the list CMFM changed (a new page starts with the game's values).
 void stop_window(void* unit) {
     g_window_list.store(nullptr, std::memory_order_release);
     g_view_unit.store(nullptr, std::memory_order_release);
@@ -429,84 +461,51 @@ void set_header(void* unit, const char* text) {
     }
 }
 
-void restore_tables() {
-    for (QwordPatch& p : g_tabs) {
-        std::string why;
-        if (p.applied() && !p.restore(why)) {
-            logf(AL_LOG_WARNING, "title options: could not restore a tab table: %s", why.c_str());
-        }
-    }
-}
-
-// Rebuilds the page from the game's tables, with the game's texts.
-void rebuild_game(void* unit) {
-    g_view.store(false, std::memory_order_release);
-    stop_window(unit);
-    g_top.store(0, std::memory_order_relaxed);
-    restore_tables();
-    BuildCategoriesFn build = build_categories(unit);
-    if (build == nullptr || !prepare_rebuild(unit)) {
-        return;
-    }
-    build(static_cast<char*>(unit) + game::kOptCategories, unit);
-    set_header(unit, game_text(game::kRvaMessages12, 0));
-    g_built_unit = nullptr;
-    logf(AL_LOG_INFO, "title options: game rows back");
-}
-
-void enter_view(void* unit) {
+// Fills CMFM's page with CMFM's menu: the status tab and the plugin pages,
+// at most five category rows (more scroll), so Key Config and Default (a
+// full reset) stay out of reach. False if anything is off; the caller closes
+// the page then.
+bool enter_view(void* unit) {
     BuildCategoriesFn build = build_categories(unit);
     void* categories = field<void*>(unit, game::kOptCategoryList);
     if (build == nullptr || categories == nullptr) {
-        return;
+        return false;
     }
     const OptionsModel* model = menu::service_prepare();  // CMFM's texts on from here
     if (model == nullptr) {
-        return;  // the plain Options page opens
+        return false;
     }
     stop_window(unit);
     g_top.store(0, std::memory_order_relaxed);
     g_entries.store(menu::service_used_tabs(), std::memory_order_relaxed);
-    for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
-        std::string why;
-        const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model->table(t));
-        if (!g_tabs[t].applied() && !g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
-            logf(AL_LOG_WARNING, "title options: could not swap tab %zu: %s", t, why.c_str());
-            restore_tables();
-            menu::service_abort();
-            return;
-        }
-    }
     if (!prepare_rebuild(unit)) {
-        restore_tables();
         menu::service_abort();
-        return;
+        return false;
     }
     g_view.store(true, std::memory_order_release);  // the text hook answers the category labels
-    build(static_cast<char*>(unit) + game::kOptCategories, unit);
-    g_built_unit = unit;
-    // The status tab and the plugin pages only, at most five rows (more
-    // scroll): Key Config and Default (a full reset) out of reach.
+    if (!with_tables(*model, 0, [&] { build(static_cast<char*>(unit) + game::kOptCategories, unit); })) {
+        g_view.store(false, std::memory_order_release);
+        menu::service_abort();
+        return false;
+    }
     const std::size_t entries = g_entries.load(std::memory_order_relaxed);
     const std::uint32_t used =
         static_cast<std::uint32_t>(entries < game::kTitleViewTabs ? entries : game::kTitleViewTabs);
     if (field<std::uint32_t>(categories, game::kListRowCount) < game::kTitleViewTabs) {
-        logf(AL_LOG_WARNING, "title options: only %u categories; game rows back",
-             field<std::uint32_t>(categories, game::kListRowCount));
+        logf(AL_LOG_WARNING, "title options: only %u categories", field<std::uint32_t>(categories, game::kListRowCount));
+        g_view.store(false, std::memory_order_release);
         menu::service_abort();
-        rebuild_game(unit);
-        return;
+        return false;
     }
     g_set_row_count(categories, used);
     for (std::uint32_t t = 0; t < used; ++t) {
         set_row_text(list_row(categories, t), "msg_1", nullptr, model->tab_name(t));
     }
     if (field<std::uint32_t>(categories, game::kListRowCount) != used) {
-        logf(AL_LOG_WARNING, "title options: the category list did not shrink; game rows back");
+        logf(AL_LOG_WARNING, "title options: the category list did not shrink");
+        g_view.store(false, std::memory_order_release);
         menu::service_abort();
-        rebuild_game(unit);
-        return;
+        return false;
     }
     if (entries > game::kTitleViewTabs) {
         start_window(unit, categories);
@@ -514,31 +513,30 @@ void enter_view(void* unit) {
     set_header(unit, model->header());
     menu::service_opened();
     logf(AL_LOG_INFO, "title options: Mods page on (%zu categories, %zu rows)", entries, model->row_count());
+    return true;
 }
 
-std::uint64_t open_detour(void* unit) {
-    if (g_ready.load(std::memory_order_acquire)) {
-        if (g_view.load(std::memory_order_acquire)) {
-            menu::service_closed();  // the close hook did not run
-        }
-        if (g_pending.exchange(false, std::memory_order_acq_rel)) {
-            enter_view(unit);
-        } else if (unit == g_built_unit || g_view.load(std::memory_order_acquire)) {
-            rebuild_game(unit);
-        }
+// CMFM's page, vtable slot 90: the open handler.
+std::uint64_t page_open(void* unit) {
+    if (g_view.exchange(false, std::memory_order_acq_rel)) {
+        menu::service_closed();  // the close handler did not run
     }
-    return g_open_next(unit);
+    const bool on = enter_view(unit);
+    const std::uint64_t result = page_next(game::kSlotOpen)(unit);
+    if (!on) {
+        logf(AL_LOG_WARNING, "title options: CMFM's page could not be filled; closing it");
+        page_request_close(unit);
+    }
+    return result;
 }
 
-std::uint64_t close_detour(void* unit) {
-    const std::uint64_t result = g_close_next(unit);
-    if (g_view.load(std::memory_order_acquire)) {
-        // The rows stay on screen while the page closes; the next plain open
-        // rebuilds the game's lists.
-        g_view.store(false, std::memory_order_release);
-        restore_tables();
+// CMFM's page, vtable slot 91: the close handler. The rows stay on screen
+// while the page closes; the next open fills it again.
+std::uint64_t page_close(void* unit) {
+    const std::uint64_t result = page_next(game::kSlotClose)(unit);
+    if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
-        logf(AL_LOG_INFO, "title options: Mods page closed (game tables back)");
+        logf(AL_LOG_INFO, "title options: Mods page closed");
     }
     return result;
 }
@@ -547,12 +545,59 @@ std::uint64_t close_detour(void* unit) {
 // Mods page has no use for it.
 std::uint64_t show_category_detour(void* categories, std::int32_t category) {
     const std::uint64_t result = g_show_category_next(categories, category);
-    if (g_view.load(std::memory_order_acquire)) {
-        void* unit = field<void*>(categories, game::kCategoriesUnit);
-        void* vram = unit != nullptr ? field<void*>(unit, game::kOptVramPanel) : nullptr;
+    void* unit = field<void*>(categories, game::kCategoriesUnit);
+    if (g_view.load(std::memory_order_acquire) && unit != nullptr && unit == page_alive()) {
+        void* vram = field<void*>(unit, game::kOptVramPanel);
         if (vram != nullptr) {
             g_set_play(vram, false);
         }
+    }
+    return result;
+}
+
+// ---- The title scene: CMFM's page and the Options flow ----
+
+// Every frame of the title scene (its own update). CMFM's page is made here,
+// the way the scene makes its own pages, and dies with the scene. When
+// "Mods" started the Options flow (flow 9), the flow's page is CMFM's for
+// the length of each update, so the game's own code opens it, waits for it
+// to close and checks it, and the game's Options page is never touched.
+std::uint64_t scene_flows_detour(void* scene, void* a2, void* a3, void* a4) {
+    if (!g_ready.load(std::memory_order_acquire)) {
+        return g_scene_flows_next(scene, a2, a3, a4);
+    }
+    void* page = page_alive();
+    if (page == nullptr && !g_create_failed) {
+        std::string why;
+        page = page_create(why);
+        if (page == nullptr) {
+            g_create_failed = true;
+            logf(AL_LOG_WARNING, "title: CMFM's page could not be made (%s); Mods opens the Options page", why.c_str());
+        } else {
+            ++g_pages_created;
+            logf(AL_LOG_INFO, "title: CMFM's page made (unit %p, page %u)", page, g_pages_created);
+        }
+    }
+    if (field<std::int32_t>(scene, game::kSceneFlow) != game::kSceneFlowOptions) {
+        g_flow_ours = false;
+    } else if (g_pending.exchange(false, std::memory_order_acq_rel)) {
+        g_flow_ours = page != nullptr;
+        logf(AL_LOG_INFO, g_flow_ours ? "title: the Options flow opens CMFM's page"
+                                      : "title: CMFM's page is missing; the Options flow opens the Options page");
+    }
+    if (!g_flow_ours || page == nullptr) {
+        return g_scene_flows_next(scene, a2, a3, a4);
+    }
+    // Only the pointer in the scene's tracked reference; its links stay the game's.
+    void*& slot = field<void*>(scene, game::kSceneOptionsPage);
+    void* game_page = slot;
+    slot = page;
+    const std::uint64_t result = g_scene_flows_next(scene, a2, a3, a4);
+    if (slot == page) {
+        slot = game_page;
+    }
+    if (field<std::int32_t>(scene, game::kSceneFlow) != game::kSceneFlowOptions) {
+        g_flow_ours = false;
     }
     return result;
 }
@@ -579,7 +624,8 @@ bool title_menu_register(const Env& env, std::string& why) {
         !find("getInstanceFromName", game::kGetInstanceFromNamePattern, reinterpret_cast<void**>(&g_get_instance),
               why) ||
         !find("setPlay", game::kSetPlayPattern, reinterpret_cast<void**>(&g_set_play), why) ||
-        !find("initCategory", game::kInitCategoryPattern, reinterpret_cast<void**>(&g_init_category), why)) {
+        !find("initCategory", game::kInitCategoryPattern, reinterpret_cast<void**>(&g_init_category), why) ||
+        !page_class_register(env, why)) {
         return false;
     }
     struct Spec {
@@ -595,16 +641,12 @@ bool title_menu_register(const Env& env, std::string& why) {
          reinterpret_cast<void**>(&g_cursor_next)},
         {"CMFM:uGUITitle::onRowDecided", game::kTitleDecidedPattern, reinterpret_cast<void*>(&decided_detour),
          reinterpret_cast<void**>(&g_decided_next)},
-        {"CMFM:uGUIOption::open", game::kTitleOptionsOpenPattern, reinterpret_cast<void*>(&open_detour),
-         reinterpret_cast<void**>(&g_open_next)},
-        {"CMFM:uGUIOption::close", game::kTitleOptionsClosePattern, reinterpret_cast<void*>(&close_detour),
-         reinterpret_cast<void**>(&g_close_next)},
         {"CMFM:uGUIOption::showCategory", game::kTitleShowCategoryPattern,
          reinterpret_cast<void*>(&show_category_detour), reinterpret_cast<void**>(&g_show_category_next)},
         {"CMFM:cGUIInstButtonList::moveCursor", game::kListMovePattern, reinterpret_cast<void*>(&list_move_detour),
          reinterpret_cast<void**>(&g_list_move_next)},
-        {"CMFM:uGUIOption::update", game::kTitleOptionsUpdatePattern, reinterpret_cast<void*>(&update_detour),
-         reinterpret_cast<void**>(&g_update_next)},
+        {"CMFM:TitleScene::updateFlows", game::kTitleSceneFlowsPattern, reinterpret_cast<void*>(&scene_flows_detour),
+         reinterpret_cast<void**>(&g_scene_flows_next)},
     };
     for (int i = 0; i < kHookCount; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
@@ -621,8 +663,8 @@ bool title_menu_register(const Env& env, std::string& why) {
             return false;
         }
     }
-    logf(AL_LOG_INFO, "title: hooks registered (menu play, cursor, selected; title Options open, close, show "
-                      "category, update; list cursor moves)");
+    logf(AL_LOG_INFO, "title: hooks registered (menu play, cursor, selected; title scene flows; Options show "
+                      "category; list cursor moves)");
     // The wheel scrolls a long category list; without al.input it does not.
     if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {
         logf(AL_LOG_WARNING, "title: no window messages from al.input; the mouse wheel will not scroll the list");
@@ -651,6 +693,9 @@ bool title_menu_check(const Env& env, std::string& why) {
             why = b;
             return false;
         }
+    }
+    if (!page_class_check(env, PageHandlers{&page_update, &page_open, &page_close}, why)) {
+        return false;
     }
     g_ready.store(true, std::memory_order_release);
     logf(AL_LOG_INFO, "title: ready");
@@ -684,7 +729,8 @@ void title_menu_restore(const Env&) {
         menu::service_closed();
     }
     restore_tables();
-    logf(AL_LOG_INFO, "title: tables restored; Mods selected %u time(s)", g_mods_selected);
+    page_release();
+    logf(AL_LOG_INFO, "title: done; Mods selected %u time(s), %u page(s) made", g_mods_selected, g_pages_created);
 }
 
 }  // namespace cmfm::native

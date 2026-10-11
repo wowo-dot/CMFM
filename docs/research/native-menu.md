@@ -633,10 +633,49 @@ five (category rows 5 and 6 are Key Config and Default in code).
   it on a move line (GUI pages: line 20, bits 0x40000000).
 - The registry (`createGUIObjects`) is not the only way: **the title scene
   (`aTitle`, `sub_14025CF70`) creates its pages itself** with newUnit +
-  addBottom(20) and keeps reference-counted pointers (scene+216 the title
+  addBottom(20) and keeps tracked references to them (scene+216 the title
   menu, scene+312 the Options page); its destructor (`sub_14025B670`) only
-  releases its references. Group 0 (`sub_141ADC8A0`, once) holds the common
+  drops its references. Group 0 (`sub_141ADC8A0`, once) holds the common
   pages alive at the title and in game (units get +20 |= 8).
+- **Tracked references** (corrected, earlier "reference-counted"): a 24-byte
+  slot `{unit, next, prev}` linked into the unit's list (head +208, count
+  +216). `setRef(lock, unit, slot)` (0x142229160, IDA's
+  "InterlockedExchange64") unlinks the old unit and links the new one;
+  `clearRef(lock, slot)` (0x1422291D0); the lock is a global critical
+  section (`sub_142229230`); setRef does nothing while the byte at lock+0x2C
+  is set. The unit's destructor (`sub_1422283C0`) zeroes every slot in its
+  list, so a reference turns null when the unit dies.
+- **Who kills pages:** `sUnit::kill` (`sub_142219370`, via `cUnit` slot 18)
+  refuses units with `+20 & 8` and otherwise sets state 16 and queues the
+  unit; state `+12 & 0xE` is non-zero while alive (2 new, 8 running). A
+  scene's units list (`sub_1411D8830` adds a unit and sets `+20 |= 8`;
+  `sub_1411D8880` clears the flag and kills them). **At the title scene's end
+  (`sub_14025C710`, aTitle slot 8)** the game kills every unit on every move
+  line except flagged ones (`sub_14221AC20`) and drops unflagged units from
+  sMhGUI's list (`sub_141ADE330`). So a page made without the flag dies with
+  the title scene, like the title's own pages.
+- **A new page sets itself up:** a unit in state 2 gets `cUnit::invokeSetup`
+  on its line's next pass: uMhGUI slot 6 (`sub_141FB4540`) loads the layout
+  named by slot 71 (`sMhResource`, `rGUI`), slot 5 (`sub_141FB7ED0`) adds the
+  unit to sMhGUI's list (+608, `sub_141AD5F40`), which draws it and gives it
+  input; then the page's own setup (slot 74).
+- **The title scene's slots:** 6 `sub_14025CF70` (makes the pages), 7
+  `TitleScene::updateFlows` (every frame), 8 `sub_14025C710` (end). Flow 9
+  touches scene+312 only through its pointer: step 0 requestOpen, step 1
+  polls `+8856 & 0x22`, step 2 `sub_141E8BFE0(page)` (did system settings
+  change: 32 kind-1 values, a few floats; yes -> flow 12, no -> flow 13).
+- `uGUIOption::close` (slot 91) looks for the uGUIOption unit by class id
+  only when its display or language values changed (+30503/+30504,
+  +30524/+30525); otherwise `sub_141ADB5D0(sMhGUI, page)`.
+- uGUIOption is also in registry group 5 (0x143F9E460), so a uGUIOption unit
+  exists in game too (for step 2).
+- Class descriptions: MtDTI is 0x38 bytes (vtable, name, next sibling, first
+  child, parent, class-table chain, flags = size/4 in the low 23 bits plus
+  allocator bits, id = crc32 without the final inversion & 0x7FFFFFFF). Its
+  vtable has 4 slots (0 delete, 1 new object, 2 construct in place, 3
+  construct an array). uGUIOption's create (`sub_141E87060`) allocates with
+  uGUIOption's own class description, whatever DTI it is called with. The
+  uGUIOption vtable has 93 slots and no RTTI pointer before it.
 - A page names its layout through vtable slot 71 (`uGUIOption`:
   `ui\title\options`).
 - `uMhGUI::requestOpen(unit, opener)` sets state 0x10 and stores the opener
@@ -644,15 +683,37 @@ five (category rows 5 and 6 are Key Config and Default in code).
   with a "child closed" message (`off_143499310`). The title scene passes no
   opener and polls the page's state instead (flow 9).
 
-**A page of CMFM's own (plan, not built):** a class description copied
-from `uGUIOption`'s with CMFM's name, id and vtable (slot 1: the original
-create, then CMFM's page vtable); the page vtable is `uGUIOption`'s with
-overrides (getDti, getGuiPath, play, close, update). CMFM creates the page
-itself (newUnit + addBottom(20)), keeps the reference and opens it from both
-Mods entries: on the title by pointing the scene's flow 9 at CMFM's page
-for that one flow; in game from the Start menu (to be studied). The game's
-own Options pages stay untouched; CMFM's rows go into the page only while
-CMFM builds it. A layout of CMFM's own (decision 10) can follow.
+**A page of CMFM's own (probe P1, built, title only;
+`src/native/page_class.cpp`):**
+- Class `uGUICmfmPage` (id 0x0DBC4ADA, no collision among the game's 24,051
+  ids), a child of uGUIOption: a copy of uGUIOption's class description with
+  CMFM's name, id and a vtable whose slots 1-3 run uGUIOption's own and then
+  give the object CMFM's vtable. Not entered in the game's class table.
+- The page vtable is a copy of uGUIOption's 93 slots with getDti (4),
+  update (81), open (90) and close (91) replaced; CMFM's handlers call the
+  originals. The copy is made at WIN_MAIN after checking that slot 4 returns
+  uGUIOption's class description and that slots 81/90/91 hold the functions
+  their patterns find. Layout still `ui\title\options` (slot 71 unchanged).
+- Made in a hook on `TitleScene::updateFlows` (the scene's own update, the
+  same context in which the scene makes its pages) when CMFM has no live
+  page: create, `addBottom(units, 20, page, 0x40000000, 0)`, tracked with
+  CMFM's own reference slot. It dies with the title scene; the next title
+  makes a new one.
+- When "Mods" started flow 9, the same hook puts CMFM's page into the
+  scene's reference pointer (scene+312, the pointer only; the links stay
+  the game's) for the length of each update while flow 9 runs, then puts the
+  game's page back. The game's flow code opens, polls and checks CMFM's
+  page; the game's Options page is never opened, swapped or rebuilt.
+- On open, CMFM fills the page as before (prototype 3 and the scrolling
+  window), with `TitleOptionTabTables[0..4]` pointing at CMFM's tables only
+  during each build (the game reads them only in fillCategoryRows). If that
+  fails the page asks to close (requestClose).
+- Hooks: title menu play, cursor, selected; title scene flows; Options
+  showCategory (CMFM's page only); list moveCursor (CMFM's list only). The
+  uGUIOption open/close/update hooks are gone.
+
+Still to do: the Start menu (in game) opens the same class; a layout of
+CMFM's own (decision 10) through slot 71.
 
 ## Answers so far
 

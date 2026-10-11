@@ -1,8 +1,8 @@
 // CMFM: the in-game settings menu for MHW mods, an Astera Loader plugin.
 // It publishes "cmfm.menu" (include/cmfm/cmfm.h) for other plugins' settings
 // pages, and shows them natively (decisions.md items 7-9): a "Mods" entry in
-// the Start menu's System tab and on the title screen, both opening the
-// game's Options page with CMFM's rows. Exe 421810 only; on any other exe, or
+// the Start menu's System tab (the game's Options page with CMFM's rows) and
+// on the title screen (a page of CMFM's own). Exe 421810 only; on any other exe, or
 // when a check fails, CMFM leaves that part alone and reports DEGRADED with
 // the reason (cmfm.menu stays available; pages are then not shown).
 #include "al/al_plugin.h"

@@ -91,7 +91,8 @@ inline constexpr char kTitleCursorPattern[] = "40 53 48 83 EC 20 80 B9 C8 2D 00 
 inline constexpr char kTitleDecidedPattern[] =
     "48 89 5C 24 10 55 48 8D 6C 24 D0 48 81 EC 30 01 00 00 48 8B D9 3B 91 2C 30 00 00";
 // uGUIOption (the title Options) on-open (slot 90) at RVA 0x1E8AF60 and close
-// (slot 91) at RVA 0x1E8AB40.
+// (slot 91) at RVA 0x1E8AB40. Not hooked: they confirm the vtable slots CMFM's
+// page class overrides.
 inline constexpr char kTitleOptionsOpenPattern[] =
     "48 89 5C 24 18 55 56 57 41 56 41 57 48 8D 6C 24 C9 48 81 EC E0 00 00 00 48 8B F9";
 inline constexpr char kTitleOptionsClosePattern[] = "40 55 53 57 41 57 48 8D 6C 24 98 48 81 EC 68 01 00 00 48 8B F9";
@@ -124,6 +125,7 @@ inline constexpr char kSetPlayPattern[] = "48 85 C9 74 50 48 89 5C 24 08 57 48 8
 inline constexpr char kListMovePattern[] = "48 89 5C 24 18 57 48 83 EC 30 48 63 81 74 02 00 00 48 8B D9 48 63 FA";
 // uGUIOption::update (vtable slot 81) at RVA 0x1E8EF50, every frame while the
 // title Options page runs; +10480 is 0 while its category list has the focus.
+// Not hooked (confirms slot 81).
 inline constexpr char kTitleOptionsUpdatePattern[] =
     "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 30 48 8B F9";
 inline constexpr std::size_t kOptFocus = 0x28F0;  // 0: the category list
@@ -180,6 +182,62 @@ inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
 inline constexpr std::size_t kInstFlags = 0x628;
 inline constexpr std::uint32_t kInstFlagActive = 0x2;    // cleared by play() for the rows after Quit
 inline constexpr std::uint32_t kInstFlagEnabled = 0x10;  // cleared for greyed-out rows
+
+// ---- A page of CMFM's own (docs/research/native-menu.md, "Pages and their lifetime") ----
+
+// The title scene (aTitle) slot 7, TitleScene::updateFlows(scene, ...) at RVA
+// 0x25E0D0, every frame of the title scene: runs its sub-flows; flow 9
+// (Options) opens the page at scene+312, waits until it closes and checks
+// it. Hooked: CMFM points flow 9 at its own page when "Mods" started it.
+inline constexpr char kTitleSceneFlowsPattern[] =
+    "48 83 EC 68 8B 41 74 48 89 5C 24 78 48 89 74 24 60 33 F6 48 89 7C 24 58 48 8B F9 0F 29 74 24 40 0F 57 F6 83 F8 19";
+inline constexpr std::size_t kSceneFlow = 116;          // the running sub-flow
+inline constexpr std::int32_t kSceneFlowOptions = 9;
+inline constexpr std::size_t kSceneOptionsPage = 312;   // tracked reference to the title's uGUIOption
+
+// sMhUnit::addBottom(units, move line, unit, group bits, 0) at RVA 0x2219070
+// (addTop shares its first 64 bytes). The title scene puts its pages on line
+// 20 with group bits 0x40000000.
+inline constexpr char kAddBottomPattern[] =
+    "48 89 5C 24 20 55 57 41 57 48 83 EC 30 48 63 EA 4D 8B F9 49 8B D8 48 8B F9 4D 85 C0 75 10 32 C0 48 8B 5C 24 68 48 83 C4 30 41 5F 5F 5D C3 80 79 30 00 48 89 74 24 50 4C 89 74 24 58 75 09 80 3D ?? ?? ?? ?? 00 74 0A 48 83 C1 08 FF 15 ?? ?? ?? ?? 48 69 F5 F8 00 00 00 4C 8B F5";
+inline constexpr std::int32_t kGuiMoveLine = 20;
+inline constexpr std::uint64_t kGuiGroupBits = 0x40000000;
+// sMhUnit::Instance (pointer in .data) and sMhUnit's vtable.
+inline constexpr std::uintptr_t kRvaUnitManager = 0x51238C8;
+inline constexpr std::uintptr_t kRvaUnitManagerVtable = 0x33FCDE8;
+
+// Tracked unit references: a 24-byte slot {unit, next, prev} in the unit's
+// list (+208); the unit's destructor clears every slot. setRef(lock, unit,
+// slot) at RVA 0x2229160, clearRef(lock, slot) at RVA 0x22291D0; the lock
+// comes from a function that uMhGUI::requestOpen (RVA 0x1FB7CF0) calls.
+inline constexpr char kSetRefPattern[] =
+    "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 80 79 2C 00 49 8B F8 48 8B F2 48 8B D9 75 35";
+inline constexpr char kClearRefPattern[] =
+    "48 89 5C 24 08 57 48 83 EC 20 80 79 2C 00 48 8B FA 48 8B D9 75 22 FF 15 ?? ?? ?? ?? 48 8B 0F 48 85 C9 74 0B 48 8B D7 E8 ?? ?? ?? ?? FF 4B 28 48 8B CB FF 15";
+inline constexpr char kRequestOpenPattern[] =
+    "48 89 5C 24 08 57 48 83 EC 20 83 89 98 22 00 00 10 48 8D B9 00 21 00 00 48 8B DA 48 39 17 74 13 E8 ?? ?? ?? ?? 48 8B C8 4C 8B C7 48 8B D3 E8";
+inline constexpr std::size_t kRequestOpenLockCall = 32;    // E8 rel32: the reference lock
+inline constexpr std::size_t kRequestOpenSetRefCall = 46;  // E8 rel32: setRef
+// uMhGUI::requestClose(unit, now) at RVA 0x1FB7CC0.
+inline constexpr char kRequestClosePattern[] =
+    "44 8B 81 98 22 00 00 41 83 C8 20 41 8B C0 41 0F BA F0 07 0F BA E8 07 84 D2 44 0F 45 C0 44 89 81 98 22 00 00 C3";
+
+// cUnit fields.
+inline constexpr std::size_t kUnitState = 12;  // byte: & 0xE while alive (2 new, 8 running; 16 killed)
+
+// uGUIOption's class description (MtDTI in .data, filled by MtDti::ctor
+// before WinMain) and vtable (93 slots in .rdata; no RTTI before it).
+inline constexpr std::uintptr_t kRvaOptionPageDti = 0x502B370;
+inline constexpr std::uintptr_t kRvaOptionPageVtable = 0x347DA20;
+inline constexpr std::size_t kOptionPageVtableSlots = 93;
+inline constexpr std::size_t kSlotGetDti = 4;    // lea rax, [DTI]; ret
+inline constexpr std::size_t kSlotUpdate = 81;   // kTitleOptionsUpdatePattern
+inline constexpr std::size_t kSlotOpen = 90;     // kTitleOptionsOpenPattern
+inline constexpr std::size_t kSlotClose = 91;    // kTitleOptionsClosePattern
+inline constexpr char kOptionPageClassName[] = "uGUIOption";
+inline constexpr std::uint32_t kOptionPageClassId = 0x165BDEB6;  // (~crc32(name)) & 0x7FFFFFFF
+// MtDTI as MtDti::ctor fills it; its vtable has 4 slots (1: new object).
+inline constexpr std::size_t kDtiVtableSlots = 4;
 
 // uGUIOption fields.
 inline constexpr std::size_t kOptCategories = 0x28F8;    // object with buildCategories in slot 5

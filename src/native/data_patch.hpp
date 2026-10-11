@@ -17,9 +17,6 @@ public:
                std::string& why);
     // Puts `expected` back if the value is still `replacement`.
     bool restore(std::string& why);
-    // While applied: writes another replacement if the value is still the
-    // current one (restore still puts `expected` back).
-    bool retarget(std::uint64_t replacement, std::string& why);
     bool applied() const { return applied_; }
     const char* name() const { return name_; }
 
