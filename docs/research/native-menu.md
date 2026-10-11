@@ -773,7 +773,29 @@ is the fallback. Code: `src/native/mods_page.cpp` (the page's content and
 both entry points), `src/native/gui.cpp` (shared GUI helpers),
 `title_menu.cpp` (title row and scene flow only).
 
-Still to do: a layout of CMFM's own (decision 10) through slot 71.
+**A layout of CMFM's own (loading probe, run `20261011-layout-1`, tag
+layout-probe-1):**
+- The game reads loose files under `nativePC` (sMhMain::ctor registers the
+  `nativePC` / `app:\nativePC` root next to the chunk archives); the user's
+  MO2 file mods ship `nativePC/...` at the mod root. CMFM's layout is
+  `nativePC/ui/cmfm/mods.gui` in its mod folder, resource path
+  `ui\cmfm\mods`.
+- `sMhResource::loadResource(resources, class, path, flags)` (vtable slot
+  11, 0x1422228D0) returns nullptr when the file is missing (flag 1 = load
+  from file, as uMhGUI's layout load in slot 6 uses; flag 0x10 = only if
+  already loaded). CMFM loads its layout once before making the page and
+  only then points slot 71 at it (one extra reference for the session).
+- Format details used by `tools/gui/gui_edit.py`: animations (+4 u16
+  instance count, +12 first instance, +16 name), instances (+4 u8 parameter
+  count, +16 name, +24 class id, +32 first parameter), parameters (32 bytes:
+  +0 type, +16 name, +24 value). Named parameters such as `PosX`, `Size`,
+  `FontSize`, `VertexColorLeft`, `Visible`, `Texture`; types 2 (float) and 4
+  (four floats) point into the value pool at slot 0x188, and one pool entry
+  may serve several parameters (the tool checks who shares a value before
+  changing it). Animation keyframes (keysets) may override base values.
+- Probe edit: the header band's colours (`title_options/tex_base_r` and
+  `tex_base_l` `VertexColorLeft/Right`, (32,32,32) -> (180,30,30)): red at
+  the title and in game.
 
 ## Answers so far
 
