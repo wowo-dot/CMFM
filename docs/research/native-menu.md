@@ -890,6 +890,73 @@ study afterwards):**
 - Panel and header texts: the header `a_title_options` has one text,
   `msg_title`; each panel title `a_title_menu_<tab>` has `msg_sub_title`
   (300 x 50, font 24, centred, AutoScale shrinks long text).
+- Visibility in the layout: every `a_title_menu_<tab>` and the row
+  template's `null_star` ship with `Visible` 0 (a type-3 parameter: one byte
+  in the pool at slot 0x178); `setHidden` cannot show them, so CMFM's layout
+  points those flags at a byte that is 1. Panel titles stay off (a title
+  sits on the first row's line, under its value box).
+
+**What re-shows the rows' parts (runs `design-3` to `-5`, static):**
+- The row text filler (`sub_140EEA6A0`, via `sub_140EEA680`) calls
+  `setHidden(text_config_L, 0)` (and on the value text in it) every time it
+  writes a row. The tab refresh (`sub_141E8EB40`) runs it for every row,
+  then the row looks (`sub_141E8E600`); the tab's cursor handler (tab slot
+  10, `sub_141E89CB0`) runs the refresh and then the row looks again on
+  every cursor move.
+- The row looks replay each row's look (`sub_141E8D200`: animation 0 or 5,
+  or 9 greyed), hide the arrows (`num_input`) and set list +375 for rows
+  with +84/+85, and play the pick list (`select` +32 and +24) only when the
+  cursor row has +86, hiding it otherwise.
+- Tab setActive (`sub_141E8C530`) hides each row's star unless +86, and
+  shows it only while the tab is active.
+- `moveCursor` calls the list's cursor callback (so the row looks run with
+  the new row) before it stores the new cursor (+628).
+- CMFM hooks the row looks (`kRowLooksPattern`) and redoes its touches
+  (headings, stars, sliders, pick rows) right after them, with the row they
+  were given; and on every focus change.
+
+**Sliders (design step 2, run `sliders-1`):**
+- The row filler makes a row a slider for the game's volume and gamma rows
+  (`sub_141E8E410`): row +84 = 1, `sub_140EEAD20(slider, text, entry)`
+  (slider +1664 = 32, +1708 = 1, knob at getter * 0.01 through
+  `sub_140B8ABC0(slider, float)`), slider +1664 = 2, `msg_slider_00/01`
+  shown, the value box hidden. Row object: +40 slider, +64 `msg_slider_00`,
+  +72 `msg_slider_01`, +32 `text_config_L`, +16 row entry, +8 the page.
+- Every frame the tab update (`sub_141E8EC90`) runs, for rows with +84,
+  the slider's mouse drag (`sub_140B8ADB0`) and `sub_140EEB860`: knob
+  position * 100 (rounded up) against the getter, the setter when they
+  differ. The slider's own update (`sub_140B8A5E0`) moves it by keys and
+  stick while +1708 is set (the row look sets it for the cursor row).
+- Slider fields: +1640 orientation, +1656 knob (+160/+164 position), +1672
+  and +1676 track ends, +1696 steps (positions snap to k / steps), +1708
+  active, +1728 dragging. A drag does not snap.
+- CMFM: INT/FLOAT rows with 3+ values; steps = values - 1; the option hooks
+  map index <-> 0-100 and keep the last raw value (no set every frame for a
+  knob between steps); after a drag the knob snaps; CMFM's label goes into
+  `msg_slider_00`.
+
+**The pick list (design step 3, runs `picklist-1` to `-3`):**
+- The page's select object (+27376; set up by `sub_141E8D350`): +24
+  `btnlist_select` (callbacks: decide `sub_141E89B20(select, row)`, cancel
+  `sub_141E897D0`), +32 `null_prog_color2`, +40 14 check-mark pointers,
+  +152 the setting it holds, +160 `a_window_select` (scale Y = rows *
+  1.44), +168 the line's `poly_line_mask` (frame = rows). Rows:
+  `msg_language`, `checkMark`.
+- Language rows: +85 (Confirm, no arrows) and +86 (the list shows while
+  the row is the cursor row: the row looks fill it with `sub_141E8CFA0`,
+  which knows only the language lists). Their row decide (`sub_141E8BA10`)
+  fills it and sets focus 2; the list's decide applies the language and
+  returns to focus 1. The select object's update (`sub_141E8E4A0`, on focus
+  changes) hides every check mark in its array for a setting that is not a
+  language.
+- +86 is not usable for other ids: with +85 the row refresh
+  (`sub_141E8E8B0`) reads `[table + 0x100 + 0xFFFFFFFF]` for setting ids
+  from 32.
+- CMFM: CHOICE rows of 6-14 values (or `CMFM_FLAG_LIST`) get +85 only; the
+  decoration fills the list (texts, window, line; its own check marks, kept
+  out of the select object's array) and shows it while the cursor is on the
+  row; hooks on the row decide (open: focus 2, cursor on the current value)
+  and on the list's decide (set the value; the game then closes the list).
 
 ## Answers so far
 
