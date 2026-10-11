@@ -481,4 +481,22 @@ inline constexpr std::size_t kTabDisplayRow = 84;        // -1 when unset
 inline constexpr std::size_t kTabRowObjects = 24;
 inline constexpr std::size_t kRowObjectSize = 96;
 
+// The game's scroll bar, cGUIInstScrollBar (docs/research/scrollbar.md): a
+// display driven by three floats that pages write directly (no setters);
+// its update (vtable slot 14) sets the thumb's length from visible / total
+// and moves it by the ratio. CMFM's layout has a track and a bar for the mod
+// list and for the panel (tools/gui/make_mods_gui.py), found by name; the
+// class is checked through the instance's getDti (vtable slot 4).
+inline constexpr char kListScrollName[] = "cmfm_list_scroll";
+inline constexpr char kPanelScrollName[] = "cmfm_panel_scroll";
+inline constexpr std::uint32_t kScrollBarClassId = 0x7F2F0CC3;  // (~crc32(name)) & 0x7FFFFFFF
+inline constexpr std::size_t kInstanceGetDtiSlot = 4;
+inline constexpr std::size_t kDtiClassIdOffset = 0x34;
+inline constexpr std::size_t kScrollTotal = 0x230;       // float: content size
+inline constexpr std::size_t kScrollVisible = 0x234;     // float: visible size (same unit)
+inline constexpr std::size_t kScrollRatio = 0x238;       // float: position 0 (top) to 1
+inline constexpr std::size_t kScrollTextures = 0x248;    // 3 pointers: the thumb's parts (null: no draw)
+inline constexpr std::size_t kScrollFullLength = 0x260;  // byte: drawn full length (the track)
+inline constexpr std::size_t kScrollWheel = 0x262;       // byte: its mouse update takes the wheel
+
 }  // namespace cmfm::native::game

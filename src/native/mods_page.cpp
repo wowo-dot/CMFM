@@ -132,6 +132,18 @@ bool g_panel_selectable[kMaxRowsPerTab];
 std::size_t g_panel_count = 0;  // the tab's rows
 std::size_t g_panel_top = 0;    // the first of them in the window
 
+// The scrollbars of CMFM's layout (track and bar, the game's own), found by
+// name on the page: one for the mod list, one for the panel. Shown only while
+// their list scrolls; display only (the keys and the wheel scroll the lists).
+struct ScrollBar {
+    void* root = nullptr;
+    void* track = nullptr;
+    void* bar = nullptr;
+};
+ScrollBar g_list_bar;
+ScrollBar g_panel_bar;
+void* g_bars_unit = nullptr;  // the page the bars were looked up on
+
 Env g_env = {};
 std::atomic<bool> g_ready{false};
 std::uint32_t g_pages_created = 0;
@@ -295,6 +307,7 @@ void update_sliders(void* unit);
 // all: every slider row (the window moves), not only the locked ones.
 void end_sliders(void* unit, bool all = false);
 void show_pick_list(void* unit, const GameOptionRow& entry);
+void update_scrollbars();
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -654,6 +667,7 @@ void show_mod_list() {
         // Where the list's opening animation leaves the cursor.
         field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(cursor);
     }
+    update_scrollbars();
 }
 
 // ---- Split mode: the panel's window over a long tab ----
@@ -752,6 +766,89 @@ std::uint32_t step_down_detour(void* list, std::int32_t cursor, std::int32_t ste
 std::uint32_t step_up_detour(void* list, std::int32_t cursor, std::int32_t steps, std::uint8_t wrap,
                              std::uint8_t* wrapped) {
     return panel_step(false, g_step_up_next, list, cursor, steps, wrap, wrapped);
+}
+
+// ---- Split mode: the scrollbars ----
+
+// A scroll bar instance of CMFM's layout by name, checked by its class.
+void* find_scroll_bar(void* unit, const char* name) {
+    void* instance = gui_get_instance(unit, name);
+    if (instance == nullptr) {
+        return nullptr;
+    }
+    using GetDtiFn = const void* (*)(void* instance);
+    const auto get_dti = field<GetDtiFn const*>(instance, 0)[game::kInstanceGetDtiSlot];
+    const void* dti = get_dti != nullptr ? get_dti(instance) : nullptr;
+    if (dti == nullptr ||
+        *reinterpret_cast<const std::uint32_t*>(static_cast<const char*>(dti) + game::kDtiClassIdOffset) !=
+            game::kScrollBarClassId) {
+        return nullptr;
+    }
+    return instance;
+}
+
+// The track, the bar and their group; false (and an empty `out`) if the
+// layout lacks them or the shared scrollbar layout did not load (no parts
+// to draw).
+bool find_scroll(void* unit, const char* name, ScrollBar& out) {
+    char part[64];
+    out = {};
+    void* root = gui_get_instance(unit, name);
+    std::snprintf(part, sizeof part, "%s_base", name);
+    void* track = find_scroll_bar(unit, part);
+    std::snprintf(part, sizeof part, "%s_bar", name);
+    void* bar = find_scroll_bar(unit, part);
+    if (root == nullptr || track == nullptr || bar == nullptr) {
+        return false;
+    }
+    for (void* b : {track, bar}) {
+        for (std::size_t k = 0; k < 3; ++k) {
+            if (field<void*>(b, game::kScrollTextures + 8 * k) == nullptr) {
+                return false;
+            }
+        }
+        field<std::uint8_t>(b, game::kScrollWheel) = 0;  // CMFM's wheel moves the lists
+    }
+    field<std::uint8_t>(track, game::kScrollFullLength) = 1;
+    out = {root, track, bar};
+    return true;
+}
+
+// Shows the bar for `visible` of `total` rows from `top`, or hides it when
+// everything fits (setPlay acts only on a change).
+void show_scroll(const ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top) {
+    if (b.root == nullptr) {
+        return;
+    }
+    const bool on = visible > 0 && total > visible;
+    gui_set_play(b.root, on);
+    if (on) {
+        field<float>(b.bar, game::kScrollTotal) = static_cast<float>(total);
+        field<float>(b.bar, game::kScrollVisible) = static_cast<float>(visible);
+        field<float>(b.bar, game::kScrollRatio) = static_cast<float>(top) / static_cast<float>(total - visible);
+    }
+}
+
+// Both bars as the mod list's and the panel's windows stand (after any
+// change to either; the bar draws it on the next update).
+void update_scrollbars() {
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    if (!split_view() || unit == nullptr || list == nullptr) {
+        return;
+    }
+    if (unit != g_bars_unit) {
+        g_bars_unit = unit;
+        const bool list_ok = find_scroll(unit, game::kListScrollName, g_list_bar);
+        const bool panel_ok = find_scroll(unit, game::kPanelScrollName, g_panel_bar);
+        if (!list_ok || !panel_ok) {
+            logf(AL_LOG_WARNING, "Mods page: scrollbars missing or not loaded (mod list %s, panel %s); lists scroll "
+                 "without them", list_ok ? "ok" : "none", panel_ok ? "ok" : "none");
+        }
+    }
+    show_scroll(g_list_bar, g_entries.load(std::memory_order_relaxed),
+                field<std::uint32_t>(list, game::kListDuplicateNum), g_mod_top);
+    show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
 }
 
 // The panels show the selected tab again, the game's way (initCategory), and
@@ -963,6 +1060,7 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
             show_pick_list(unit, rows[cursor]);
         }
     }
+    update_scrollbars();
 }
 
 // The line above the mod list: empty unless changes wait for a restart.
@@ -1128,6 +1226,7 @@ std::uint64_t page_close(void* unit) {
     g_pick_count = 0;
     g_pick_filled = -1;
     g_pending_button = -1;
+    g_bars_unit = nullptr;  // looked up again on the next open
     options_view_sliders(false);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();

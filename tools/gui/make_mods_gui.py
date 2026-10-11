@@ -13,17 +13,30 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
 - the camera panel's title text moves above the mod list: CMFM's line for
   changes that wait for a game restart (empty otherwise);
 - that line and the rows' star icon (CMFM's restart mark) are switched on;
-  the panel titles stay off, as in the game.
+  the panel titles stay off, as in the game;
+- two scrollbars, the game's own (the PC graphics settings' pair, a track
+  and a bar drawing ui\\common\\scrollbar, docs/research/scrollbar.md): one
+  right of the mod list, one right of the settings panel. Adding parts
+  grows the file (tools/gui/gui_graft.py, docs/research/gui-format.md);
+  CMFM's code shows them only while their list scrolls.
 
     py -3.12 -B tools/gui/make_mods_gui.py "<extract>/chunk/ui/title/options.gui"
+
+The scrollbar parts come from <extract>/chunk/ui/pc/graphic_option.gui next
+to it (only read).
 """
 import os
+import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
+from gui_check import check  # noqa: E402
 from gui_edit import GuiFile, Scene, sha256  # noqa: E402
+from gui_graft import GraftError, find_instance, graft  # noqa: E402
+from gui_rebuild import VALUE_POOL, Gui, rd  # noqa: E402
 
 SOURCE_SHA256 = "ce319136a650983d22cfc8684f11e0d72c669f4c307ff40710b7dc03d3c8b066"
+SCROLLBAR_SOURCE_SHA256 = "a0e4092cd4c3acc628c7a634b391232f360effc5cece194e5d8750df902b2b99"
 OUTPUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "nativePC", "ui", "cmfm", "mods.gui")
 MOD_LIST_ROWS = 11
 
@@ -132,6 +145,67 @@ def build(gui):
                 gui.param("menu_config", "coladj_star", "Visible"))
 
 
+# The scrollbars (design pixels, positions inside their parent; docs/research/scrollbar.md):
+# the plain animations (2 track, 1 bar in ui\common\scrollbar) draw from the root's
+# top-left, 16 px wide, MaxFixFrame = BarMaxPos = the track's length.
+# - the mod list (parent null_prog_color0 at 170, 250; rows 50 + 10 apart, 11
+#   shown, the first centred about 4 px below the list's origin): between the
+#   cursor bar's end (about 518) and the panel's frame (about 557);
+# - the panel (parent null_audio, in null_prog_color1 at 576, 212; rows 40 + 12
+#   apart from PosY 33, CMFM shows at most 14): just right of the panel's frame
+#   (56 x 14.4 = 806 px wide).
+SCROLLBARS = (
+    # name, parent, PosX, PosY, track length
+    ("cmfm_list_scroll", "null_prog_color0", 359.0, -21.0, 650.0),
+    ("cmfm_panel_scroll", "null_audio", 814.0, 20.0, 716.0),
+)
+
+
+def init_param(g, instance, name):
+    rec = g.tables["instance"][find_instance(g, instance)]
+    for k in range(rd(rec, 40), rd(rec, 40) + rd(rec, 16)):
+        if g.string(rd(g.tables["initparam"][k], 16)) == name:
+            return g.tables["initparam"][k]
+    raise KeyError("%s has no parameter %s" % (instance, name))
+
+
+def set_param(g, instance, name, expected, new):
+    """A grafted instance's own value (the graft gave it a pool entry of its own)."""
+    p = init_param(g, instance, name)
+    fmt = "<f" if p[0] == 2 else "<i"
+    pool, off = g.pools[VALUE_POOL[p[0]]], rd(p, 24, "<Q")
+    found = struct.unpack_from(fmt, pool, off)[0]
+    if round(found, 4) != expected:
+        raise ValueError("%s %s is %r, expected %r" % (instance, name, found, expected))
+    struct.pack_into(fmt, pool, off, new)
+    print("  %s %s: %r -> %r" % (instance, name, expected, new))
+
+
+def add_scrollbars(data, source):
+    """CMFM's layout with the two scrollbars grafted in (the file grows)."""
+    g = Gui.parse(data)
+    src = Gui.parse(source)
+    for name, parent, x, y, length in SCROLLBARS:
+        print("scrollbar %s under %s" % (name, parent))
+        graft(g, src, "null_scrollbar_root", parent, entries_like="btnlist_camera", log=lambda m: print("  " + m),
+              rename={"null_scrollbar_root": name, "scrollbar_auto_base": name + "_base",
+                      "scrollbar_auto": name + "_bar"})
+        set_param(g, name, "PosX", 610.0, x)
+        set_param(g, name, "PosY", 16.0, y)
+        for part, animation in (("_base", 2), ("_bar", 1)):  # the plain track and bar
+            set_param(g, name + part, "AnimationId", 4 if part == "_base" else 3, animation)
+            set_param(g, name + part, "MaxFixFrame", 590.0, length)
+            set_param(g, name + part, "BarMaxPos", 590.0, length)
+    out = g.build()
+    again = Gui.parse(out)
+    if again.build() != out:
+        raise ValueError("the grown layout does not rebuild identically")
+    problems = check(again)
+    if problems:
+        raise ValueError("the grown layout breaks %d rule(s): %s" % (len(problems), "; ".join(problems[:5])))
+    return out
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -140,13 +214,18 @@ def main():
     if sha256(data) != SOURCE_SHA256:
         print("source is not the expected options.gui (SHA-256 %s)" % sha256(data))
         return 1
+    source_path = os.path.join(os.path.dirname(sys.argv[1]), "..", "pc", "graphic_option.gui")
+    source = open(source_path, "rb").read()
+    if sha256(source) != SCROLLBAR_SOURCE_SHA256:
+        print("%s is not the expected graphic_option.gui (SHA-256 %s)" % (source_path, sha256(source)))
+        return 1
     gui = GuiFile(data)
     try:
         build(gui)
-    except (KeyError, ValueError, TypeError) as e:
+        out = add_scrollbars(bytes(gui.d), source)
+    except (KeyError, ValueError, TypeError, GraftError) as e:
         print("stopped: %s" % e)
         return 1
-    out = bytes(gui.d)
     os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     with open(OUTPUT, "wb") as f:
         f.write(out)

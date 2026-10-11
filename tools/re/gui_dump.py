@@ -29,7 +29,7 @@ SECTIONS = {
     0xC8: (0x38, 32, "params"),
     0xD0: (0x3C, 48, "anim params"),
     0xD8: (0x44, 56, "objects"),
-    0xE0: (0x48, 32, "refs"),
+    0xE0: (0x48, 32, "flows"),  # flow states (Start, End, main, ...); other .gui files are at 0x150
     0xE8: (0x4C, 48, "table e8"),
     0xF0: (0x50, 16, "table f0"),
     0xF8: (0x54, 16, "table f8"),

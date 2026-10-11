@@ -789,8 +789,9 @@ layout-probe-1):**
   instance count, +12 first instance, +16 name), instances (+4 u8 parameter
   count, +16 name, +24 class id, +32 first parameter), parameters (32 bytes:
   +0 type, +16 name, +24 value). Named parameters such as `PosX`, `Size`,
-  `FontSize`, `VertexColorLeft`, `Visible`, `Texture`; types 2 (float) and 4
-  (four floats) point into the value pool at slot 0x188, and one pool entry
+  `FontSize`, `VertexColorLeft`, `Visible`, `Texture`; type 2 (float) points
+  into the value pool at slot 0x180 and type 4 (four floats) into the one at
+  0x188 (corrected; docs/research/gui-format.md), and one pool entry
   may serve several parameters (the tool checks who shares a value before
   changing it). Animation keyframes (keysets) may override base values.
 - Probe edit: the header band's colours (`title_options/tex_base_r` and
