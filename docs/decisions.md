@@ -45,3 +45,13 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
    Native means reusing the game's layouts and resources in memory; CMFM
    never ships edited game files. No deadline: this is the user's fun
    project, and the reversing takes as long as it takes.
+8. **Menu placement: a "Mods" entry right below Options, in both menus**
+   (the user's design, 2026-10-11). In the in-game Start menu's System tab
+   (Options, **Mods**, View Mode, Steam Store, Save, Return to Title, Quit
+   Game) and in the title screen menu (Start Game, Gallery, Steam Store,
+   Options, **Mods**, Credits, Support, Quit). Both open the same CMFM page,
+   registered in a GUI group that is alive at the title and in the world
+   (like Keyboard Settings, which both Options menus open). Order: the
+   in-game System tab first, then the title screen. Fallback if a hook site
+   proves unsafe: a "Mods" row inside the Options page (a data-only table
+   swap, `docs/research/native-menu.md`).
