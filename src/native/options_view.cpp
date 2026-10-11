@@ -83,6 +83,9 @@ std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
 std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value) {
     if (is_cmfm_row(kind, id)) {
         // Never reaches the game's setter: it would write sUserData out of range.
+        if (menu::service_locked(id)) {
+            return 0;  // greyed: no change (a slider's knob snaps back)
+        }
         if (const std::uint32_t steps = menu::service_slider_steps(id)) {
             g_slider_raw[id - kSettingIdFirst] = static_cast<std::int16_t>(value < 0 ? 0 : value > 100 ? 100 : value);
             const std::uint32_t index = slider_index(value, steps);

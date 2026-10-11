@@ -147,6 +147,7 @@ private:
         char help[kMaxHelp + 64] = {};
         char text[CMFM_MAX_TEXT] = {};  // TEXT rows' and status rows' value
         bool get_failed = false;        // logged once per opening
+        bool lock_logged = false;       // a refused change while locked, logged once per opening
     };
 
     void logf(int level, const char* format, ...) const;

@@ -661,6 +661,7 @@ std::size_t Menu::restart_count() const {
 void Menu::refresh() {
     for (Row& r : rows_) {
         r.get_failed = false;
+        r.lock_logged = false;
         set_help(r, r.base_help.c_str());
     }
     refresh_texts();
@@ -712,7 +713,11 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
     const cmfm_value_t v = value_at(s, static_cast<std::uint32_t>(index));
     const char* name = r->value_ptrs[static_cast<std::size_t>(index)];
     if (s.locked) {
-        logf(0, "%s: \"%s\" = %s refused: locked (%s)", p.plugin.c_str(), s.label.c_str(), name, s.locked_why.c_str());
+        if (!r->lock_logged) {
+            r->lock_logged = true;
+            logf(0, "%s: \"%s\" = %s refused: locked (%s)", p.plugin.c_str(), s.label.c_str(), name,
+                 s.locked_why.c_str());
+        }
         return false;
     }
     if ((s.flags & CMFM_FLAG_RESTART) != 0 && s.first_index < 0) {

@@ -682,6 +682,12 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
         field<std::uint8_t>(slider, game::kSliderActive) = active ? 1 : 0;
         gui_set_play(slider, true);
     }
+    // The row look makes the cursor row's slider take keys and the mouse
+    // whether or not the row is enabled: a locked one takes neither (run
+    // 20261011-buttons-1: the greyed slider moved and snapped back).
+    if (menu::service_locked(id)) {
+        field<std::uint8_t>(slider, game::kSliderActive) = 0;
+    }
     const auto index = static_cast<std::uint32_t>(menu::service_get(id));
     g_slider_rows[g_slider_count++] = SliderRow{r, steps, index};
     if (void* end = field<void*>(row_object, game::kRowSliderEnd)) {
