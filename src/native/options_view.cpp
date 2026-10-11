@@ -63,7 +63,7 @@ std::uintptr_t tab_slot(std::size_t tab) {
 }
 
 std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
-    if (kind == kCmfmRowKind) {
+    if (is_cmfm_row(kind, id)) {
         std::uint32_t value = 0;
         g_model.get(id, value);
         return value;
@@ -72,8 +72,8 @@ std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
 }
 
 std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value) {
-    if (kind == kCmfmRowKind) {
-        // Never reaches the game's setter: an unknown kind would write the save data.
+    if (is_cmfm_row(kind, id)) {
+        // Never reaches the game's setter: it would write sUserData out of range.
         if (value >= 0 && g_model.set(id, static_cast<std::uint32_t>(value))) {
             const OptionSpec* s = g_model.spec(id);
             logf(AL_LOG_INFO, "options view: %s = %s", s->label, s->values[value]);
@@ -108,6 +108,36 @@ void defaults_detour(void* closure, void* unknown, std::int32_t* answer) {
         }
         logf(AL_LOG_INFO, "options view: Set To Default reset the CMFM rows only");
     }
+}
+
+// A game row with a CMFM id would be answered by CMFM; none exists in 421810
+// (kind-1 ids 0-34), and this keeps it so.
+bool game_tables_clear(const Env& env, std::string& why) {
+    std::uintptr_t tables[game::kOptionTabTableCount + 2 + game::kTitleOptionTabTableCount] = {};
+    std::size_t n = 0;
+    for (std::size_t i = 0; i < game::kOptionTabTableCount; ++i) {
+        tables[n++] = *reinterpret_cast<const std::uintptr_t*>(env.base + game::kRvaOptionTabTables + 8 * i);
+    }
+    tables[n++] = env.base + game::kRvaOptionRowsMode2;
+    tables[n++] = env.base + game::kRvaOptionRowsMode3;
+    for (std::size_t i = 0; i < game::kTitleOptionTabTableCount; ++i) {
+        tables[n++] = *reinterpret_cast<const std::uintptr_t*>(env.base + game::kRvaTitleOptionTabTables + 8 * i);
+    }
+    for (std::size_t t = 0; t < n; ++t) {
+        const auto* row = reinterpret_cast<const GameOptionRow*>(tables[t]);
+        std::size_t i = 0;
+        for (; i < game::kMaxGameTableRows && row[i].kind != kRowTableEnd; ++i) {
+            if (is_cmfm_row(row[i].kind, static_cast<std::uint32_t>(row[i].setting_id))) {
+                why = "a game Options row uses setting id " + std::to_string(row[i].setting_id);
+                return false;
+            }
+        }
+        if (i == game::kMaxGameTableRows) {
+            why = "a game Options row table has no end";
+            return false;
+        }
+    }
+    return true;
 }
 
 bool register_hook(const char* name, const char* pattern, void* detour, void** next, std::uint32_t& handle) {
@@ -180,12 +210,17 @@ bool options_view_check(const Env& env, std::string& why) {
             return false;
         }
     }
+    if (!game_tables_clear(env, why)) {
+        return false;
+    }
     g_ready = true;
     logf(AL_LOG_INFO, "options view: ready");
     return true;
 }
 
 bool options_view_ready() { return g_ready; }
+
+const OptionsModel& options_view_model() { return g_model; }
 
 bool options_view_enter() {
     if (!g_ready) {

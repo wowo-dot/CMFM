@@ -19,6 +19,9 @@ struct Env {
     const al_scanner_t* scanner;  // may be NULL
 };
 
+// The entry's label in the Start menu and on the title screen.
+inline constexpr char kModsLabel[] = "Mods";
+
 // al_plugin_init: registers the two hooks. False (with `why`) if either
 // cannot be registered; the entry is then never shown.
 bool start_menu_register(const Env& env, std::string& why);
@@ -28,5 +31,9 @@ bool start_menu_register(const Env& env, std::string& why);
 bool start_menu_activate(const Env& env, std::string& why);
 // SHUTDOWN: puts the original System table back.
 void start_menu_restore(const Env& env);
+
+// The game's own text (message file global at `file_rva`, id), past CMFM's
+// text hook; nullptr if the file is not loaded or the hook is not in place.
+const char* game_text(std::uintptr_t file_rva, std::uint32_t id);
 
 }  // namespace cmfm::native

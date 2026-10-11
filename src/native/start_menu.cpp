@@ -4,6 +4,7 @@
 #include "native/game_421810.hpp"
 #include "native/options_view.hpp"
 #include "native/system_items.hpp"
+#include "native/title_menu.hpp"
 
 #include <atomic>
 #include <cstdio>
@@ -15,7 +16,6 @@ namespace {
 using GetMessageFn = const char* (*)(void* self, std::uint32_t id);
 using ItemActionFn = std::uint64_t (*)(void* menu, std::uint32_t id, void* arg);
 
-constexpr char kModsLabel[] = "Mods";
 constexpr char kModsHelp[] = "Settings for installed mods (CMFM).";
 constexpr std::size_t kItemsCapacity = 24;
 
@@ -59,6 +59,10 @@ const char* get_message_detour(void* self, std::uint32_t id) {
         if (const char* text = options_view_text(self, id)) {
             return text;
         }
+    }
+    // The title Options' category labels while the title Mods page is on.
+    if (const char* text = title_menu_text(self, id)) {
+        return text;
     }
     return g_get_message_next(self, id);
 }
@@ -165,6 +169,11 @@ bool start_menu_activate(const Env& env, std::string& why) {
                               ", label " + std::to_string(game::kModsLabelId) + ", help " +
                               std::to_string(game::kModsHelpId) + ")");
     return true;
+}
+
+const char* game_text(std::uintptr_t file_rva, std::uint32_t id) {
+    void* file = g_base != 0 ? message_file(file_rva) : nullptr;
+    return file != nullptr && g_get_message_next != nullptr ? g_get_message_next(file, id) : nullptr;
 }
 
 void start_menu_restore(const Env& env) {

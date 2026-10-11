@@ -41,6 +41,12 @@ bool OptionsModel::build(const char* header, const char* const* tab_names, const
         why = "too many rows";
         return false;
     }
+    for (const std::size_t n : per_tab) {
+        if (n > kMaxRowsPerTab) {
+            why = "too many rows on one tab";
+            return false;
+        }
+    }
 
     header_ = header ? header : "";
     for (std::size_t t = 0; t < kTabCount; ++t) {
@@ -62,7 +68,8 @@ bool OptionsModel::build(const char* header, const char* const* tab_names, const
         help_ids_[row] = help;
         tables_[tab][per_tab[tab]++] = GameOptionRow{
             kCmfmRowKind, static_cast<std::int32_t>(label), 1, kHelpCategory, static_cast<std::int32_t>(help),
-            static_cast<std::int32_t>(row), static_cast<std::int32_t>(s.value_count), 0, nullptr};
+            static_cast<std::int32_t>(kSettingIdFirst + row), static_cast<std::int32_t>(s.value_count), 0,
+            nullptr};
         label += 1 + s.value_count;
         help += 1 + s.value_count;
         ++row;
@@ -117,11 +124,17 @@ const char* OptionsModel::help_text(std::uint32_t id) const {
     return nullptr;
 }
 
+const OptionSpec* OptionsModel::spec(std::uint32_t setting_id) const {
+    const std::uint32_t row = setting_id - kSettingIdFirst;  // wraps for ids below ours
+    return row < count_ ? &specs_[row] : nullptr;
+}
+
 bool OptionsModel::get(std::uint32_t setting_id, std::uint32_t& value) const {
-    if (setting_id >= count_) {
+    const std::uint32_t row = setting_id - kSettingIdFirst;
+    if (row >= count_) {
         return false;
     }
-    value = values_[setting_id];
+    value = values_[row];
     return true;
 }
 
@@ -132,10 +145,11 @@ void OptionsModel::reset() {
 }
 
 bool OptionsModel::set(std::uint32_t setting_id, std::uint32_t value) {
-    if (setting_id >= count_ || value >= specs_[setting_id].value_count) {
+    const std::uint32_t row = setting_id - kSettingIdFirst;
+    if (row >= count_ || value >= specs_[row].value_count) {
         return false;
     }
-    values_[setting_id] = value;
+    values_[row] = value;
     return true;
 }
 

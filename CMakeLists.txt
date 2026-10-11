@@ -42,7 +42,8 @@ add_library(cmfm SHARED
     src/plugin.cpp
     src/native/data_patch.cpp
     src/native/options_view.cpp
-    src/native/start_menu.cpp)
+    src/native/start_menu.cpp
+    src/native/title_menu.cpp)
 # "al/al_plugin.h" is third_party/al/al_plugin.h.
 target_include_directories(cmfm PRIVATE third_party src)
 target_link_libraries(cmfm PRIVATE cmfm_core)

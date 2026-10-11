@@ -3,6 +3,7 @@
 // menu runs only on this exe; every value is checked before it is used.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace cmfm::native::game {
@@ -66,5 +67,104 @@ inline constexpr std::int32_t kItemMods = 77;     // ours: 76 is the end marker
 // file 23). Without our hook they resolve to empty text.
 inline constexpr std::uint32_t kModsLabelId = 9000;  // file 11
 inline constexpr std::uint32_t kModsHelpId = 9001;   // file 18
+
+// Every row table the Options pages read: OptionTabTables[0..6], the mode 2
+// and 3 tables, TitleOptionTabTables[0..5]. Their kind-1 rows use setting
+// ids 0-34; CMFM's rows use kind 1 from id 100, checked at start.
+inline constexpr std::size_t kOptionTabTableCount = 7;
+inline constexpr std::uintptr_t kRvaOptionRowsMode2 = 0x31BE438;
+inline constexpr std::uintptr_t kRvaOptionRowsMode3 = 0x31BE848;
+inline constexpr std::size_t kMaxGameTableRows = 128;  // the longest has 24
+
+// ---- The title screen (docs/research/native-menu.md, "The title screen") ----
+
+// uGUITitle::play (vtable slot 90) at RVA 0x1EFFDF0: labels the menu rows,
+// hides the rows after Quit and records the Options and Quit rows.
+inline constexpr char kTitlePlayPattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 56 48 81 EC 40 02 00 00 BA 07 00 00 00";
+// The menu list's cursor callback (title, list, row) at RVA 0x1EFF690: row ->
+// item id (equal on PC).
+inline constexpr char kTitleCursorPattern[] = "40 53 48 83 EC 20 80 B9 C8 2D 00 00 00 48 8B D9";
+// The menu list's selected callback (title, row) at RVA 0x1EFF480: the Quit
+// row opens a Yes/No, any other row closes the title, and the title scene
+// acts on the item id (Options: flow 9 opens uGUIOption).
+inline constexpr char kTitleDecidedPattern[] =
+    "48 89 5C 24 10 55 48 8D 6C 24 D0 48 81 EC 30 01 00 00 48 8B D9 3B 91 2C 30 00 00";
+// uGUIOption (the title Options) on-open (slot 90) at RVA 0x1E8AF60 and close
+// (slot 91) at RVA 0x1E8AB40.
+inline constexpr char kTitleOptionsOpenPattern[] =
+    "48 89 5C 24 18 55 56 57 41 56 41 57 48 8D 6C 24 C9 48 81 EC E0 00 00 00 48 8B F9";
+inline constexpr char kTitleOptionsClosePattern[] = "40 55 53 57 41 57 48 8D 6C 24 98 48 81 EC 68 01 00 00 48 8B F9";
+
+// Game functions CMFM calls (found with al.scanner, not hooked).
+// cGUIInstButtonList::setRowCount(list, count) at RVA 0xB7FED0: rebuilds the
+// row copies; keeps the cursor index.
+inline constexpr char kListSetRowCountPattern[] =
+    "40 53 48 83 EC 20 48 8B D9 E8 ?? ?? ?? ?? 48 8B 03 48 8B CB 48 83 C4 20 5B 48 FF A0 30 01 00 00";
+// cGUIInstButtonList::setCursor(list, row) at RVA 0xB76190; reads the row
+// under the old cursor without a range check.
+inline constexpr char kListSetCursorPattern[] = "48 89 5C 24 08 57 48 83 EC 20 48 63 FA 48 8B D9 3B B9 D8 01 00 00";
+// cGUIObjRoot::getObjectFromName(root, name) at RVA 0x2340E20.
+inline constexpr char kGetObjectFromNamePattern[] = "48 89 5C 24 08 48 89 7C 24 10 48 8B 81 C8 00 00 00";
+// cGUIObjSizeAdjustMessage::formatText(obj, text) at RVA 0x18C48A0.
+inline constexpr char kFormatTextPattern[] = "48 85 C9 74 34 48 85 D2 74 25 0F B6 02 3A 05";
+// uGUI::getInstanceFromName(unit, name) at RVA 0x23537A0.
+inline constexpr char kGetInstanceFromNamePattern[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 48 8B 81 90 02 00 00";
+// cGUIInstance::setPlay(instance, bool) at RVA 0x18BAEA0.
+inline constexpr char kSetPlayPattern[] = "48 85 C9 74 50 48 89 5C 24 08 57 48 83 EC 20 0F B6 FA";
+
+// uGUIOption::buildCategories(categories, unit) at RVA 0x1E8D5A0: slot 5 of
+// the categories object's vtable; builds the category list and every tab's
+// rows from TitleOptionTabTables. Called through that slot after checking it.
+inline constexpr std::uintptr_t kRvaBuildCategories = 0x1E8D5A0;
+inline constexpr std::size_t kBuildCategoriesSlot = 5;
+
+// TitleOptionTabTables in .data (writable): 6 row-table pointers, [0..4] the
+// title Options tabs Interface, Display, Audio, Language, Privacy.
+inline constexpr std::uintptr_t kRvaTitleOptionTabTables = 0x3FC0480;
+inline constexpr std::size_t kTitleOptionTabTableCount = 6;
+inline constexpr std::uintptr_t kRvaTitleOptionRows[kTitleOptionTabTableCount] = {
+    0x31BEEE0, 0x31BE870, 0x31BEB70, 0x31BED00, 0x31BF000, 0x31BE190};
+inline constexpr std::size_t kTitleViewTabs = 5;
+// The category labels for tabs 0-4 (file 12), asked for by buildCategories.
+inline constexpr std::uint32_t kTitleCategoryLabelIds[kTitleViewTabs] = {392, 347, 348, 349, 395};
+
+// Message files for the title rows CMFM moves down: Credits 13/0x66,
+// Support 13/0x5F, Quit 23/0x170 (as uGUITitle::play writes them).
+inline constexpr std::uintptr_t kRvaMessages13 = 0x5012E28;
+inline constexpr std::uintptr_t kRvaMessages23 = 0x5013458;
+inline constexpr std::uint32_t kTitleCreditsId = 0x66;
+inline constexpr std::uint32_t kTitleSupportId = 0x5F;
+inline constexpr std::uint32_t kTitleQuitId = 0x170;
+
+// uGUITitle fields.
+inline constexpr std::size_t kTitleList = 0x2900;        // btnlist_menuList
+inline constexpr std::size_t kTitleOptionsRow = 0x2FD8;  // set by play()
+inline constexpr std::size_t kTitleQuitRow = 0x302C;     // set by play()
+inline constexpr std::uint32_t kTitleRows = 7;           // the list's DuplicateNum, set at setup
+
+// cGUIInstButtonList fields.
+inline constexpr std::size_t kListRowCount = 0x1D8;
+inline constexpr std::size_t kListRows = 0x1E8;
+inline constexpr std::size_t kListDuplicateNum = 0x298;
+inline constexpr std::size_t kListCursor = 0x274;
+// List row (cGUIInstance) fields.
+inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
+inline constexpr std::size_t kInstFlags = 0x628;
+inline constexpr std::uint32_t kInstFlagActive = 0x2;    // cleared by play() for the rows after Quit
+inline constexpr std::uint32_t kInstFlagEnabled = 0x10;  // cleared for greyed-out rows
+
+// uGUIOption fields.
+inline constexpr std::size_t kOptCategories = 0x28F8;    // object with buildCategories in slot 5
+inline constexpr std::size_t kOptCategoryList = 0x2910;  // btnlist_menu (categories + 24)
+inline constexpr std::size_t kOptTabs = 0x2918;          // 7 tab objects
+inline constexpr std::size_t kOptTabSize = 0x968;
+inline constexpr std::size_t kTabList = 24;              // its row list
+inline constexpr std::size_t kTabIndex = 80;
+inline constexpr std::size_t kTabDisplayRow = 84;        // -1 when unset
+// Each tab object holds 24 row objects of 96 bytes from +96. A row object
+// as constructed: vtable, zeros up to +80, tab 7 at +80, 0 at +84, -1 at +88.
+inline constexpr std::size_t kTabRowObjects = 24;
+inline constexpr std::size_t kRowObjectSize = 96;
 
 }  // namespace cmfm::native::game

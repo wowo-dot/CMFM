@@ -35,12 +35,12 @@ void builds_rows_in_game_format() {
     const char* why = nullptr;
     check(m.build("Mods", kTabs, kSpecs, 3, kFree, why), "build succeeds");
     const GameOptionRow* t0 = m.table(0);
-    check(t0[0].kind == kCmfmRowKind && t0[0].setting_id == 0 && t0[0].value_count == 2, "row 0");
+    check(t0[0].kind == 1 && t0[0].setting_id == 100 && t0[0].value_count == 2, "row 0: kind 1, id 100");
     check(t0[0].label_id == 9100 && t0[0].flag == 1 && t0[0].help_cat == 18 && t0[0].help_id == 9002,
           "row 0 text ids");
-    check(t0[1].label_id == 9103 && t0[1].help_id == 9005 && t0[1].setting_id == 1, "row 1 follows row 0's values");
+    check(t0[1].label_id == 9103 && t0[1].help_id == 9005 && t0[1].setting_id == 101, "row 1 follows row 0's values");
     check(t0[2].kind == kRowTableEnd, "tab 0 ends after 2 rows");
-    check(m.table(2)[0].setting_id == 2 && m.table(2)[1].kind == kRowTableEnd, "tab 2 has its row");
+    check(m.table(2)[0].setting_id == 102 && m.table(2)[1].kind == kRowTableEnd, "tab 2 has its row");
     // No tab may be empty: the game reads the row under the cursor unchecked.
     for (std::size_t t = 0; t < kTabCount; ++t) {
         check(m.table(t)[0].kind == kCmfmRowKind, "every tab has a first row");
@@ -69,14 +69,16 @@ void gets_and_sets() {
     const char* why = nullptr;
     m.build("Mods", kTabs, kSpecs, 3, kFree, why);
     std::uint32_t v = 99;
-    check(m.get(0, v) && v == 1, "initial value");
-    check(m.set(1, 2) && m.get(1, v) && v == 2, "set within range");
-    check(!m.set(1, 3) && m.get(1, v) && v == 2, "out of range refused, value kept");
-    check(!m.set(3, 1) && m.set(3, 0), "placeholder accepts only its one value");
-    check(!m.set(7, 0) && !m.get(7, v), "unknown row refused");
-    m.set(0, 0);
+    check(m.get(100, v) && v == 1, "initial value");
+    check(m.set(101, 2) && m.get(101, v) && v == 2, "set within range");
+    check(!m.set(101, 3) && m.get(101, v) && v == 2, "out of range refused, value kept");
+    check(!m.set(103, 1) && m.set(103, 0), "placeholder accepts only its one value");
+    check(!m.set(107, 0) && !m.get(107, v), "unknown row refused");
+    check(!m.set(0, 0) && !m.get(1, v) && !m.get(99, v) && m.spec(99) == nullptr, "game ids are not ours");
+    check(m.spec(100) != nullptr && same(m.spec(101)->label, "Test choice"), "spec by setting id");
+    m.set(100, 0);
     m.reset();
-    check(m.get(0, v) && v == 1 && m.get(1, v) && v == 0, "reset restores the initial values");
+    check(m.get(100, v) && v == 1 && m.get(101, v) && v == 0, "reset restores the initial values");
 }
 
 void rejects_bad_specs() {
@@ -91,6 +93,19 @@ void rejects_bad_specs() {
     const OptionSpec bad_free = {"x", "", kOnOff, 0, 0, 0};
     check(!m.build("Mods", kTabs, kSpecs, 3, bad_free, why), "invalid placeholder");
     check(m.build("Mods", kTabs, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
+    // The title Options page holds 24 rows per tab.
+    OptionSpec many[kMaxRowsPerTab + 1];
+    for (OptionSpec& s : many) {
+        s = {"x", "", kOnOff, 2, 0, 0};
+    }
+    check(m.build("Mods", kTabs, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
+    check(!m.build("Mods", kTabs, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+}
+
+void knows_its_ids() {
+    check(is_cmfm_row(1, 100) && is_cmfm_row(1, 199), "kind 1, ids 100-199");
+    check(!is_cmfm_row(1, 34) && !is_cmfm_row(1, 99) && !is_cmfm_row(1, 200), "game kind-1 ids pass on");
+    check(!is_cmfm_row(0, 100) && !is_cmfm_row(2, 100) && !is_cmfm_row(7, 100), "other kinds pass on");
 }
 
 }  // namespace
@@ -100,6 +115,7 @@ int main() {
     resolves_texts();
     gets_and_sets();
     rejects_bad_specs();
+    knows_its_ids();
     if (g_failures == 0) {
         std::printf("test_options_model: all passed\n");
     }
