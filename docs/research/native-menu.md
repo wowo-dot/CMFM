@@ -825,6 +825,47 @@ layout-probe-1):**
   (`menu_language` template), for rows with flag +85; contents from code
   (not studied further yet).
 
+**Split mode and the mouse (runs `20261011-split-1` to `-split-3`, static
+study afterwards):**
+- Split mode: the layout's camera list, styled like the category list,
+  shows every menu entry on the left (CMFM fills and moves it); the game's
+  category list sits off screen with its cursor kept on the audio panel
+  (2), which shows the highlighted entry. Up/Down on the category list are
+  turned into mod list moves (moveCursor hook).
+- **Why Confirm got stuck (split-2, -3):** a list's update
+  (`sub_140B755C0`) in state 1 puts the cursor on the first enabled row from
+  its start row (+560) when its opening animation ends. That came one frame
+  after CMFM's open handler had set the category cursor to 2, so it went
+  back to 0, and Confirm entered tab 0 (a hidden panel) while the shown
+  panel stayed inactive. initCategory writes +560 = 0 for panel lists; CMFM
+  writes 2 for the category list and the cursor row for the mod list.
+- **Input routing (`sub_141FB6A70`, uMhGUI's update):** after the instance
+  tree's update, the GUI sets +369 ("input this frame") on the registered
+  input lists of the top priority that are shown and not marked inactive
+  (+371 == 0, `sub_140B87020`); then slot 81 runs. A list reads keys and
+  mouse only with +369 set and +371 clear (`sub_140B872A0`,
+  `sub_140B87410`). The page switches focus by flipping +371: focus 0 the
+  category list, focus 1 the panel under the category cursor
+  (`sub_141E8CDD0`; categories slot 6 and tab slot 6 write +371).
+- **The game's mouse on the page:** a list's hover handler (vtable +248,
+  `sub_140B76AF0`) moves the cursor to the row under the pointer when the
+  mouse moved and +641 is set, and a click on the current row decides;
+  right click cancels. Focus 0: the category list follows the pointer, and
+  slot 81 enters the panel for a click on its window (tab+48,
+  `a_window_<tab>`). Focus 1: the category list takes no input; Back or a
+  right click returns (tab slot 9, `sub_141E89AB0`).
+- **Helpers CMFM calls:** mouse position `sub_141FB5D30(gui, float[4],
+  list)`, hit test `sub_141FB6190(gui, instance, position, int*)`, left
+  click `sub_141FB6560`, mouse moved `sub_141FB65A0`; all answer only while
+  the GUI has the input (+8897/+8898). Found through the calls in
+  `sub_141E8A510` (pattern `kOptionClickPattern`) and `kMouseMovedPattern`.
+- **CMFM's mouse (split-4, untested):** slot 81 checks the mouse on mouse
+  activity only. Over a mod row: that mod is highlighted, and from focus 1
+  the panel's Back runs first (tab slot 9). Moving onto the panel's window
+  in focus 0: the category list's Confirm (categories slot 8,
+  `sub_141E89C40` -> `sub_141E8A890`) enters it. Both slots are checked
+  against their RVAs before each call.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
