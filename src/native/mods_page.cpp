@@ -12,6 +12,7 @@
 #include "native/panel_window.hpp"
 
 #include <atomic>
+#include <bitset>
 #include <chrono>
 #include <cstdarg>
 #include <cstddef>
@@ -163,8 +164,9 @@ std::size_t g_panel_top = 0;    // the first of them in the window
 // their lock, CMFM_FLAG_HIDE_LOCKED, left out), and which were hidden when
 // the panel was last filled (one bit per tab row).
 std::uint8_t g_panel_shown[kMaxRowsPerTab];
-std::uint64_t g_panel_hidden = 0;
-static_assert(kMaxRowsPerTab <= 64);
+using RowBits = std::bitset<kMaxRowsPerTab>;
+RowBits g_panel_hidden;
+static_assert(kMaxRowsPerTab <= 256);  // g_panel_shown's entries
 
 // The scrollbars of CMFM's layout (track and bar, the game's own), found by
 // name on the page: one for the mod list, one for the panel. Shown only while
@@ -315,7 +317,7 @@ bool with_tables(const OptionsModel& model, Build build) {
         std::string why;
         const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
         const std::uint64_t ours = reinterpret_cast<std::uint64_t>(
-            g_split.load(std::memory_order_relaxed) ? g_panel_rows : model.table(menu_tab(t)));
+            g_split.load(std::memory_order_relaxed) ? g_panel_rows : model.game_table(menu_tab(t)));
         if (!g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
             logf(AL_LOG_WARNING, "Mods page: could not point tab %zu at CMFM's tab %zu: %s", t, menu_tab(t),
                  why.c_str());
@@ -352,7 +354,7 @@ void refresh_live_rows(void* unit);
 void poll_key_wait(void* unit);
 void end_key_wait(void* unit, bool set, std::int32_t key, const char* how);
 std::size_t panel_visible();
-std::uint64_t panel_hidden_now();
+RowBits panel_hidden_now();
 void rebuild_panel(void* unit);
 void fill_split_panel(void* unit);
 
@@ -766,19 +768,21 @@ void show_mod_list() {
 
 // ---- Split mode: the panel's window over a long tab ----
 
-// Rows the panel holds: the whole tab, or kPanelRows of it.
+// Rows the panel holds: kPanelRows of the tab with the window, else the whole
+// tab up to the game's 24 row objects (rows past them out of reach then).
 std::size_t panel_visible() {
-    return g_panel_window_on && g_panel_count > kPanelRows ? kPanelRows : g_panel_count;
+    const std::size_t limit = g_panel_window_on ? kPanelRows : kGameRowsPerTab;
+    return g_panel_count > limit ? limit : g_panel_count;
 }
 
 // Which of the highlighted tab's rows are hidden now (their lock, with
 // CMFM_FLAG_HIDE_LOCKED), one bit per row.
-std::uint64_t panel_hidden_now() {
+RowBits panel_hidden_now() {
     const GameOptionRow* rows = menu::service_model().table(g_selected.load(std::memory_order_relaxed));
-    std::uint64_t hidden = 0;
+    RowBits hidden;
     for (std::size_t r = 0; r < kMaxRowsPerTab && rows[r].kind != kRowTableEnd; ++r) {
         if (menu::service_hidden(static_cast<std::uint32_t>(rows[r].setting_id))) {
-            hidden |= std::uint64_t{1} << r;
+            hidden.set(r);
         }
     }
     return hidden;
@@ -798,7 +802,7 @@ void load_panel_rows(std::size_t top, bool recheck = true) {
     std::size_t count = 0;
     std::size_t tab_rows = 0;
     for (; tab_rows < kMaxRowsPerTab && rows[tab_rows].kind != kRowTableEnd; ++tab_rows) {
-        if ((g_panel_hidden >> tab_rows & 1) == 0) {
+        if (!g_panel_hidden.test(tab_rows)) {
             g_panel_shown[count] = static_cast<std::uint8_t>(tab_rows);
             g_panel_selectable[count] =
                 !menu::service_is_section(static_cast<std::uint32_t>(rows[tab_rows].setting_id));

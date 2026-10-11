@@ -46,7 +46,7 @@
  * needed" while one of its changes waits for a game restart. A page with
  * more rows than fit (14) scrolls; keep the important settings near the top.
  * Since 1.2 CMFM ends every page with a "Reset to defaults" row of its own
- * (see CMFM_PAGE_NO_RESET).
+ * (see CMFM_PAGE_NO_RESET), and a page holds up to 64 settings.
  */
 #ifndef CMFM_H
 #define CMFM_H
@@ -136,7 +136,10 @@ typedef uint32_t cmfm_flags_t;
 
 /* Limits of CMFM's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */
-#define CMFM_MAX_SETTINGS 24u /* per page */
+/* Per page, sections included: 64 since 1.2 (24 before; an older CMFM
+ * refuses a longer page with the reason). The game's own Options page, CMFM's
+ * fallback when its Mods page cannot open, shows a page's first 24 rows. */
+#define CMFM_MAX_SETTINGS 64u
 #define CMFM_MAX_CHOICES 32u  /* CHOICE names (and INT/FLOAT values in 1.0) */
 #define CMFM_MAX_STEPS 101u   /* since 1.1: INT/FLOAT values from min to max (the slider's 0-100) */
 #define CMFM_MAX_TEXT 128u    /* bytes CMFM offers get_text, including the NUL */
@@ -207,8 +210,7 @@ typedef uint32_t(CMFM_CALL* cmfm_locked_fn)(void* user, uint32_t id, char* why, 
 /* Since 1.2, page flags. CMFM ends every page that has a BOOL, CHOICE, INT,
  * FLOAT or KEY setting with a "Reset to defaults" row (after the game's Yes/No
  * question it sets each of them to its default_value through `set`, after
- * `validate`; locked and hidden ones too), unless the page already has
- * CMFM_MAX_SETTINGS settings or sets this flag. Setting ids from
+ * `validate`; locked and hidden ones too), unless the page sets this flag. Setting ids from
  * CMFM_RESERVED_IDS up are CMFM's own (the row's); pages may not use them. */
 #define CMFM_PAGE_NO_RESET 0x1u
 #define CMFM_RESERVED_IDS 0xFFFFFF00u

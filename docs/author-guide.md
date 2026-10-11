@@ -37,7 +37,8 @@ if (menu == NULL) {
   always works.
 - **Version:** ask for the version whose features you use: 1.1 is the
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
-  header (rows that hide, live lines, key bindings, CMFM's reset row). Within a major
+  header (rows that hide, live lines, key bindings, CMFM's reset row,
+  pages of up to 64 settings). Within a major
   version CMFM only adds: later CMFMs keep accepting your pages, and an
   older CMFM returns NULL when you ask for more than it has.
 
@@ -129,7 +130,7 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 
 | What | Limit |
 |---|---|
-| settings per page | 1 to 24 (headings count) |
+| settings per page | 1 to 64 (headings count; 24 before 1.2) |
 | plugin name / title / version | 64 / 24 / 24 bytes |
 | label / help | 64 / 200 bytes |
 | CHOICE names | 1 to 32, each 32 bytes at most |
@@ -137,6 +138,7 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 | unit | 8 bytes |
 | BUTTON text / question | 32 / 200 bytes |
 | pages shown | 24 (more are listed on the Overview as not shown) |
+| all pages together | 200 rows, and the game's text ids: about 900 labels and value names (a BOOL uses 3, a CHOICE 1 plus its names, a number 2). Pages that no longer fit are listed on the Overview as not shown |
 
 A page needs at least one setting besides its headings; ids must be unique
 on the page (ids from `CMFM_RESERVED_IDS`, 0xFFFFFF00, are CMFM's); a
@@ -207,7 +209,9 @@ call `add_page`. `get` runs every time a row is drawn.
   "Restart needed" while one of your changes waits for a restart.
 - **The rows**, one per setting, at most 14 at a time; a longer page
   scrolls (keys, mouse wheel, its scrollbar). Keep the important settings
-  near the top and group the rest with headings.
+  near the top and group the rest with headings. (The game's own Options
+  page, CMFM's fallback when the Mods page cannot open, shows only a page's
+  first 24 rows.)
 - **The help line** at the bottom: the row's help, the reason a value was
   refused or a row is locked, the restart note.
 - **Reset to defaults** (since 1.2): CMFM ends your page with a "Reset to
@@ -217,7 +221,7 @@ call `add_page`. `get` runs every time a row is drawn.
   BOOL, CHOICE, INT and FLOAT setting to its `default_value` through
   `validate` and `set`, locked and hidden ones too, so fill your defaults
   carefully. Opt out with `page.flags = CMFM_PAGE_NO_RESET` (for example if
-  you offer your own reset). A page with 24 settings has no room for it.
+  you offer your own reset).
 
 ## 5. Testing
 

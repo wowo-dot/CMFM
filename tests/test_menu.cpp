@@ -64,6 +64,17 @@ cmfm_result_t CMFM_CALL fake_set(void* user, std::uint32_t id, const cmfm_value_
     return CMFM_OK;
 }
 
+// Any id: one value for all (pages with more ids than the fake's slots).
+cmfm_result_t CMFM_CALL fake_get_any(void* user, std::uint32_t, cmfm_value_t* v) {
+    *v = static_cast<Fake*>(user)->values[0];
+    return CMFM_OK;
+}
+
+cmfm_result_t CMFM_CALL fake_set_any(void* user, std::uint32_t, const cmfm_value_t* v) {
+    static_cast<Fake*>(user)->values[0] = *v;
+    return CMFM_OK;
+}
+
 // "Gamma" (index 2) only while the toggle is on.
 cmfm_result_t CMFM_CALL fake_validate(void* user, std::uint32_t id, const cmfm_value_t* v, char* why,
                                       std::uint32_t why_size) {
@@ -457,8 +468,9 @@ void drops_pages_that_do_not_fit() {
     static const char* const names[CMFM_MAX_CHOICES] = {
         "c0",  "c1",  "c2",  "c3",  "c4",  "c5",  "c6",  "c7",  "c8",  "c9",  "c10", "c11", "c12", "c13", "c14", "c15",
         "c16", "c17", "c18", "c19", "c20", "c21", "c22", "c23", "c24", "c25", "c26", "c27", "c28", "c29", "c30", "c31"};
-    static cmfm_setting_t big[CMFM_MAX_SETTINGS];
-    for (std::uint32_t i = 0; i < CMFM_MAX_SETTINGS; ++i) {
+    constexpr std::uint32_t kBig = 24;
+    static cmfm_setting_t big[kBig];
+    for (std::uint32_t i = 0; i < kBig; ++i) {
         big[i] = setting(i, CMFM_TYPE_CHOICE, "Big");
         big[i].choices = names;
         big[i].choice_count = CMFM_MAX_CHOICES;
@@ -470,7 +482,7 @@ void drops_pages_that_do_not_fit() {
         page.plugin = "big";
         page.title = "Big";
         page.settings = big;
-        page.setting_count = CMFM_MAX_SETTINGS;
+        page.setting_count = kBig;
         page.user = &f;
         page.get = fake_get;
         page.set = fake_set;
@@ -901,6 +913,34 @@ void rereads_live_lines() {
     check(!m.reread_text(id(toggle)), "other rows are never reread");
 }
 
+void holds_long_pages() {
+    static OptionsModel model;
+    static Fake f;
+    static cmfm_setting_t s[CMFM_MAX_SETTINGS + 1];
+    for (std::uint32_t i = 0; i <= CMFM_MAX_SETTINGS; ++i) {
+        s[i] = setting(1000 + i, i % 16 == 0 ? CMFM_TYPE_SECTION : CMFM_TYPE_BOOL, i == 63 ? "Last" : "Row");
+    }
+    cmfm_page_t page = demo_page(&f, "Long").page;
+    page.get = fake_get_any;
+    page.set = fake_set_any;
+    page.settings = s;
+    page.setting_count = CMFM_MAX_SETTINGS + 1;
+    check(refused(page, "needs 1 to 64 settings"), "65 settings refused");
+    page.setting_count = CMFM_MAX_SETTINGS;
+    Menu m;
+    check(add(m, page), "a page of 64 settings");
+    std::string why;
+    check(m.build(model, why) && model.tab_rows(1) == CMFM_MAX_SETTINGS + 1, "laid out with its reset row");
+    const native::GameOptionRow* last = &model.table(1)[CMFM_MAX_SETTINGS - 1];
+    const native::GameOptionRow* reset = &model.table(1)[CMFM_MAX_SETTINGS];
+    check(same(model.label_text(static_cast<std::uint32_t>(last->label_id)), "Last") && m.is_plain_button(id(reset)),
+          "the 64th setting, then the reset row");
+    m.refresh();
+    check(m.set(id(last), 1) && f.values[0].i == 1, "the 64th setting set through the page");
+    check(model.game_table(1)[native::kGameRowsPerTab].kind == native::kRowTableEnd,
+          "the game's own view gets the first 24 rows");
+}
+
 bool layout_char(std::uint32_t vk, char* out, std::size_t size) {
     const char* c = vk == 0xBA ? "\xC5\x9F" : vk == 0xE2 ? "<" : nullptr;  // a Turkish layout's s-cedilla
     if (c == nullptr) {
@@ -1052,6 +1092,7 @@ int main() {
     resets_a_page();
     names_keys();
     binds_keys();
+    holds_long_pages();
     rereads_live_lines();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");

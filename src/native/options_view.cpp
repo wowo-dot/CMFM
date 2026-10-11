@@ -257,7 +257,12 @@ bool options_view_enter() {
     std::string why;
     for (std::size_t t = 0; t < kTabCount; ++t) {
         const std::uint64_t expected = g_env.base + game::kRvaOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model->table(t));
+        // The game's tab holds 24 rows; a longer page shows its first 24 here.
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model->game_table(t));
+        if (model->tab_rows(t) > kGameRowsPerTab) {
+            logf(AL_LOG_INFO, "options view: tab %zu shows the first %zu of its %zu rows (the Mods page shows all)", t,
+                 kGameRowsPerTab, model->tab_rows(t));
+        }
         if (!g_tabs[t].apply("Options tab", tab_slot(t), expected, ours, why)) {
             for (std::size_t u = 0; u < t; ++u) {
                 std::string ignored;

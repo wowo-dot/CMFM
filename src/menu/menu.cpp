@@ -11,6 +11,9 @@
 
 namespace cmfm::menu {
 
+// A page's settings and CMFM's reset row fit one tab of the model.
+static_assert(CMFM_MAX_SETTINGS + 1 <= native::kMaxRowsPerTab);
+
 namespace {
 
 constexpr char kRestartNote[] = "Takes effect after restarting the game.";
@@ -253,7 +256,7 @@ bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
         return false;
     }
     if (page->settings == nullptr || page->setting_count == 0 || page->setting_count > CMFM_MAX_SETTINGS) {
-        why = "needs 1 to 24 settings";
+        why = "needs 1 to 64 settings";
         return false;
     }
     const std::uint32_t stride = page->settings[0].size;
@@ -356,7 +359,7 @@ void Menu::add(Page page) {
     for (const Setting& s : page.settings) {
         resettable = resettable || resettable_type(s.type);
     }
-    if (resettable && (page.flags & CMFM_PAGE_NO_RESET) == 0 && page.settings.size() < CMFM_MAX_SETTINGS) {
+    if (resettable && (page.flags & CMFM_PAGE_NO_RESET) == 0) {
         Setting reset;
         reset.id = kResetId;
         reset.type = CMFM_TYPE_BUTTON;
@@ -381,7 +384,7 @@ void Menu::add_refused(std::string plugin, std::string why) {
 
 void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     // Status rows: CMFM itself, one per add_page call (at most 23 rows).
-    constexpr std::size_t kStatusRows = native::kMaxRowsPerTab;
+    constexpr std::size_t kStatusRows = native::kGameRowsPerTab;  // the Overview shows whole in every view
     std::size_t entry_rows = entries_.empty() ? 1 : entries_.size();
     const bool more = entry_rows > kStatusRows - 1;
     if (more) {

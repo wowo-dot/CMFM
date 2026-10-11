@@ -57,7 +57,13 @@ inline constexpr std::uint32_t kHelpIdLimit = 9996;
 
 inline constexpr std::size_t kTabCount = 5;        // the in-game Options page has 5 fixed tabs
 inline constexpr std::size_t kMaxTabs = 25;        // the title page scrolls through more
-inline constexpr std::size_t kMaxRowsPerTab = 24;  // the title Options page holds 24 rows per tab
+// The game's tab object holds 24 rows: what the views that show a tab whole
+// (the game's Options page, CMFM's page without its own layout) can show.
+inline constexpr std::size_t kGameRowsPerTab = 24;
+// A tab in CMFM's model: a page of 64 settings (CMFM_MAX_SETTINGS) and its
+// reset row. CMFM's Mods page shows them through its panel window
+// (native/panel_window.hpp), 14 at a time.
+inline constexpr std::size_t kMaxRowsPerTab = 65;
 inline constexpr std::size_t kMaxRows = 200;       // setting ids 100-299
 inline constexpr std::size_t kMaxValues = 32;
 // Rows whose values share one text (numbers, as CMFM writes the current
@@ -104,6 +110,10 @@ public:
 
     // The game-format table for a tab, ended by a row with kind -1.
     const GameOptionRow* table(std::size_t tab) const { return tables_[tab]; }
+    // The same, cut after kGameRowsPerTab rows, for views that show a tab
+    // whole; and how many rows the tab has.
+    const GameOptionRow* game_table(std::size_t tab) const { return game_tables_[tab]; }
+    std::size_t tab_rows(std::size_t tab) const { return tab < tab_count_ ? tab_rows_[tab] : 0; }
 
     // Texts by message file and id; nullptr if the id is not ours.
     const char* label_text(std::uint32_t id) const;  // file 12, labels and values
@@ -134,8 +144,11 @@ private:
     std::size_t count_ = 0;
     std::uint32_t label_end_ = kLabelIdFirst;
     std::uint32_t help_end_ = kHelpIdFirst;
-    // Per tab: its rows plus the end row.
+    // Per tab: its rows plus the end row; the first kGameRowsPerTab of them
+    // plus the end row; the row count.
     GameOptionRow tables_[kMaxTabs][kMaxRowsPerTab + 1] = {};
+    GameOptionRow game_tables_[kMaxTabs][kGameRowsPerTab + 1] = {};
+    std::size_t tab_rows_[kMaxTabs] = {};
     // The shared rows' per-value tables, kMaxSharedValues entries each
     // (sized once per build: the tables point into it).
     std::vector<GameValueText> shared_values_;

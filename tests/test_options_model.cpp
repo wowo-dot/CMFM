@@ -103,13 +103,24 @@ void rejects_bad_rows() {
     const RowSpec bad_free = {"x", "", kOnOff, 0, 0};
     check(!m.build("Mods", kTabs, kTabCount, kRows, 3, bad_free, why), "invalid placeholder");
     check(m.build("Mods", kTabs, kTabCount, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
-    // The title Options page holds 24 rows per tab.
-    RowSpec many[kMaxRowsPerTab + 1];
-    for (RowSpec& s : many) {
-        s = {"x", "", kOnOff, 2, 0};
+    // A tab holds a page of 64 settings and its reset row; the views that show
+    // a tab whole get its first 24 rows.
+    static RowSpec many[kMaxRowsPerTab + 1];
+    static const char* const labels[] = {"first", "x", "24th", "25th"};
+    for (std::size_t r = 0; r <= kMaxRowsPerTab; ++r) {
+        many[r] = {r == 0 ? labels[0] : r == kGameRowsPerTab - 1 ? labels[2] : r == kGameRowsPerTab ? labels[3] : labels[1],
+                   "", kOnOff, 2, 0};
     }
-    check(m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
-    check(!m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+    check(m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab, kFree, why) && m.tab_rows(0) == kMaxRowsPerTab,
+          "65 rows on one tab");
+    check(m.table(0)[kGameRowsPerTab].kind == kCmfmRowKind && m.table(0)[kMaxRowsPerTab].kind == kRowTableEnd,
+          "the whole tab in its table");
+    check(m.game_table(0)[kGameRowsPerTab].kind == kRowTableEnd &&
+              same(m.label_text(static_cast<std::uint32_t>(m.game_table(0)[kGameRowsPerTab - 1].label_id)), "24th") &&
+              m.game_table(0)[0].setting_id == m.table(0)[0].setting_id,
+          "the game's table: the first 24 rows");
+    check(m.game_table(1)[1].kind == kRowTableEnd && m.tab_rows(1) == 1, "a short tab whole in both");
+    check(!m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab + 1, kFree, why), "66 rows on one tab refused");
 }
 
 void builds_more_tabs() {
@@ -137,12 +148,13 @@ void runs_out_of_text_ids() {
     for (const char*& v : values) {
         v = "v";
     }
-    static RowSpec rows[4 * kMaxRowsPerTab];
-    for (std::size_t i = 0; i < 4 * kMaxRowsPerTab; ++i) {
-        rows[i] = {"x", "", values, static_cast<std::uint32_t>(kMaxValues), static_cast<std::uint32_t>(1 + i / kMaxRowsPerTab)};
+    constexpr std::size_t kRowsEach = 24;
+    static RowSpec rows[4 * kRowsEach];
+    for (std::size_t i = 0; i < 4 * kRowsEach; ++i) {
+        rows[i] = {"x", "", values, static_cast<std::uint32_t>(kMaxValues), static_cast<std::uint32_t>(1 + i / kRowsEach)};
     }
     const char* why = nullptr;
-    check(!m.build("Mods", kTabs, kTabCount, rows, 4 * kMaxRowsPerTab, kFree, why) && same(why, "text ids exhausted"),
+    check(!m.build("Mods", kTabs, kTabCount, rows, 4 * kRowsEach, kFree, why) && same(why, "text ids exhausted"),
           "text ids exhausted");
     check(m.row_count() == 0 && m.source(100) == OptionsModel::kNotOurs, "a failed build leaves no rows");
 }

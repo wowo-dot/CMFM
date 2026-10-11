@@ -85,8 +85,14 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    overlaps it (named in the help line). The value is what Astera Loader's
    hotkeys take, so a mod passes it straight on (MCM: key maps with conflict
    detection, its most used feature). Keyboard first; pad bindings later.
-5. **More settings per page.** The panel scrolls, so a page may hold more
-   than 24 rows (the limit to check against the text-id budget).
+5. **More settings per page.** Built, awaiting its test (run `rows-1`).
+   64 settings per page (`CMFM_MAX_SETTINGS`), and the reset row always fits
+   on top. The game's tab object holds 24 rows, but CMFM's panel window gives
+   the game only the 14 rows it shows; the two views that show a tab whole
+   (the game's Options page fallback, CMFM's page without its own layout) get
+   a table cut at 24 rows. Still shared by all pages: 200 rows and about 900
+   label/value text ids (pages that no longer fit are listed as not shown);
+   lifting those is a later step if mods need it.
 
 ## Then: config pages without code (1.3, its own design first)
 

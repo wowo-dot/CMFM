@@ -116,6 +116,12 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t ta
             return false;
         }
         tables_[t][per_tab[t]] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
+        const std::size_t game_rows = per_tab[t] < kGameRowsPerTab ? per_tab[t] : kGameRowsPerTab;
+        for (std::size_t r = 0; r < game_rows; ++r) {
+            game_tables_[t][r] = tables_[t][r];
+        }
+        game_tables_[t][game_rows] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
+        tab_rows_[t] = per_tab[t];
     }
     count_ = row;
     label_end_ = label;

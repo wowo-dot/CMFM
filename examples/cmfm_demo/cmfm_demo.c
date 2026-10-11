@@ -7,7 +7,7 @@
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
  * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
- * of a long list of mods); the first of them is a long page of 24 rows, the
+ * of a long list of mods); the first of them is a long page of 64 rows, the
  * second holds a key binding that overlaps the demo's hotkey (F5 against
  * Ctrl+F5), so CMFM marks both.
  *
@@ -267,16 +267,11 @@ static void CMFM_CALL demo_event(void* user, cmfm_event_t event) {
 }
 
 /* ---- The extra test pages: one toggle each; `user` is the page number ---- */
-/* The first one is a long page instead: CMFM_MAX_SETTINGS rows (CMFM's tests
- * of a page taller than the panel). */
+/* The first one is a long page instead: CMFM_MAX_SETTINGS rows (64 since
+ * cmfm.menu 1.2), four sections of 15 toggles (CMFM's tests of a page taller
+ * than the panel and of the longest page). */
 
 static int g_long[CMFM_MAX_SETTINGS];
-static const char* const kLongLabels[CMFM_MAX_SETTINGS] = {
-    "Long toggle 1",  "Long toggle 2",  "Long toggle 3",  "Long toggle 4",  "Long toggle 5",
-    "Long toggle 6",  "Long toggle 7",  "Long toggle 8",  "Long toggle 9",  "Long toggle 10",
-    "Long toggle 11", "Long toggle 12", "Long toggle 13", "Long toggle 14", "Long toggle 15",
-    "Long toggle 16", "Long toggle 17", "Long toggle 18", "Long toggle 19", "Long toggle 20",
-    "Long toggle 21", "Long toggle 22", "Long toggle 23", "Long toggle 24 (the last row)"};
 
 static cmfm_result_t CMFM_CALL extra_get(void* user, uint32_t id, cmfm_value_t* value) {
     if ((intptr_t)user == 1) {
@@ -298,6 +293,7 @@ static cmfm_result_t CMFM_CALL extra_set(void* user, uint32_t id, const cmfm_val
 
 static void add_extra_pages(const cmfm_menu_t* menu) {
     cmfm_setting_t s[CMFM_MAX_SETTINGS];
+    static char labels[CMFM_MAX_SETTINGS][40]; /* CMFM copies them in add_page */
     cmfm_page_t page;
     char title[24];
     char why[200];
@@ -308,8 +304,19 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
             s[i].size = sizeof s[i];
             s[i].id = i + 1;
             s[i].type = CMFM_TYPE_BOOL;
-            s[i].label = n == 1 ? kLongLabels[i] : "Extra toggle";
-            s[i].help = n == 1 ? "A test page taller than the panel." : "A test page for CMFM's list of mods.";
+            s[i].label = "Extra toggle";
+            s[i].help = "A test page for CMFM's list of mods.";
+            if (n == 1 && i % 16 == 0) {
+                snprintf(labels[i], sizeof labels[i], "Group %u", i / 16 + 1);
+                s[i].type = CMFM_TYPE_SECTION;
+                s[i].label = labels[i];
+                s[i].help = NULL;
+            } else if (n == 1) {
+                snprintf(labels[i], sizeof labels[i], "Long toggle %u%s", i - i / 16,
+                         i == count - 1 ? " (the last row)" : "");
+                s[i].label = labels[i];
+                s[i].help = "A test page of 64 rows, the most a page holds (since 1.2).";
+            }
         }
         if (n == 2) { /* a key binding as another mod's: F5 overlaps the demo's Ctrl+F5 */
             s[0].type = CMFM_TYPE_KEY;
