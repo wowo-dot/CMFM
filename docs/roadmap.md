@@ -21,7 +21,7 @@ each part works go into `docs/research/native-menu.md`.
 - The in-game Start menu path with all of the above (run
   `20261011-startmenu-1`).
 
-## Next: the rest of the first draft (agreed 2026-10-11)
+## The rest of the first draft (agreed 2026-10-11): done
 
 5. **Scrollbars, for the mod list and the panel.** Done (tag
    `design-step-5`, run `scrollbar-2`).
@@ -39,16 +39,23 @@ each part works go into `docs/research/native-menu.md`.
    - 5d. Done (commits 93bbd30, 5ebcaea): each bar follows its list's
      window, shows only while the list scrolls, and its thumb can be dragged
      (the user asked for it). The draft's "2 more" line is dropped.
-6. **The mod's own header** on the right panel: its name, version and state
-   ("active", "restart needed"), placed so it does not sit on the first
-   row's line (why the panel title was dropped). The version: a new optional
-   page field while 1.1 is unreleased, or an AL request for other plugins'
-   versions (AL has no such service yet).
-7. **The slider's number** next to the slider (the draft's "0.35").
+6. **The mod's own header** above the panel. Done (tag `design-step-6`, run
+   `header-1`): the page's title, its version (a new optional page field,
+   cmfm.menu 1.1) and a yellow "Restart needed" while a change waits;
+   centred under "Mods", level with the restart line. "Active" is left out
+   (every listed mod is active). An AL service for other plugins' versions
+   remains a candidate request.
+7. **The slider's number** next to the slider: there since design step 2
+   (the value beside the bar). **Fine sliders** added on the user's
+   question (tag `fine-sliders-1`, runs `fineslider-1` to `-3`): INT/FLOAT
+   up to 101 values (0 to 100 in steps of 1), one shared value text per
+   number row, knobs placed exactly, equal zones per value.
 8. ~~The gear next to "Mods"~~: already there (the game's own header art,
    seen in run `20261011-longpage-1`).
 
-## After that
+The first draft is complete.
+
+## Next
 
 - Choice lists longer than 14 entries: a scrolling pick list (arrows today).
 - The author guide and the handoff to the DLSS mod (its five settings).

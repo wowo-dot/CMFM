@@ -1034,6 +1034,35 @@ study afterwards):**
   cursor handler when it has the focus); otherwise the thumb is put back on
   whole rows. The bars' own wheel is off (+0x262 = 0).
 
+**The mod's header (design step 6, run `header-1`):** only `initCategory`
+(`sub_141E8DFE0`, the one user of the string `msg_sub_title`) writes the
+panel titles' text, on every fill; CMFM's layout switches the audio panel's
+title on and moves it above the panel, and CMFM writes the header after
+each fill, on open and when a restart state changes.
+
+**Fine sliders (runs `fineslider-1` to `-3`):**
+- Per-value texts: a row's `values` pointer (+32) is a table of 16-byte
+  entries `{text id, text id, help id, help file}`. The value's text id is
+  entry +4 (or +0 when -1), else `label_id + 1 + value` (`sub_140EEA620`);
+  for rows without +84/+85 the help is entry +8/+12, else `help_id + value +
+  1` (`sub_140EEB160`); slider and list rows use the row's help
+  (`sub_141E8EA70`). CMFM's number rows share one text (the current value,
+  written on every read and change) through a 101-entry table: the text
+  filler reads a slider row's text at its 0-100 getter value.
+- The slider's set-position (`sub_140B8ABC0`) puts the knob on step
+  `floor(steps * position)` and stores it in the step counter +1704; the
+  keys (`sub_140B8A5E0`) move that counter one step at a time (thresholds in
+  `range / (steps + 1)`); a drag (`sub_140B8ADB0`) moves the knob only. The
+  game's slider-from-setting passes `getter * 0.01` (99 * 0.01 -> 98.99999 ->
+  step 98) on every tab refresh, and its per-frame sync (`sub_140EEB860`)
+  sets `ceil(position * 100)`; with 100 steps both can be a step off.
+- CMFM: knobs placed with `(index + 0.5) / steps` after every refresh (from
+  the row looks, before the sync) and after a drag, also when +1704 is
+  stale; a knob's value is its zone of the track (steps + 1 equal zones,
+  the ends included), read by the option setter instead of the game's
+  number, which is kept with the value it meant so the game does not set it
+  again every frame.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
