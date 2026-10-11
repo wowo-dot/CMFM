@@ -1085,8 +1085,8 @@ each fill, on open and when a restart state changes.
 **Centred labels (plain button rows, run `plain-1`; static):**
 - The game's "Advanced Graphics Settings" row is a label alone: no value
   box, the row itself takes Confirm. CMFM draws its reset row that way: the
-  value box hidden as for headings, the label centred and light blue
-  (`<STYL MOJI_LIGHTBLUE_DEFAULT>`). Section headings are centred the same
+  value box hidden as for headings, the label centred and red
+  (`<STYL MOJI_RED_DEFAULT>`; light blue in run `plain-1`). Section headings are centred the same
   way (yellow, the cursor skips them; run `plain-2`).
 - Text parts are `cGUIObjMessage` (property list `0x14233A920`, getters and
   setters plain field accesses): +232 `FontStyleId`, +236 `Color`, +248

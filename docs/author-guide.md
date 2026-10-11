@@ -198,7 +198,7 @@ call `add_page`. `get` runs every time a row is drawn.
   refused or a row is locked, the restart note.
 - **Reset to defaults** (since 1.2): CMFM ends your page with a "Reset to
   defaults" row of its own, drawn like the game's "Advanced Graphics
-  Settings" row (the label alone, centred, light blue; no value box). After
+  Settings" row (the label alone, centred, red; no value box). After
   the game's Yes/No question it sets every
   BOOL, CHOICE, INT and FLOAT setting to its `default_value` through
   `validate` and `set`, locked and hidden ones too, so fill your defaults

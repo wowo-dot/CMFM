@@ -821,7 +821,7 @@ void resets_a_page() {
     std::string why;
     m.build(model, why);
     const native::GameOptionRow* reset =
-        find(model, 1, "<STYL MOJI_LIGHTBLUE_DEFAULT>Reset to defaults</STYL>");
+        find(model, 1, "<STYL MOJI_RED_DEFAULT>Reset to defaults</STYL>");
     check(reset != nullptr && m.is_button(id(reset)), "CMFM's reset row ends the page");
     check(reset != nullptr && m.is_plain_button(id(reset)), "drawn as a plain button");
     check(!m.is_plain_button(id(find(model, 1, "Toggle"))), "other rows are not");
@@ -854,7 +854,7 @@ void resets_a_page() {
     Menu m2;
     add(m2, page_of(no));
     m2.build(model, why);
-    check(find(model, 1, "<STYL MOJI_LIGHTBLUE_DEFAULT>Reset to defaults</STYL>") == nullptr,
+    check(find(model, 1, "<STYL MOJI_RED_DEFAULT>Reset to defaults</STYL>") == nullptr,
           "CMFM_PAGE_NO_RESET: no reset row");
 
     Demo bad = demo_page(&f);

@@ -22,7 +22,7 @@ constexpr std::size_t kSettingSize10 = offsetof(cmfm_setting_t, button);
 constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
 constexpr char kSectionEnd[] = "</STYL>";
 // Plain buttons (Menu::is_plain_button): the label in its own colour.
-constexpr char kPlainButtonStart[] = "<STYL MOJI_LIGHTBLUE_DEFAULT>";
+constexpr char kPlainButtonStart[] = "<STYL MOJI_RED_DEFAULT>";
 const char* const kOffOn[] = {"Off", "On"};
 const char* const kDash[] = {"-"};
 const char* const kNoValue[] = {""};

@@ -70,7 +70,7 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
 2. **Reset to defaults per mod.** Done (tag `reset-defaults-1`, run
    `reset-1`; it resets locked and hidden settings too). Since run
    `plain-1` the row looks like the game's "Advanced Graphics Settings"
-   row: its label alone, centred and light blue. A "Reset to defaults" row CMFM adds at the
+   row: its label alone, centred and red; headings are centred too. A "Reset to defaults" row CMFM adds at the
    end of every page (with the game's Yes/No question), restoring every
    setting's `default_value` through `set`; a page can opt out. Today each
    author has to build a Reset button (MCM: the Default key).
