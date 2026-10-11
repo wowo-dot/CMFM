@@ -101,6 +101,7 @@ std::atomic<void*> g_mod_list{nullptr};  // while the page shows CMFM's menu
 std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
 std::size_t g_mod_top = 0;               // the first tab in the mod list's window
 std::uint32_t g_restart_seen = 0;        // the menu's restart revision the page shows
+std::int32_t g_decorated_focus = -1;     // the page's focus when the panel was last decorated
 char g_panel_title[160];
 char g_restart_line[96];
 
@@ -453,7 +454,19 @@ std::uint64_t page_update(void* unit) {
             scroll_to(unit, static_cast<std::size_t>(next));
         }
     }
-    return page_next(game::kSlotUpdate)(unit);
+    const std::uint64_t result = page_next(game::kSlotUpdate)(unit);
+    // A focus change (keys, clicks, the mouse above, or the game's own update)
+    // activates or deactivates the panel, and the game then shows or hides
+    // the rows' parts again by its own rules (tab setActive, RVA 0x1E8C530):
+    // CMFM's headings and restart marks are redone on the same frame.
+    if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
+        const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+        if (focus != g_decorated_focus) {
+            g_decorated_focus = focus;
+            decorate_panel(unit);
+        }
+    }
+    return result;
 }
 
 void start_window(void* unit, void* categories) {
@@ -762,6 +775,7 @@ std::uint64_t page_open(void* unit) {
                              static_cast<std::int32_t>(game::kSplitPanel));
         show_mod_list();
         g_restart_seen = menu::service_restart_revision();
+        g_decorated_focus = field<std::int32_t>(unit, game::kOptFocus);
         decorate_panel(unit);
         show_restart_line(unit);
         request_split_help(unit);
