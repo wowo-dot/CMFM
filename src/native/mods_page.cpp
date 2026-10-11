@@ -244,7 +244,9 @@ bool with_tables(const OptionsModel& model, Build build) {
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
 bool split_view();
 void select_tab(void* unit, std::size_t index);
-void decorate_panel(void* unit);
+// looks_cursor: the cursor row the row looks were given (the list stores a
+// moved cursor only after its cursor callback); -1: the list's.
+void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
 void show_restart_line(void* unit);
 void request_split_help(void* unit);
 void update_sliders(void* unit);
@@ -707,12 +709,16 @@ void update_sliders(void* unit) {
 // headings the cursor skips (the row's "selectable" flag off, as the list's
 // moves and hover test it) and without a value box, and the restart mark
 // (the row's star icon) on settings waiting for a restart.
-void decorate_panel(void* unit) {
+void decorate_panel(void* unit, std::int32_t looks_cursor) {
     char* tab = tab_object(unit, game::kSplitPanel);
     void* list = field<void*>(tab, game::kTabList);
     if (list == nullptr) {
         return;
     }
+    // A moved cursor reaches the row looks before the list stores it (run
+    // 20261011-picklist-2: the pick list showed one row off).
+    const std::uint32_t cursor =
+        looks_cursor >= 0 ? static_cast<std::uint32_t>(looks_cursor) : field<std::uint32_t>(list, game::kListCursor);
     const OptionsModel& model = menu::service_model();
     const std::size_t selected = g_selected.load(std::memory_order_relaxed);
     const GameOptionRow* rows = model.table(selected);
@@ -720,9 +726,7 @@ void decorate_panel(void* unit) {
     std::int32_t first = -1;  // the first row the cursor may take
     std::uint32_t known = 0;  // rows with a table entry
     // The row the panel's cursor is on, while the panel has the focus.
-    const std::uint32_t active_row = field<std::int32_t>(unit, game::kOptFocus) == 1
-                                         ? field<std::uint32_t>(list, game::kListCursor)
-                                         : 0xFFFFFFFFu;
+    const std::uint32_t active_row = field<std::int32_t>(unit, game::kOptFocus) == 1 ? cursor : 0xFFFFFFFFu;
     g_slider_count = 0;
     g_value_seen = menu::service_value_revision();
     for (std::uint32_t r = 0; r < count && rows[r].kind != kRowTableEnd; ++r) {
@@ -752,8 +756,8 @@ void decorate_panel(void* unit) {
         }
     }
     if (first >= 0) {
-        const std::uint32_t cursor = field<std::uint32_t>(list, game::kListCursor);
-        if (cursor < known && menu::service_is_section(static_cast<std::uint32_t>(rows[cursor].setting_id))) {
+        if (looks_cursor < 0 && cursor < known &&
+            menu::service_is_section(static_cast<std::uint32_t>(rows[cursor].setting_id))) {
             gui_set_cursor(list, static_cast<std::uint32_t>(first));
         }
         field<std::int32_t>(list, game::kListStartRow) = first;
@@ -761,7 +765,6 @@ void decorate_panel(void* unit) {
     // The row looks' rule for a cursor row that opens a list (sub_141E8E600;
     // on a fresh fill they ran before the pick rows were flagged): Confirm on,
     // arrows off, and its list shown while the panel or the list has the focus.
-    const std::uint32_t cursor = field<std::uint32_t>(list, game::kListCursor);
     if (cursor < known && field<std::uint8_t>(tab + (cursor + 1) * game::kRowObjectSize, game::kRowOpensList) != 0) {
         field<std::uint8_t>(list, game::kListTakesConfirm) = 1;
         if (void* arrows = field<void*>(tab, game::kTabNumInput)) {
@@ -972,7 +975,7 @@ std::uint64_t row_looks_detour(void* tab, std::uint32_t cursor) {
     const std::uint64_t result = g_row_looks_next(tab, cursor);
     void* unit = g_view_unit.load(std::memory_order_acquire);
     if (unit != nullptr && split_view() && tab == tab_object(unit, game::kSplitPanel)) {
-        decorate_panel(unit);
+        decorate_panel(unit, static_cast<std::int32_t>(cursor));
     }
     return result;
 }
