@@ -201,11 +201,69 @@ Layout elements can also be found by name: `uGUI::getInstanceFromName(gui,
 Each step needs checking in the running game first (with Frida, read-only
 logging on functions we already know, after the user's OK).
 
+## Live checks (run `local/runs/20261011-gui-inspect`, read-only)
+
+Confirmed in the running game with `tools/re/gui_inspect.py`:
+
+- The registry groups and live unit list are where the static study put
+  them. Group 1 (menus) does not exist at the title screen; in Astera the
+  Start menu and `uGUIMenuOption` are alive while closed. Opening a menu
+  creates nothing; it flips the unit's state word (`+8856`, low byte `c9`
+  shown, `ca` hidden).
+- Start menu labels are message category 11. The System tab is items 71
+  Options, 10 View Mode, 72 Steam Store, 73 Save, 74 Return to Title, 75 Quit
+  Game. **Item 71 opens `uGUIMenuOption`, which is the in-game Options
+  page** (not a HUD page); its modes are 0 Options, 1 Auto Accept & Reply,
+  2 Squad Settings, 3 Recipient Settings.
+- In Options (mode 0) the setting-name list (`+10504`) and the value list
+  (`+10608`) have 10 rows each (`DuplicateNum` 10); the 5 tab icons are a
+  fixed 5-row list (`+10528`). Long tabs show pages of 10 ("1/2").
+  Switching tabs changes no unit and no list size.
+
+## The Options row tables (confirmed, static and live)
+
+`uGUIMenuOption::fillTabPage(page, tab, pageIndex)` (0x141E82780) sets the
+tab title (message category 12, id `tab + 1`), picks the tab's row table
+and copies the visible rows of the current page (10 per page) into
+`this+10664`:
+
+- **`OptionTabTables` (0x143FBFE90, in `.data`, writable):** 7 pointers;
+  [0..4] the five tabs of mode 0 (Game Settings, Controls, Camera, Display,
+  Audio), [5..6] the Accept / Reply tables of mode 1. Modes 2 and 3 use
+  fixed tables (0x1431BE438, 0x1431BE848).
+- **Row** (`cmfm_OptionRow` in IDA, 40 bytes): `int kind; int labelId; int
+  flag; int helpCat; int helpId; int settingId; int valueCount; int pad;
+  const int* valueLabels;`. `kind` -1 ends a table. Texts are category 12
+  (ids above 10000 are category 23, as in `GetGameMessage`); help texts are
+  `helpCat`/`helpId` (18, 21 or 23). Without `valueLabels`, value texts are
+  `labelId + 1 …`; some PC rows use a value-array format not decoded yet.
+- **`kind` = where the setting lives** (from the live map): 0 game options
+  (Autosave 12, HUD Display 129, Minimap 0, Damage Indicators 30, …), 1
+  system settings (subtitles, volumes, brightness), 2 PC graphics settings
+  (the Display tab). Rows with no values are sliders or open a page of
+  their own (HUD Display 129, Keyboard Settings 130, Graphics Settings).
+- `OptionRow_isVisible` (0x140EEB090) hides rows per platform or state.
+- Tab sizes: 17, 16, 24, 18, 9 rows. The full map with names and values is
+  `local/runs/20261011-gui-inspect/option_rows.txt`.
+
+**Consequences:**
+
+- **A "Mods" row** needs no code patch to appear: point one tab's entry in
+  `OptionTabTables` at our own copy of its table with one extra row (and put
+  the original pointer back on unload). Its text and its action (opening
+  our page, like HUD Display does) still need the decide path traced.
+- **The DLSS mod's AA lockout:** the Display tab (table 3) holds
+  "NVIDIA DLSS" (row 9, kind 2 setting 2), "DLSS Sharpness" (10, setting 3),
+  "FidelityFX CAS + Upscaling" (11, setting 13) and "FidelityFX Sharpness"
+  (12, setting 14). The same table swap can hide or mark them while the mod
+  owns AA.
+
 ## Answers so far
 
-1. **Can CMFM add a row or a page?** Rows: yes in principle; the game resizes
-   lists at runtime. A page: the registry, creation and open path are known
-   (see above); a page of our own looks possible but is not tested.
+1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
+   through the writable `OptionTabTables` (no code patch); the visible list
+   pages through the table itself. A page: the registry, creation and open
+   path are known; a page of our own looks possible but is not tested.
 2. **Can CMFM show its own text?** Yes in principle: `formatText` takes any
    string.
 3. **Can CMFM see value changes?** Probably, through the list callbacks; not
