@@ -388,6 +388,14 @@ inline constexpr std::size_t kRowObjectUnit = 8;     // a panel row object's pag
 inline constexpr std::size_t kRowOpensList = 85;     // byte: Confirm opens a sub-window
 inline constexpr std::size_t kListTakesConfirm = 375;  // byte on a list: Confirm decides
 inline constexpr std::size_t kTabNumInput = 72;      // num_input_<tab>: the arrows over the cursor row
+// The arrows (cGUIInstChangeNumInput) keep a value of their own: a press sends
+// it plus or minus one to the option setter (sub_141E89EA0). The row looks set
+// the count from the row (sub_140B82900) but the value (this function,
+// value(arrows, value) at RVA 0xB82890) only for the game's own kind-1 ids
+// below 32, so CMFM sets it for its rows (run 20261012-hide-1: after a panel
+// refill the arrows never reached value 0).
+inline constexpr char kArrowValuePattern[] =
+    "48 83 EC 38 44 0F B6 81 58 02 00 00 45 33 C9 C7 81 40 02 00 00 FF FF FF FF C6 44 24 20 00 E8";
 inline constexpr char kPickText[] = "msg_language";
 inline constexpr char kPickCheck[] = "checkMark";
 

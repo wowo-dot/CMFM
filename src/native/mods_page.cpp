@@ -49,6 +49,7 @@ using DefaultAnswerFn = void (*)(void* const* capture, std::uint32_t unknown, st
 using RowTextFn = void (*)(void* row, void* label, void* value, const GameOptionRow* entry);
 using ScrollMouseFn = std::uint8_t (*)(void* bar);
 using TabCursorFn = std::uint64_t (*)(void* tab, void* list, std::int32_t row);
+using ArrowValueFn = std::uint64_t (*)(void* arrows, std::int32_t value);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -128,6 +129,9 @@ bool g_panel_window_on = false;
 RowTextFn g_row_text = nullptr;
 // The scroll bars' mouse (optional: without it the bars only show).
 ScrollMouseFn g_scroll_mouse = nullptr;
+// The arrows' own value (optional: without it a press starts from the value
+// the arrows last held).
+ArrowValueFn g_arrow_value = nullptr;
 
 // The split panel's window over the highlighted tab's rows
 // (native/panel_window.hpp): the rows the panel holds (the game keeps
@@ -1382,6 +1386,18 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
             show_pick_list(unit, rows[cursor]);
         }
     }
+    // The arrows over the cursor row start from its value (the game's row
+    // looks set it only for its own rows).
+    if (g_arrow_value != nullptr && cursor < known) {
+        char* cursor_object = tab + (cursor + 1) * game::kRowObjectSize;
+        const auto id = static_cast<std::uint32_t>(rows[cursor].setting_id);
+        void* arrows = field<void*>(tab, game::kTabNumInput);
+        if (arrows != nullptr && is_cmfm_row(rows[cursor].kind, id) && !menu::service_is_section(id) &&
+            field<std::uint8_t>(cursor_object, game::kRowIsSlider) == 0 &&
+            field<std::uint8_t>(cursor_object, game::kRowOpensList) == 0) {
+            g_arrow_value(arrows, static_cast<std::int32_t>(menu::service_get(id)));
+        }
+    }
     update_scrollbars();
 }
 
@@ -1934,6 +1950,11 @@ bool mods_page_register(const Env& env, std::string& why) {
             g_panel_window_on = false;
             logf(AL_LOG_WARNING, "Mods page: the hook %s was refused; long pages show all their rows", steps[i].name);
         }
+    }
+    std::string arrow_why;
+    if (!find_game_function(env, "arrow value", game::kArrowValuePattern, reinterpret_cast<void**>(&g_arrow_value),
+                            arrow_why)) {
+        logf(AL_LOG_WARNING, "Mods page: %s; arrows may start from another row's value", arrow_why.c_str());
     }
     std::string bar_why;
     if (!find_game_function(env, "scroll bar mouse", game::kScrollMousePattern,
