@@ -42,9 +42,10 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
       themed close to MHW. A small ImGui layer may come later anyway, for
       debug pages and as a fallback when hook sites do not match.
 
-   Native means reusing the game's layouts and resources in memory; CMFM
-   never ships edited game files. No deadline: this is the user's fun
-   project, and the reversing takes as long as it takes.
+   Native means reusing the game's layouts and resources, in memory or as
+   edited files CMFM ships (item 10 supersedes "never ships edited game
+   files"). No deadline: this is the user's fun project, and the reversing
+   takes as long as it takes.
 8. **Menu placement: a "Mods" entry right below Options, in both menus**
    (the user's design, 2026-10-11). In the in-game Start menu's System tab
    (Options, **Mods**, View Mode, Steam Store, Save, Return to Title, Quit
@@ -62,3 +63,14 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
    tab's table pointers), is a small CMFM helper during the prototype: it
    checks the expected old bytes, logs the change and restores it on unload.
    When the menu works, what was actually used becomes the AL request.
+10. **CMFM may ship edited game files** (the user's call, 2026-10-11).
+    Supersedes item 7's "never ships edited game files". The trigger: the
+    title Options layout has exactly five panels with row lists, so a page
+    of CMFM's own (any number of mods, a clipped scrolling list, room for
+    sliders and side lists) may need a layout file CMFM edits. Boundaries:
+    the installed game is never changed on disk (exe, chunk archives, game
+    directory); edited files live in `assets/`, ship inside CMFM's own mod
+    folder and are loaded from there; only files CMFM actually changed ship,
+    never unmodified Capcom files or bulk extracts; ask the user before
+    pushing them to a public remote. How the game would load them (loose
+    files through AL or MO2) is part of the layout study.

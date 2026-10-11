@@ -100,16 +100,22 @@ binaries or assume other contributors use them.
 
 - Treat the game directory as read-only. Install test builds as MO2 mods,
   never into the game directory.
-- Never patch `MonsterHunterWorld.exe` or game assets on disk. In-memory
-  hooks only through AL, at signature-verified sites, with clean removal.
+- Never change the installed game on disk: not `MonsterHunterWorld.exe`,
+  not its chunk archives, nothing in the game directory. In-memory hooks
+  only through AL, at signature-verified sites, with clean removal.
+- CMFM may ship game files it edited, such as a GUI layout (decisions.md
+  item 10). They live in `assets/`, ship inside CMFM's own mod folder and
+  are loaded from there. Ship only files we actually changed, never
+  unmodified Capcom files or bulk extracts.
 - Do not disable, bypass or weaken integrity checks, CRC/anti-tamper code,
   DRM, anti-cheat, licensing or platform protections. CMFM itself must not
   change gameplay or network behaviour.
 - Never touch `D:\mh world modding\ai\glavenus` IDA databases (another
   project). Work on private copies under `local/` only.
-- Do not commit or redistribute Capcom binaries, decoded images, game
-  assets, NVIDIA binaries, other mods' binaries, crash dumps or IDA
-  databases.
+- Do not commit or redistribute Capcom binaries, decoded images,
+  unmodified game assets, NVIDIA binaries, other mods' binaries, crash
+  dumps or IDA databases. Edited game files that ship (`assets/`) are the
+  exception; ask the user before pushing them to a public remote.
 - Never send project data, logs or binaries to external services. The one
   exception: CMFM's own release binaries, built from this repository, go to
   VirusTotal (as AL's do, AL `docs/decisions.md` item 15). VirusTotal's
