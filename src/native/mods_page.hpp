@@ -40,9 +40,10 @@ bool mods_page_open_from_start_menu(void* start_menu);
 const char* mods_page_text(void* message_file, std::uint32_t id);
 
 // From the option setter (the game's menu thread): the value a slider row of
-// the shown panel stands on, from its knob's position rounded to the nearest
-// of `steps` + 1 places (the game's own 0-100 value rounds up, one step too
-// far for some positions with 100 steps). False if no shown slider has it.
+// the shown panel stands on, from its knob's position: the track in `steps` +
+// 1 equal zones, one per value, the ends included (the game's own 0-100 value
+// rounds up, one step too far for some positions with 100 steps). False if no
+// shown slider has it.
 bool mods_page_slider_index(std::uint32_t setting_id, std::uint32_t steps, std::uint32_t* index);
 
 // SHUTDOWN: puts the title tab tables back and stops following the page.

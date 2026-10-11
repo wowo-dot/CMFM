@@ -54,8 +54,8 @@ std::uintptr_t tab_slot(std::size_t tab) {
 // Slider rows (CMFM's page): the game reads and writes them on the slider's
 // 0-100 scale (sub_140EEB860 every frame: the knob's position * 100, rounded
 // up, against the getter; the setter when they differ). The setter takes the
-// value from the knob itself (mods_page_slider_index: rounded to the nearest
-// step; the game's rounding up is a step too far for some positions with 100
+// value from the knob itself (mods_page_slider_index: equal zones per value;
+// the game's rounding up is a step too far for some positions with 100
 // steps). The last 0-100 value the game set is kept with the value it meant,
 // so the getter answers the game's own number while the value stands and the
 // game does not set it again every frame. -1: none.

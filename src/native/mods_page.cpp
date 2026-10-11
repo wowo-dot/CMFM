@@ -1161,8 +1161,12 @@ bool mods_page_slider_index(std::uint32_t setting_id, std::uint32_t steps, std::
             static_cast<std::uint32_t>(entry->setting_id) != setting_id) {
             continue;
         }
-        const float place = slider_position(slider) * static_cast<float>(steps) + 0.5f;
-        const auto k = place <= 0.0f ? 0u : static_cast<std::uint32_t>(place);
+        // The track in steps + 1 equal zones, one per value, the ends too
+        // (rounding to the nearest step gave the end values half a zone: 100
+        // only in the last half percent, run 20261011-fineslider-2). A knob
+        // placed on value k (k / steps) lies inside zone k.
+        const float zone = slider_position(slider) * static_cast<float>(steps + 1);
+        const auto k = zone <= 0.0f ? 0u : static_cast<std::uint32_t>(zone);
         *index = k > steps ? steps : k;
         return true;
     }
