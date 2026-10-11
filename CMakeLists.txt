@@ -20,8 +20,35 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # The static C runtime: players need no Visual C++ runtime installed.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-add_library(cmfm SHARED src/plugin.cpp)
+# The commit goes into the DLL's log line, so run logs name the build.
+find_package(Git QUIET)
+set(CMFM_COMMIT "unknown")
+if(GIT_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" describe --always --dirty --abbrev=7
+                    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" OUTPUT_VARIABLE CMFM_COMMIT
+                    OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+endif()
+
+set(CMFM_WARNINGS /W4 /WX /permissive- /utf-8)
+
+# Pure logic, shared by the plugin and the unit tests.
+add_library(cmfm_core STATIC src/native/system_items.cpp)
+target_include_directories(cmfm_core PUBLIC src)
+target_compile_options(cmfm_core PRIVATE ${CMFM_WARNINGS})
+
+add_library(cmfm SHARED
+    src/plugin.cpp
+    src/native/data_patch.cpp
+    src/native/start_menu.cpp)
 # "al/al_plugin.h" is third_party/al/al_plugin.h.
-target_include_directories(cmfm PRIVATE third_party)
-target_compile_definitions(cmfm PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
-target_compile_options(cmfm PRIVATE /W4 /WX /permissive- /utf-8)
+target_include_directories(cmfm PRIVATE third_party src)
+target_link_libraries(cmfm PRIVATE cmfm_core)
+target_compile_definitions(cmfm PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
+                           CMFM_COMMIT="${CMFM_COMMIT}")
+target_compile_options(cmfm PRIVATE ${CMFM_WARNINGS})
+
+enable_testing()
+add_executable(test_system_items tests/test_system_items.cpp)
+target_link_libraries(test_system_items PRIVATE cmfm_core)
+target_compile_options(test_system_items PRIVATE ${CMFM_WARNINGS})
+add_test(NAME system_items COMMAND test_system_items)
