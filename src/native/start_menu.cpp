@@ -2,6 +2,7 @@
 
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
+#include "native/options_view.hpp"
 #include "native/system_items.hpp"
 
 #include <atomic>
@@ -43,13 +44,21 @@ void* message_file(std::uintptr_t rva) {
     return *reinterpret_cast<void* const*>(g_base + rva);
 }
 
-// Detours run on the game's threads: no allocation, no logging.
+// Detours run on the game's threads: no allocation, no logging in the text
+// lookup (it runs for every text the game shows).
 const char* get_message_detour(void* self, std::uint32_t id) {
-    if (id == game::kModsLabelId && self == message_file(game::kRvaMessages11)) {
-        return kModsLabel;
-    }
-    if (id == game::kModsHelpId && self == message_file(game::kRvaMessages18)) {
-        return kModsHelp;
+    // Fast path: CMFM's ids are 9000 and up, plus the Options header and tab
+    // names (0-5) while the CMFM view is on.
+    if (id >= game::kModsLabelId || id <= 5) {
+        if (id == game::kModsLabelId && self == message_file(game::kRvaMessages11)) {
+            return kModsLabel;
+        }
+        if (id == game::kModsHelpId && self == message_file(game::kRvaMessages18)) {
+            return kModsHelp;
+        }
+        if (const char* text = options_view_text(self, id)) {
+            return text;
+        }
     }
     return g_get_message_next(self, id);
 }
@@ -57,8 +66,13 @@ const char* get_message_detour(void* self, std::uint32_t id) {
 std::uint64_t item_action_detour(void* menu, std::uint32_t id, void* arg) {
     if (id == static_cast<std::uint32_t>(game::kItemMods)) {
         g_mods_selected.fetch_add(1, std::memory_order_relaxed);
-        // Prototype 1: the game's own Options page until the CMFM page exists.
+        // The Options page in mode 0, with CMFM's tables when the view is
+        // ready; the plain Options page otherwise.
+        options_view_enter();
         return g_item_action_next(menu, static_cast<std::uint32_t>(game::kItemOptions), arg);
+    }
+    if (id == static_cast<std::uint32_t>(game::kItemOptions)) {
+        options_view_exit();  // the game's own Options always show the game's tables
     }
     return g_item_action_next(menu, id, arg);
 }

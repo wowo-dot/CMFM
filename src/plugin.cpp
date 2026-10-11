@@ -4,6 +4,7 @@
 // check fails, CMFM changes nothing and reports DEGRADED with the reason.
 #include "al/al_plugin.h"
 #include "native/game_421810.hpp"
+#include "native/options_view.hpp"
 #include "native/start_menu.hpp"
 
 #include <windows.h>
@@ -37,6 +38,7 @@ const al_plugin_info_t kInfo = {
 const al_api_t* g_api = nullptr;
 cmfm::native::Env g_env = {};
 bool g_native = false;  // hooks registered; activate at WIN_MAIN
+bool g_view = false;    // options view hooks registered; check at WIN_MAIN
 
 void log(al_log_level_t level, const std::string& line) {
     g_api->log(g_env.self, level, line.c_str());
@@ -50,13 +52,20 @@ void degrade(const std::string& why) {
 void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
     if (phase == AL_PHASE_WIN_MAIN && g_native) {
         std::string why;
-        if (cmfm::native::start_menu_activate(g_env, why)) {
-            g_api->set_status(g_env.self, AL_STATUS_ACTIVE, nullptr);
-        } else {
+        if (!cmfm::native::start_menu_activate(g_env, why)) {
             g_native = false;
             degrade(why);
+            return;
         }
+        if (g_view && !cmfm::native::options_view_check(g_env, why)) {
+            g_view = false;
+            log(AL_LOG_WARNING, "Mods page off, Mods opens the plain Options page: " + why);
+            g_api->set_status(g_env.self, AL_STATUS_DEGRADED, ("Mods page off: " + why).c_str());
+            return;
+        }
+        g_api->set_status(g_env.self, AL_STATUS_ACTIVE, nullptr);
     } else if (phase == AL_PHASE_SHUTDOWN && g_native) {
+        cmfm::native::options_view_restore(g_env);
         cmfm::native::start_menu_restore(g_env);
     }
 }
@@ -103,5 +112,9 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
         return AL_OK;
     }
     g_native = true;
+    g_view = cmfm::native::options_view_register(g_env, why);
+    if (!g_view) {
+        log(AL_LOG_WARNING, "Mods page off, Mods opens the plain Options page: " + why);
+    }
     return AL_OK;
 }

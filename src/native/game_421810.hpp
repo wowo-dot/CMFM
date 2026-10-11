@@ -15,8 +15,23 @@ inline constexpr char kGetMessagePattern[] = "39 91 D8 00 00 00 76 1D";
 // menu's action switch. Its default case opens the Item Pouch.
 inline constexpr char kItemActionPattern[] = "48 89 5C 24 18 55 56 57 48 8D 6C 24 80";
 
+// The option-row module shared by the Options pages: getter(kind, id) at
+// RVA 0xEEA350 and setter(kind, id, value) at RVA 0xEEB450. Unknown kinds
+// fall through to save-data reads and writes, so CMFM rows must be answered
+// before the game's code runs.
+inline constexpr char kOptionGetPattern[] = "48 89 5C 24 08 57 48 83 EC 20 33 DB 8B FA 83 E9 01";
+inline constexpr char kOptionSetPattern[] = "48 89 5C 24 08 57 48 83 EC 20 41 8B D8 8B FA 83 E9 01";
+// uGUIMenuOption::close (vtable slot 91) at RVA 0x1E80D40.
+inline constexpr char kMenuOptionClosePattern[] = "40 53 48 83 EC 20 48 8B D9 0F B6 89 40 2C 00 00";
+
+// OptionTabTables in .data (writable): 7 row-table pointers, [0..4] the five
+// Options tabs of mode 0, with these original tables.
+inline constexpr std::uintptr_t kRvaOptionTabTables = 0x3FBFE90;
+inline constexpr std::uintptr_t kRvaOptionRows[5] = {0x31BDEC0, 0x31BE190, 0x31BE460, 0x31BE870, 0x31BEB70};
+
 // GetGameMessage's loaded message files (rGUIMessage* globals).
 inline constexpr std::uintptr_t kRvaMessages11 = 0x5012E18;  // Start menu labels
+inline constexpr std::uintptr_t kRvaMessages12 = 0x5012E20;  // option texts (header 0, tabs 1-5)
 inline constexpr std::uintptr_t kRvaMessages18 = 0x5012E50;  // help lines
 
 // The Start menu's tab lists in .rdata (read-only): 5 x {u32 tab label id,

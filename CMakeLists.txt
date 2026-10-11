@@ -32,13 +32,16 @@ endif()
 set(CMFM_WARNINGS /W4 /WX /permissive- /utf-8)
 
 # Pure logic, shared by the plugin and the unit tests.
-add_library(cmfm_core STATIC src/native/system_items.cpp)
+add_library(cmfm_core STATIC
+    src/native/system_items.cpp
+    src/native/options_model.cpp)
 target_include_directories(cmfm_core PUBLIC src)
 target_compile_options(cmfm_core PRIVATE ${CMFM_WARNINGS})
 
 add_library(cmfm SHARED
     src/plugin.cpp
     src/native/data_patch.cpp
+    src/native/options_view.cpp
     src/native/start_menu.cpp)
 # "al/al_plugin.h" is third_party/al/al_plugin.h.
 target_include_directories(cmfm PRIVATE third_party src)
@@ -52,3 +55,7 @@ add_executable(test_system_items tests/test_system_items.cpp)
 target_link_libraries(test_system_items PRIVATE cmfm_core)
 target_compile_options(test_system_items PRIVATE ${CMFM_WARNINGS})
 add_test(NAME system_items COMMAND test_system_items)
+add_executable(test_options_model tests/test_options_model.cpp)
+target_link_libraries(test_options_model PRIVATE cmfm_core)
+target_compile_options(test_options_model PRIVATE ${CMFM_WARNINGS})
+add_test(NAME options_model COMMAND test_options_model)
