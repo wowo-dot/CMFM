@@ -12,7 +12,7 @@ Your config file stays the source of truth. CMFM stores none of your
 values, so a broken or missing CMFM can never touch them, and players can
 keep editing your ini by hand.
 
-The interface is `include/cmfm/cmfm.h` (`cmfm.menu` 1.1, plain C). Its
+The interface is `include/cmfm/cmfm.h` (`cmfm.menu` 1.2, plain C). Its
 comments are the reference; this guide is the walk-through. The example
 plugin `examples/cmfm_demo/cmfm_demo.c` uses every feature.
 
@@ -35,9 +35,11 @@ if (menu == NULL) {
 - **When to ask:** CMFM loads early (order -100), so `al_plugin_init` works
   unless your `load_after`/`load_before` put you before it; PRE_MAIN or later
   always works.
-- **Version:** ask for `CMFM_MENU_VERSION` (1.1), the first version CMFM
-  publishes. Within a major version CMFM only adds: later CMFMs keep
-  accepting your pages.
+- **Version:** ask for the version whose features you use: 1.1 is the
+  first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
+  header (rows that hide). Within a major version CMFM only adds: later
+  CMFMs keep accepting your pages, and an older CMFM returns NULL when you
+  ask for more than it has.
 
 ## 2. Describing your page
 
@@ -113,6 +115,11 @@ at run time goes through the callbacks (values, TEXT lines, locks).
   back.
 - `CMFM_FLAG_LIST`, `CMFM_FLAG_ARROWS`: CHOICE only, one or the other (see
   the table).
+- `CMFM_FLAG_HIDE_LOCKED` (since 1.2, any type): while your `locked`
+  callback says the row is locked, the row is **hidden** instead of greyed.
+  CMFM asks again after every change, so rows come and go as other settings
+  change. To hide a whole section, give its heading and its rows the flag
+  and lock them together.
 
 ### Limits (a page beyond them is refused, with the reason)
 
@@ -163,6 +170,12 @@ call `add_page`. `get` runs every time a row is drawn.
 - **Locks for dependencies.** "Multiplier" locked while "Frame generation"
   is Off, with the reason "Turn frame generation on first." CMFM asks again
   after every change, so the lock follows at once.
+- **Hide what does not apply.** An "Upscaler" choice (DLSS, FSR, XeSS) and
+  each upscaler's settings with `CMFM_FLAG_HIDE_LOCKED`, locked unless their
+  upscaler is chosen: the page shows only the chosen one's settings. An
+  "Advanced settings" toggle can do the same for a section. Grey (no flag)
+  when the player should see that the option exists but cannot use it now;
+  hide when it does not apply at all.
 - **Validate for refusals that depend on the machine.** "3x needs an RTX
   50" refuses the value with the reason; the row keeps its old value.
 

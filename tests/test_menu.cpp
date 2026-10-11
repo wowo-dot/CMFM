@@ -217,7 +217,7 @@ void validates_pages() {
     bad.settings[3].default_value.f = 3.0;
     check(refused(page_of(bad), "default"), "float default out of range");
     bad = demo_page(&f);
-    bad.settings[0].flags = 0x8;
+    bad.settings[0].flags = 0x10;
     check(refused(page_of(bad), "flags"), "unknown flag");
     bad = demo_page(&f);
     bad.settings[0].type = 9;
@@ -487,6 +487,8 @@ void shows_sections() {
     check(!refused(page, ""), "a page with sections is valid");
     s[0].flags = CMFM_FLAG_RESTART;
     check(refused(page, "no flags"), "a section takes no flags");
+    s[0].flags = CMFM_FLAG_HIDE_LOCKED;
+    check(!refused(page, ""), "but it may be hidden while locked");
     s[0].flags = 0;
     cmfm_setting_t only[1] = {setting(1, CMFM_TYPE_SECTION, "Alone")};
     cmfm_page_t empty = page;
@@ -770,6 +772,42 @@ void shows_page_headers() {
     check(copy_page(&page_of(e), copy, why) && copy.version.empty(), "a page without the field has no version");
 }
 
+// Hides Status (a TEXT line) and the restart row while the toggle is off;
+// greys Scale as before.
+std::uint32_t CMFM_CALL fake_hiding(void* user, std::uint32_t id, char* why, std::uint32_t why_size) {
+    auto* f = static_cast<Fake*>(user);
+    if ((id == kStatus || id == kRestart || id == kScale) && f->values[slot(kToggle)].i == 0) {
+        std::snprintf(why, why_size, "needs the toggle on.");
+        return 1;
+    }
+    return 0;
+}
+
+void hides_locked_rows() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.settings[4].flags = CMFM_FLAG_HIDE_LOCKED;                      // Status
+    d.settings[5].flags |= CMFM_FLAG_HIDE_LOCKED;                     // Restart thing
+    d.page.locked = fake_hiding;
+    Menu m;
+    check(add(m, page_of(d)), "HIDE_LOCKED accepted on TEXT and with RESTART");
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* scale = find(model, 1, "Scale");
+    const native::GameOptionRow* status = find(model, 1, "Status");
+    const native::GameOptionRow* restart = find(model, 1, "Restart thing");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    m.refresh();
+    check(m.is_hidden(id(status)) && m.is_hidden(id(restart)), "locked rows with the flag are hidden");
+    check(m.is_locked(id(scale)) && !m.is_hidden(id(scale)), "locked rows without it are greyed");
+    check(!m.set(id(restart), 0), "a hidden row refuses a change too");
+    const std::uint32_t l0 = m.lock_revision();
+    check(m.set(id(toggle), 1) && !m.is_hidden(id(status)) && !m.is_hidden(id(restart)) && m.lock_revision() != l0,
+          "they come back with the change that unlocks them");
+    check(!m.is_hidden(9999), "ids not ours are never hidden");
+}
+
 }  // namespace
 
 int main() {
@@ -792,6 +830,7 @@ int main() {
     locks_rows();
     accepts_1_0_sizes();
     shows_page_headers();
+    hides_locked_rows();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");
     }

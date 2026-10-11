@@ -134,6 +134,8 @@ public:
     // Locks (the pages' `locked`), read when a page opens and after every
     // change CMFM makes; a locked row refuses changes.
     bool is_locked(std::uint32_t setting_id) const;
+    // Locked with CMFM_FLAG_HIDE_LOCKED: the row is left out of the panel.
+    bool is_hidden(std::uint32_t setting_id) const;
     std::uint32_t lock_revision() const { return lock_revision_; }
 
     // Tab t's header above its rows: "Overview", or the page's title, its

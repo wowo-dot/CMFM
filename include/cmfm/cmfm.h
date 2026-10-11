@@ -1,4 +1,4 @@
-/* CMFM menu interface "cmfm.menu", version 1.1. C ABI, 64-bit Windows.
+/* CMFM menu interface "cmfm.menu", version 1.2. C ABI, 64-bit Windows.
  *
  * CMFM (Configuration Menu For Mods) is an Astera Loader plugin that shows
  * other plugins' settings inside Monster Hunter: World's own menus: "Mods"
@@ -60,7 +60,7 @@ extern "C" {
 #define CMFM_VERSION_MINOR(version) ((uint32_t)(version) & 0xffffu)
 
 #define CMFM_MENU_INTERFACE "cmfm.menu"
-#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 1)
+#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 2)
 
 /* x64 Windows has one calling convention; this names it for readers. */
 #define CMFM_CALL __cdecl
@@ -103,6 +103,12 @@ typedef uint32_t cmfm_flags_t;
  * (up to 14), or the arrows even for more than 5. */
 #define CMFM_FLAG_LIST 0x2u
 #define CMFM_FLAG_ARROWS 0x4u
+/* Since 1.2, any type: while the page's `locked` says the setting is locked,
+ * the row is hidden instead of greyed (CMFM asks again after every change,
+ * so rows come and go as other settings change: one upscaler choice showing
+ * only that upscaler's settings). SECTION and TEXT rows with this flag are
+ * asked too; to hide a section, flag and lock its heading and its rows. */
+#define CMFM_FLAG_HIDE_LOCKED 0x8u
 
 /* Limits of CMFM's native menu. Pages beyond them are refused with the
  * reason; later versions may raise them without an interface change. */
@@ -169,7 +175,8 @@ typedef cmfm_result_t(CMFM_CALL* cmfm_press_fn)(void* user, uint32_t id);
 
 /* Since 1.1. Nonzero if the setting cannot be changed now: CMFM greys the row,
  * refuses changes and shows the reason written into `why` (`why_size` bytes
- * including the NUL) in the help line. CMFM asks when a Mods page opens and
+ * including the NUL) in the help line, or hides the row with
+ * CMFM_FLAG_HIDE_LOCKED (since 1.2). CMFM asks when a Mods page opens and
  * after every change it makes, so a lock may depend on other settings. */
 typedef uint32_t(CMFM_CALL* cmfm_locked_fn)(void* user, uint32_t id, char* why, uint32_t why_size);
 

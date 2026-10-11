@@ -1,7 +1,7 @@
 /* cmfm_demo: an Astera Loader plugin that adds a page to CMFM's Mods menu.
  * The example for plugin authors (plain C), and CMFM's test client.
  *
- * It shows every setting type of cmfm.menu 1.1 (sections since 1.1), keeps
+ * It shows every setting type of cmfm.menu 1.2 (rows that hide since 1.2), keeps
  * its values in its own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
@@ -20,7 +20,7 @@
 
 enum {
     ID_TOGGLE = 1, ID_CHOICE, ID_PERCENT, ID_SCALE, ID_RESTART, ID_STATUS, ID_BASICS, ID_NUMBERS, ID_OTHER,
-    ID_QUALITY, ID_RESET
+    ID_QUALITY, ID_RESET, ID_UPSCALING, ID_UPSCALER, ID_DLSS_PRESET, ID_FSR_SHARPNESS, ID_XESS_QUALITY
 };
 
 #define DEMO_VERSION "0.1.0" /* the plugin's version: Astera Loader's info and the page's header */
@@ -37,7 +37,11 @@ static struct {
     double scale;
     int restart;
     int quality;
-} g_values = {0, 0, 50, 1.0, 0, 3};
+    int upscaler; /* 0 DLSS, 1 FSR, 2 XeSS */
+    int dlss_preset;
+    int fsr_sharpness;
+    int xess_quality;
+} g_values = {0, 0, 50, 1.0, 0, 3, 0, 1, 50, 1};
 static int g_dirty;
 static int g_opened;
 #define MAX_EXTRA 23
@@ -66,6 +70,10 @@ static void load(void) {
         else if (sscanf(line, " scale = %lf", &d) == 1 && d >= 0.5 && d <= 2.0) g_values.scale = d;
         else if (sscanf(line, " restart = %d", &i) == 1) g_values.restart = i != 0;
         else if (sscanf(line, " quality = %d", &i) == 1 && i >= 0 && i <= 6) g_values.quality = i;
+        else if (sscanf(line, " upscaler = %d", &i) == 1 && i >= 0 && i <= 2) g_values.upscaler = i;
+        else if (sscanf(line, " dlss_preset = %d", &i) == 1 && i >= 0 && i <= 2) g_values.dlss_preset = i;
+        else if (sscanf(line, " fsr_sharpness = %d", &i) == 1 && i >= 0 && i <= 100) g_values.fsr_sharpness = i;
+        else if (sscanf(line, " xess_quality = %d", &i) == 1 && i >= 0 && i <= 3) g_values.xess_quality = i;
         else if (sscanf(line, " extra_pages = %d", &i) == 1 && i >= 0 && i <= MAX_EXTRA) g_extra_pages = i;
     }
     fclose(f);
@@ -81,6 +89,8 @@ static void save(void) {
     fprintf(f, "# cmfm_demo settings (written by the plugin; editable by hand)\n");
     fprintf(f, "toggle = %d\nchoice = %d\npercent = %d\nscale = %.2f\nrestart = %d\nquality = %d\n",
             g_values.toggle, g_values.choice, g_values.percent, g_values.scale, g_values.restart, g_values.quality);
+    fprintf(f, "upscaler = %d\ndlss_preset = %d\nfsr_sharpness = %d\nxess_quality = %d\n", g_values.upscaler,
+            g_values.dlss_preset, g_values.fsr_sharpness, g_values.xess_quality);
     fprintf(f, "# test pages for a long list of mods (0 to %d)\nextra_pages = %d\n", MAX_EXTRA, g_extra_pages);
     fclose(f);
     g_dirty = 0;
@@ -98,6 +108,10 @@ static cmfm_result_t CMFM_CALL demo_get(void* user, uint32_t id, cmfm_value_t* v
         case ID_SCALE: value->f = g_values.scale; return CMFM_OK;
         case ID_RESTART: value->i = g_values.restart; return CMFM_OK;
         case ID_QUALITY: value->i = g_values.quality; return CMFM_OK;
+        case ID_UPSCALER: value->i = g_values.upscaler; return CMFM_OK;
+        case ID_DLSS_PRESET: value->i = g_values.dlss_preset; return CMFM_OK;
+        case ID_FSR_SHARPNESS: value->i = g_values.fsr_sharpness; return CMFM_OK;
+        case ID_XESS_QUALITY: value->i = g_values.xess_quality; return CMFM_OK;
         default: return CMFM_ERROR;
     }
 }
@@ -123,6 +137,10 @@ static cmfm_result_t CMFM_CALL demo_set(void* user, uint32_t id, const cmfm_valu
         case ID_SCALE: g_values.scale = value->f; break;
         case ID_RESTART: g_values.restart = value->i; break;
         case ID_QUALITY: g_values.quality = value->i; break;
+        case ID_UPSCALER: g_values.upscaler = value->i; break;
+        case ID_DLSS_PRESET: g_values.dlss_preset = value->i; break;
+        case ID_FSR_SHARPNESS: g_values.fsr_sharpness = value->i; break;
+        case ID_XESS_QUALITY: g_values.xess_quality = value->i; break;
         default: return CMFM_ERROR;
     }
     g_dirty = 1;
@@ -142,16 +160,31 @@ static cmfm_result_t CMFM_CALL demo_press(void* user, uint32_t id) {
     g_values.percent = 50;
     g_values.scale = 1.0;
     g_values.quality = 3;
+    g_values.upscaler = 0;
+    g_values.dlss_preset = 1;
+    g_values.fsr_sharpness = 50;
+    g_values.xess_quality = 1;
     g_dirty = 1;
     logline(AL_LOG_INFO, "reset to defaults (button)");
     return CMFM_OK;
 }
 
-/* Since cmfm.menu 1.1: Demo scale can be changed only while Demo toggle is on. */
+/* Since cmfm.menu 1.1: Demo scale can be changed only while Demo toggle is on
+ * (greyed). Since 1.2: each upscaler's setting only with that upscaler (its
+ * rows have CMFM_FLAG_HIDE_LOCKED, so they hide instead of greying). */
 static uint32_t CMFM_CALL demo_locked(void* user, uint32_t id, char* why, uint32_t why_size) {
+    static const char* const kOnlyWith[] = {"Only with DLSS.", "Only with FSR.", "Only with XeSS."};
+    int needs = -1;
     (void)user;
     if (id == ID_SCALE && !g_values.toggle) {
         snprintf(why, why_size, "Turn on Demo toggle first.");
+        return 1;
+    }
+    if (id == ID_DLSS_PRESET) needs = 0;
+    if (id == ID_FSR_SHARPNESS) needs = 1;
+    if (id == ID_XESS_QUALITY) needs = 2;
+    if (needs >= 0 && g_values.upscaler != needs) {
+        snprintf(why, why_size, "%s", kOnlyWith[needs]);
         return 1;
     }
     return 0;
@@ -246,19 +279,23 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
 static const char* const kChoices[] = {"Alpha", "Beta", "Gamma"};
 /* Seven choices: more than five, so the Mods page opens its pick list. */
 static const char* const kQuality[] = {"Off", "Very low", "Low", "Medium", "High", "Very high", "Ultra"};
+/* The rows that hide: one upscaler choice, each upscaler's own setting. */
+static const char* const kUpscalers[] = {"DLSS", "FSR", "XeSS"};
+static const char* const kDlssPresets[] = {"Quality", "Balanced", "Performance"};
+static const char* const kXessQualities[] = {"Ultra quality", "Quality", "Balanced", "Performance"};
 
 static void add_page(void) {
     const cmfm_menu_t* menu =
         (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
-    cmfm_setting_t s[11];
+    cmfm_setting_t s[16];
     cmfm_page_t page;
     char why[200];
     if (menu == NULL) {
-        logline(AL_LOG_INFO, "CMFM is not installed or older than 1.1; running without the menu");
+        logline(AL_LOG_INFO, "CMFM is not installed or older than 1.2; running without the menu");
         return;
     }
     memset(s, 0, sizeof s);
-    for (int i = 0; i < 11; ++i) {
+    for (int i = 0; i < 16; ++i) {
         s[i].size = sizeof s[i];
     }
     s[0].id = ID_BASICS;
@@ -339,7 +376,47 @@ static void add_page(void) {
     page.version = DEMO_VERSION; /* since 1.1: shown in the page's header */
     page.help = "CMFM's demo plugin: one setting of each type, in three sections.";
     page.settings = s;
-    page.setting_count = 11;
+    s[11].id = ID_UPSCALING;
+    s[11].type = CMFM_TYPE_SECTION;
+    s[11].label = "Upscaling";
+
+    s[12].id = ID_UPSCALER;
+    s[12].type = CMFM_TYPE_CHOICE;
+    s[12].label = "Demo upscaler";
+    s[12].help = "Pick one: only its own setting shows below (since 1.2).";
+    s[12].choices = kUpscalers;
+    s[12].choice_count = 3;
+
+    s[13].id = ID_DLSS_PRESET;
+    s[13].type = CMFM_TYPE_CHOICE;
+    s[13].flags = CMFM_FLAG_HIDE_LOCKED;
+    s[13].label = "DLSS preset";
+    s[13].help = "Shows only while Demo upscaler is DLSS.";
+    s[13].choices = kDlssPresets;
+    s[13].choice_count = 3;
+    s[13].default_value.i = 1;
+
+    s[14].id = ID_FSR_SHARPNESS;
+    s[14].type = CMFM_TYPE_INT;
+    s[14].flags = CMFM_FLAG_HIDE_LOCKED;
+    s[14].label = "FSR sharpness";
+    s[14].help = "Shows only while Demo upscaler is FSR.";
+    s[14].min = 0;
+    s[14].max = 100;
+    s[14].step = 1;
+    s[14].unit = "%";
+    s[14].default_value.i = 50;
+
+    s[15].id = ID_XESS_QUALITY;
+    s[15].type = CMFM_TYPE_CHOICE;
+    s[15].flags = CMFM_FLAG_HIDE_LOCKED;
+    s[15].label = "XeSS quality";
+    s[15].help = "Shows only while Demo upscaler is XeSS.";
+    s[15].choices = kXessQualities;
+    s[15].choice_count = 4;
+    s[15].default_value.i = 1;
+
+    page.setting_count = 16;
     page.get = demo_get;
     page.set = demo_set;
     page.validate = demo_validate;

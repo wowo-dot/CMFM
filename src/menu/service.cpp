@@ -259,6 +259,10 @@ bool service_locked(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_locked(setting_id);
 }
 
+bool service_hidden(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_hidden(setting_id);
+}
+
 std::uint32_t service_lock_revision() {
     return g_menu ? g_menu->lock_revision() : 0;
 }

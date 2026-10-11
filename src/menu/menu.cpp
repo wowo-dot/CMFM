@@ -114,7 +114,7 @@ bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::s
     if (!text_ok(in.help, kMaxHelp, true, s.help)) {
         return fail("help longer than 200 bytes");
     }
-    if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0) {
+    if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS | CMFM_FLAG_HIDE_LOCKED)) != 0) {
         return fail("unknown flags");
     }
     if ((in.flags & (CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0 && in.type != CMFM_TYPE_CHOICE) {
@@ -180,15 +180,15 @@ bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::s
             s.value_count = 1;
             return true;
         case CMFM_TYPE_SECTION:
-            if (in.flags != 0) {
-                return fail("a SECTION takes no flags");
+            if ((in.flags & ~CMFM_FLAG_HIDE_LOCKED) != 0) {
+                return fail("a SECTION takes no flags but HIDE_LOCKED");
             }
             s.value_count = 1;
             s.help.clear();
             return true;
         case CMFM_TYPE_BUTTON: {
-            if (in.flags != 0) {
-                return fail("a BUTTON takes no flags");
+            if ((in.flags & ~CMFM_FLAG_HIDE_LOCKED) != 0) {
+                return fail("a BUTTON takes no flags but HIDE_LOCKED");
             }
             const bool sized = size >= offsetof(cmfm_setting_t, confirm) + sizeof in.confirm;
             if (!text_ok(sized ? in.button : nullptr, kMaxChoice, true, s.button)) {
@@ -544,6 +544,15 @@ bool Menu::is_locked(std::uint32_t setting_id) const {
     return r != nullptr && pages_[r->page].settings[r->setting].locked;
 }
 
+bool Menu::is_hidden(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    if (r == nullptr) {
+        return false;
+    }
+    const Setting& s = pages_[r->page].settings[r->setting];
+    return s.locked && (s.flags & CMFM_FLAG_HIDE_LOCKED) != 0;
+}
+
 void Menu::refresh_locks() {
     for (Row& r : rows_) {
         if (r.status) {
@@ -551,7 +560,8 @@ void Menu::refresh_locks() {
         }
         Page& p = pages_[r.page];
         Setting& s = p.settings[r.setting];
-        if (p.locked == nullptr || s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_TEXT) {
+        const bool hideable = (s.flags & CMFM_FLAG_HIDE_LOCKED) != 0;
+        if (p.locked == nullptr || ((s.type == CMFM_TYPE_SECTION || s.type == CMFM_TYPE_TEXT) && !hideable)) {
             continue;
         }
         char why[kMaxHelp + 1] = {};

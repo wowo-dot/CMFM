@@ -135,8 +135,14 @@ ScrollMouseFn g_scroll_mouse = nullptr;
 // place), plus the end row; which of the tab's rows the cursor may take.
 GameOptionRow g_panel_rows[kMaxRowsPerTab + 1];
 bool g_panel_selectable[kMaxRowsPerTab];
-std::size_t g_panel_count = 0;  // the tab's rows
+std::size_t g_panel_count = 0;  // the tab's rows the panel shows
 std::size_t g_panel_top = 0;    // the first of them in the window
+// The tab's rows the panel shows, by their index in the tab (rows hidden by
+// their lock, CMFM_FLAG_HIDE_LOCKED, left out), and which were hidden when
+// the panel was last filled (one bit per tab row).
+std::uint8_t g_panel_shown[kMaxRowsPerTab];
+std::uint64_t g_panel_hidden = 0;
+static_assert(kMaxRowsPerTab <= 64);
 
 // The scrollbars of CMFM's layout (track and bar, the game's own), found by
 // name on the page: one for the mod list, one for the panel. Shown only while
@@ -319,6 +325,8 @@ void update_scrollbars();
 void drag_scrollbars(void* unit);
 bool scroll_dragging();
 void wheel_split(void* unit, int steps);
+std::uint64_t panel_hidden_now();
+void rebuild_panel(void* unit);
 void fill_split_panel(void* unit);
 
 bool scrolling() {
@@ -546,7 +554,10 @@ std::uint64_t page_update(void* unit) {
         // rows first, then the game reads and writes every row again and the
         // row looks grey the locked ones (enabled check), then CMFM's touches.
         const std::uint32_t locks = menu::service_lock_revision();
-        if (locks != g_lock_seen) {
+        if (locks != g_lock_seen && panel_hidden_now() != g_panel_hidden) {
+            g_lock_seen = locks;
+            rebuild_panel(unit);
+        } else if (locks != g_lock_seen) {
             g_lock_seen = locks;
             end_sliders(unit);
             char* tab = tab_object(unit, game::kSplitPanel);
@@ -692,14 +703,44 @@ std::size_t panel_visible() {
     return g_panel_window_on && g_panel_count > kPanelRows ? kPanelRows : g_panel_count;
 }
 
-// The panel window's rows from the highlighted tab, from row `top` on (kept
-// in range), with the end row after them.
-void load_panel_rows(std::size_t top) {
+// Which of the highlighted tab's rows are hidden now (their lock, with
+// CMFM_FLAG_HIDE_LOCKED), one bit per row.
+std::uint64_t panel_hidden_now() {
     const GameOptionRow* rows = menu::service_model().table(g_selected.load(std::memory_order_relaxed));
+    std::uint64_t hidden = 0;
+    for (std::size_t r = 0; r < kMaxRowsPerTab && rows[r].kind != kRowTableEnd; ++r) {
+        if (menu::service_hidden(static_cast<std::uint32_t>(rows[r].setting_id))) {
+            hidden |= std::uint64_t{1} << r;
+        }
+    }
+    return hidden;
+}
+
+// The panel window's rows from the highlighted tab, from shown row `top` on
+// (kept in range), with the end row after them. `recheck`: ask which rows
+// are hidden now; otherwise keep the last answer (a scroll between two fills
+// must not change the rows the game holds). A tab never shows empty (the page
+// reads the row under the cursor unchecked): if every row is hidden, its first
+// row shows.
+void load_panel_rows(std::size_t top, bool recheck = true) {
+    const GameOptionRow* rows = menu::service_model().table(g_selected.load(std::memory_order_relaxed));
+    if (recheck) {
+        g_panel_hidden = panel_hidden_now();
+    }
     std::size_t count = 0;
-    while (count < kMaxRowsPerTab && rows[count].kind != kRowTableEnd) {
-        g_panel_selectable[count] = !menu::service_is_section(static_cast<std::uint32_t>(rows[count].setting_id));
-        ++count;
+    std::size_t tab_rows = 0;
+    for (; tab_rows < kMaxRowsPerTab && rows[tab_rows].kind != kRowTableEnd; ++tab_rows) {
+        if ((g_panel_hidden >> tab_rows & 1) == 0) {
+            g_panel_shown[count] = static_cast<std::uint8_t>(tab_rows);
+            g_panel_selectable[count] =
+                !menu::service_is_section(static_cast<std::uint32_t>(rows[tab_rows].setting_id));
+            ++count;
+        }
+    }
+    if (count == 0 && tab_rows > 0) {
+        g_panel_shown[0] = 0;
+        g_panel_selectable[0] = true;
+        count = 1;
     }
     g_panel_count = count;
     const std::size_t visible = panel_visible();
@@ -708,7 +749,7 @@ void load_panel_rows(std::size_t top) {
     }
     g_panel_top = top;
     for (std::size_t r = 0; r < visible; ++r) {
-        g_panel_rows[r] = rows[top + r];
+        g_panel_rows[r] = rows[g_panel_shown[top + r]];
     }
     g_panel_rows[visible] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
 }
@@ -732,7 +773,7 @@ void scroll_panel(void* unit, std::size_t top, bool refresh) {
     for (std::size_t r = 0; r < game::kTabRowObjects; ++r) {
         field<std::uint8_t>(tab + (r + 1) * game::kRowObjectSize, game::kRowOpensList) = 0;
     }
-    load_panel_rows(top);
+    load_panel_rows(top, false);
     // The game's refresh rewrites only the values: the labels the way the
     // row filler writes them.
     for (std::size_t r = 0; r < panel_visible(); ++r) {
@@ -1052,6 +1093,54 @@ void fill_split_panel(void* unit) {
     decorate_panel(unit);
     show_panel_header(unit);
     request_split_help(unit);
+}
+
+// Rows came or went (a lock with CMFM_FLAG_HIDE_LOCKED changed after a
+// change): the panel is filled again with the rows now shown, the cursor on
+// the setting it was on (or the nearest row that shows, if that one hid), the
+// window keeping it in view, and the panel's focus kept.
+void rebuild_panel(void* unit) {
+    void* list = panel_list(unit);
+    if (list == nullptr) {
+        return;
+    }
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    const std::size_t old_visible = panel_visible();
+    const std::size_t cursor = field<std::uint32_t>(list, game::kListCursor);
+    const std::size_t old_tab_row = cursor < old_visible ? g_panel_shown[g_panel_top + cursor] : 0;
+    const std::size_t old_top = g_panel_top;
+    load_panel_rows(0);
+    // The shown row at or after the old one's tab row (else the last shown),
+    // then the nearest selectable one.
+    std::size_t k = 0;
+    while (k + 1 < g_panel_count && g_panel_shown[k] < old_tab_row) {
+        ++k;
+    }
+    for (std::size_t d = 0; d < g_panel_count && !g_panel_selectable[k]; ++d) {
+        if (k + d < g_panel_count && g_panel_selectable[k + d]) {
+            k += d;
+        } else if (k >= d && g_panel_selectable[k - d]) {
+            k -= d;
+        }
+    }
+    load_panel_rows(window_top_for(g_panel_selectable, g_panel_count, panel_visible(), old_top, k), false);
+    const OptionsModel& model = menu::service_model();
+    const std::size_t selected = g_selected.load(std::memory_order_relaxed);
+    with_tables(model, [&] {
+        prepare_tab(unit, game::kSplitPanel);
+        g_init_category(tab_object(unit, game::kSplitPanel), unit, static_cast<std::int32_t>(game::kSplitPanel),
+                        game::kTitleTabNames[game::kSplitPanel], model.tab_name(selected));
+    });
+    show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
+                         static_cast<std::int32_t>(game::kSplitPanel));
+    const auto row = static_cast<std::uint32_t>(k - g_panel_top);
+    if (focus == 1 && g_set_focus != nullptr) {
+        g_set_focus(unit, 1);
+    }
+    gui_set_cursor(list, row);
+    decorate_panel(unit, static_cast<std::int32_t>(row));
+    field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(row);  // after the decoration's
+    show_panel_header(unit);
 }
 
 // The help line for the highlighted mod, with one of CMFM's two ids in turn

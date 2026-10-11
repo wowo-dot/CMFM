@@ -62,6 +62,7 @@ bool service_is_button(std::uint32_t setting_id);
 const char* service_button_question(std::uint32_t setting_id);  // nullptr: none
 bool service_press(std::uint32_t setting_id);
 bool service_locked(std::uint32_t setting_id);
+bool service_hidden(std::uint32_t setting_id);  // Menu::is_hidden
 std::uint32_t service_lock_revision();
 
 }  // namespace cmfm::menu
