@@ -350,9 +350,10 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
                          tab});
     }
 
+    tab_count_ = 1 + shown < native::kTabCount ? native::kTabCount : 1 + shown;
     tab_names_[0] = "CMFM";
     tab_helps_[0] = "Which mods added settings, and what CMFM did with them.";
-    for (std::size_t t = 1; t < native::kTabCount; ++t) {
+    for (std::size_t t = 1; t < tab_count_; ++t) {
         if (t - 1 < shown) {
             const Page& p = pages_[t - 1];
             tab_names_[t] = p.title;
@@ -366,18 +367,18 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
 
 bool Menu::build(native::OptionsModel& model, std::string& why) {
     for (std::size_t p = 0; p < pages_.size(); ++p) {
-        not_shown_why_[p] = p < kPageTabs ? "" : "Not shown: only four mod tabs fit.";
+        not_shown_why_[p] = p < kMaxPages ? "" : "Not shown: only 24 mod pages fit.";
     }
-    std::size_t shown = pages_.size() < kPageTabs ? pages_.size() : kPageTabs;
-    native::TabSpec tabs[native::kTabCount];
+    std::size_t shown = pages_.size() < kMaxPages ? pages_.size() : kMaxPages;
+    native::TabSpec tabs[native::kMaxTabs];
     std::vector<native::RowSpec> specs;
     for (;;) {
         compose(shown, specs);
-        for (std::size_t t = 0; t < native::kTabCount; ++t) {
+        for (std::size_t t = 0; t < tab_count_; ++t) {
             tabs[t] = {tab_names_[t].c_str(), tab_helps_[t].c_str()};
         }
         const char* fail = nullptr;
-        if (model.build("Mods", tabs, specs.data(), specs.size(), kEmptyRow, fail)) {
+        if (model.build("Mods", tabs, tab_count_, specs.data(), specs.size(), kEmptyRow, fail)) {
             break;
         }
         if (shown == 0) {

@@ -4,6 +4,8 @@
  * It shows every setting type of cmfm.menu 1.0, keeps its values in its
  * own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the source of truth),
  * refuses one combination in `validate`, and saves when the Mods page closes.
+ * With `extra_pages = N` in the ini it adds N small pages more (CMFM's tests
+ * of a long list of mods).
  *
  * Install: <game>\AsteraLoader\plugins\cmfm_demo\cmfm_demo.dll, next to CMFM.
  */
@@ -31,6 +33,9 @@ static struct {
 } g_values = {0, 0, 50, 1.0, 0};
 static int g_dirty;
 static int g_opened;
+#define MAX_EXTRA 23
+static int g_extra_pages; /* from the ini: test pages to add */
+static int g_extra[MAX_EXTRA];
 
 static void logline(al_log_level_t level, const char* line) {
     g_api->log(g_self, level, line);
@@ -53,6 +58,7 @@ static void load(void) {
         else if (sscanf(line, " percent = %d", &i) == 1 && i >= 0 && i <= 100) g_values.percent = i;
         else if (sscanf(line, " scale = %lf", &d) == 1 && d >= 0.5 && d <= 2.0) g_values.scale = d;
         else if (sscanf(line, " restart = %d", &i) == 1) g_values.restart = i != 0;
+        else if (sscanf(line, " extra_pages = %d", &i) == 1 && i >= 0 && i <= MAX_EXTRA) g_extra_pages = i;
     }
     fclose(f);
     logline(AL_LOG_INFO, "cmfm_demo.ini loaded");
@@ -67,6 +73,7 @@ static void save(void) {
     fprintf(f, "# cmfm_demo settings (written by the plugin; editable by hand)\n");
     fprintf(f, "toggle = %d\nchoice = %d\npercent = %d\nscale = %.2f\nrestart = %d\n", g_values.toggle,
             g_values.choice, g_values.percent, g_values.scale, g_values.restart);
+    fprintf(f, "# test pages for a long list of mods (0 to %d)\nextra_pages = %d\n", MAX_EXTRA, g_extra_pages);
     fclose(f);
     g_dirty = 0;
     logline(AL_LOG_INFO, "cmfm_demo.ini saved");
@@ -127,6 +134,51 @@ static void CMFM_CALL demo_event(void* user, cmfm_event_t event) {
         ++g_opened;
     } else if (event == CMFM_EVENT_CLOSED && g_dirty) {
         save();
+    }
+}
+
+/* ---- The extra test pages: one toggle each; `user` is the page number ---- */
+
+static cmfm_result_t CMFM_CALL extra_get(void* user, uint32_t id, cmfm_value_t* value) {
+    (void)id;
+    value->i = g_extra[(intptr_t)user - 1];
+    return CMFM_OK;
+}
+
+static cmfm_result_t CMFM_CALL extra_set(void* user, uint32_t id, const cmfm_value_t* value) {
+    (void)id;
+    g_extra[(intptr_t)user - 1] = value->i;
+    return CMFM_OK;
+}
+
+static void add_extra_pages(const cmfm_menu_t* menu) {
+    cmfm_setting_t s;
+    cmfm_page_t page;
+    char title[24];
+    char why[200];
+    for (int n = 1; n <= g_extra_pages; ++n) {
+        memset(&s, 0, sizeof s);
+        s.size = sizeof s;
+        s.id = 1;
+        s.type = CMFM_TYPE_BOOL;
+        s.label = "Extra toggle";
+        s.help = "A test page for CMFM's list of mods.";
+        memset(&page, 0, sizeof page);
+        snprintf(title, sizeof title, "Extra %d", n);
+        page.size = sizeof page;
+        page.plugin = "cmfm_demo";
+        page.title = title;
+        page.settings = &s;
+        page.setting_count = 1;
+        page.user = (void*)(intptr_t)n;
+        page.get = extra_get;
+        page.set = extra_set;
+        if (menu->add_page(&page, why, sizeof why) == 0) {
+            char line[256];
+            snprintf(line, sizeof line, "CMFM refused extra page %d: %s", n, why);
+            logline(AL_LOG_WARNING, line);
+            return;
+        }
     }
 }
 
@@ -212,6 +264,7 @@ static void add_page(void) {
         return;
     }
     logline(AL_LOG_INFO, "page added to CMFM");
+    add_extra_pages(menu);
 }
 
 /* ---- Astera Loader ---- */

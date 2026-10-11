@@ -1,7 +1,9 @@
 // CMFM's menu core: the pages plugins added through cmfm.menu (validated
 // copies), laid out as the game's Options rows (native/options_model.hpp):
-// tab 0 is CMFM's status page, tabs 1-4 one plugin page each. Values are
-// never stored here: every read and write goes through the page's callbacks.
+// tab 0 is CMFM's status page, then one tab per plugin page (at least 5 tabs
+// for the in-game page, up to 25 for the title page's scrolling list).
+// Values are never stored here: every read and write goes through the page's
+// callbacks.
 // Pure logic, single-threaded (the caller serialises), tested in
 // tests/test_menu.cpp.
 #pragma once
@@ -16,7 +18,7 @@
 
 namespace cmfm::menu {
 
-inline constexpr std::size_t kPageTabs = native::kTabCount - 1;  // tab 0 is the status page
+inline constexpr std::size_t kMaxPages = native::kMaxTabs - 1;  // tab 0 is the status page
 inline constexpr std::uint32_t kMaxTitle = 24;   // bytes; the tab name's space
 inline constexpr std::uint32_t kMaxLabel = 64;
 inline constexpr std::uint32_t kMaxHelp = 200;   // the help line's space
@@ -69,7 +71,7 @@ public:
     void add_refused(std::string plugin, std::string why);
     bool dirty() const { return dirty_; }
 
-    // Lays the pages out into `model` (status page, then up to four plugin
+    // Lays the pages out into `model` (status page, then up to 24 plugin
     // pages). A page that does not fit is listed as not shown. False (with
     // `why`) only if not even the status page fits; `model` is unusable then.
     bool build(native::OptionsModel& model, std::string& why);
@@ -118,8 +120,9 @@ private:
     std::vector<Row> rows_;  // parallel to the RowSpecs given to the model
     std::size_t shown_ = 0;
     std::vector<std::string> not_shown_why_;  // per page; empty if shown
-    std::string tab_names_[native::kTabCount];
-    std::string tab_helps_[native::kTabCount];
+    std::size_t tab_count_ = native::kTabCount;
+    std::string tab_names_[native::kMaxTabs];
+    std::string tab_helps_[native::kMaxTabs];
 };
 
 }  // namespace cmfm::menu

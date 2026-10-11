@@ -58,6 +58,19 @@ bool QwordPatch::apply(const char* name, std::uintptr_t address, std::uint64_t e
     return true;
 }
 
+bool QwordPatch::retarget(std::uint64_t replacement, std::string& why) {
+    if (!applied_) {
+        why = "not applied";
+        return false;
+    }
+    std::uint64_t found = 0;
+    if (!swap_value(address_, replacement_, replacement, found, why)) {
+        return false;
+    }
+    replacement_ = replacement;
+    return true;
+}
+
 bool QwordPatch::restore(std::string& why) {
     if (!applied_) {
         return true;

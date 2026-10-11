@@ -39,9 +39,10 @@ inline constexpr std::uint32_t kLabelIdFirst = 9100;  // file 12
 inline constexpr std::uint32_t kHelpIdFirst = 9002;   // file 18
 inline constexpr std::uint32_t kTextIdLimit = 10000;  // GetGameMessage sends larger ids to file 23
 
-inline constexpr std::size_t kTabCount = 5;        // the Options page has 5 fixed tabs
+inline constexpr std::size_t kTabCount = 5;        // the in-game Options page has 5 fixed tabs
+inline constexpr std::size_t kMaxTabs = 25;        // the title page scrolls through more
 inline constexpr std::size_t kMaxRowsPerTab = 24;  // the title Options page holds 24 rows per tab
-inline constexpr std::size_t kMaxRows = kTabCount * kMaxRowsPerTab;
+inline constexpr std::size_t kMaxRows = 200;       // setting ids 100-299
 inline constexpr std::size_t kMaxValues = 32;
 static_assert(kSettingIdFirst + kMaxRows <= kSettingIdLimit);
 
@@ -67,13 +68,15 @@ struct RowSpec {
 
 class OptionsModel {
 public:
-    // Builds the model; false (with `why`) if a row is invalid, a tab holds
-    // more than kMaxRowsPerTab rows or text ids run out. A tab without rows
-    // gets `placeholder` (its `tab` is ignored): the game's Options page reads
-    // the row under the cursor without a null check, so a tab must never be
-    // empty (run 20261011-native-m2 crashed on one).
-    bool build(const char* header, const TabSpec* tabs, const RowSpec* rows, std::size_t count,
-               const RowSpec& placeholder, const char*& why);
+    // Builds the model with `tab_count` tabs (kTabCount..kMaxTabs; `tabs` has
+    // that many); false (with `why`) if a row is invalid, a tab holds more
+    // than kMaxRowsPerTab rows, there are more than kMaxRows rows or text ids
+    // run out. A tab without rows gets `placeholder` (its `tab` is ignored):
+    // the game's Options page reads the row under the cursor without a null
+    // check, so a tab must never be empty (run 20261011-native-m2 crashed on
+    // one).
+    bool build(const char* header, const TabSpec* tabs, std::size_t tab_count, const RowSpec* rows,
+               std::size_t count, const RowSpec& placeholder, const char*& why);
 
     // The game-format table for a tab, ended by a row with kind -1.
     const GameOptionRow* table(std::size_t tab) const { return tables_[tab]; }
@@ -82,8 +85,9 @@ public:
     const char* label_text(std::uint32_t id) const;  // file 12, labels and values
     const char* help_text(std::uint32_t id) const;   // file 18, row and value help
     const char* header() const { return header_; }
-    const char* tab_name(std::size_t tab) const { return tab < kTabCount ? tabs_[tab].name : nullptr; }
-    const char* tab_help(std::size_t tab) const { return tab < kTabCount ? tabs_[tab].help : nullptr; }
+    std::size_t tab_count() const { return tab_count_; }
+    const char* tab_name(std::size_t tab) const { return tab < tab_count_ ? tabs_[tab].name : nullptr; }
+    const char* tab_help(std::size_t tab) const { return tab < tab_count_ ? tabs_[tab].help : nullptr; }
 
     // Rows in the model, placeholders included.
     std::size_t row_count() const { return count_; }
@@ -97,7 +101,8 @@ public:
 
 private:
     const char* header_ = "";
-    TabSpec tabs_[kTabCount] = {};
+    TabSpec tabs_[kMaxTabs] = {};
+    std::size_t tab_count_ = 0;
     RowSpec specs_[kMaxRows] = {};
     std::int32_t sources_[kMaxRows] = {};
     std::uint32_t label_ids_[kMaxRows] = {};
@@ -106,7 +111,7 @@ private:
     std::uint32_t label_end_ = kLabelIdFirst;
     std::uint32_t help_end_ = kHelpIdFirst;
     // Per tab: its rows plus the end row.
-    GameOptionRow tables_[kTabCount][kMaxRowsPerTab + 1] = {};
+    GameOptionRow tables_[kMaxTabs][kMaxRowsPerTab + 1] = {};
 };
 
 }  // namespace cmfm::native

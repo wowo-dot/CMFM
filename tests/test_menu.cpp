@@ -363,22 +363,56 @@ void lists_every_page_on_the_status_tab() {
     bad.page.set = nullptr;
     add(m, page_of(bad));
     std::string why;
-    check(m.build(model, why) && m.used_tabs() == 5, "four pages shown");
-    check(same(model.tab_name(4), "Four"), "in the order added");
+    check(m.build(model, why) && m.used_tabs() == 6 && model.tab_count() == 6, "five pages: six tabs");
+    check(same(model.tab_name(4), "Four") && same(model.tab_name(5), "Five"), "in the order added");
     std::size_t shown = 0;
-    std::size_t not_shown = 0;
     std::size_t refusals = 0;
     for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
         const char* v = value_text(model, r, 0);
         shown += same(v, "Shown");
-        not_shown += same(v, "Not shown");
         refusals += same(v, "Refused");
     }
-    check(shown == 4 && not_shown == 1 && refusals == 1, "status: 4 shown, 1 not shown, 1 refused");
+    check(shown == 5 && refusals == 1, "status: 5 shown, 1 refused");
     const native::GameOptionRow* broken = find(model, 0, "broken");
     check(broken && std::strstr(help_text(model, broken), "get and set"), "the refusal's reason");
     m.send(CMFM_EVENT_OPENED);
-    check(f[3].opened == 1 && f[4].opened == 0, "events go to shown pages only");
+    check(f[3].opened == 1 && f[4].opened == 1, "events go to every shown page");
+}
+
+void keeps_five_tabs_for_the_in_game_page() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo d = demo_page(&f);
+    add(m, page_of(d));
+    std::string why;
+    check(m.build(model, why) && model.tab_count() == 5 && m.used_tabs() == 2, "one page: still five tabs");
+    check(same(model.tab_name(2), "-") && find(model, 4, "Empty") != nullptr, "unused tabs");
+}
+
+void stops_at_24_pages() {
+    static OptionsModel model;
+    static Fake f;
+    static cmfm_setting_t one[1];
+    one[0] = setting(kToggle, CMFM_TYPE_BOOL, "One");
+    Menu m;
+    for (int p = 0; p < 26; ++p) {
+        cmfm_page_t page = {};
+        page.size = sizeof page;
+        page.plugin = "many";
+        page.title = "Many";
+        page.settings = one;
+        page.setting_count = 1;
+        page.user = &f;
+        page.get = fake_get;
+        page.set = fake_set;
+        add(m, page);
+    }
+    std::string why;
+    check(m.build(model, why) && m.used_tabs() == 25 && model.tab_count() == 25, "24 pages shown");
+    // 26 entries: the status list holds 22 and a "More" row for the other 4.
+    const native::GameOptionRow* more = find(model, 0, "More");
+    check(more != nullptr && same(value_text(model, more, 0), "4"), "the status list says 4 more");
 }
 
 void drops_pages_that_do_not_fit() {
@@ -407,6 +441,7 @@ void drops_pages_that_do_not_fit() {
     }
     std::string why;
     check(m.build(model, why) && m.used_tabs() == 2, "only the first big page fits");
+    check(model.tab_count() == 5, "five tabs for the in-game page");
     std::size_t not_shown = 0;
     for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
         not_shown += same(value_text(model, r, 0), "Not shown");
@@ -424,6 +459,8 @@ int main() {
     reads_and_writes_through_callbacks();
     refreshes_texts_and_sends_events();
     lists_every_page_on_the_status_tab();
+    keeps_five_tabs_for_the_in_game_page();
+    stops_at_24_pages();
     drops_pages_that_do_not_fit();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");

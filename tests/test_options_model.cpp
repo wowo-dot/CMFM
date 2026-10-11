@@ -33,7 +33,7 @@ const RowSpec kFree = {"Free tab", "Nothing here.", kDash, 1, 0};
 void builds_rows_in_game_format() {
     static OptionsModel m;
     const char* why = nullptr;
-    check(m.build("Mods", kTabs, kRows, 3, kFree, why), "build succeeds");
+    check(m.build("Mods", kTabs, kTabCount, kRows, 3, kFree, why), "build succeeds");
     const GameOptionRow* t0 = m.table(0);
     check(t0[0].kind == 1 && t0[0].setting_id == 100 && t0[0].value_count == 2, "row 0: kind 1, id 100");
     check(t0[0].label_id == 9100 && t0[0].flag == 1 && t0[0].help_cat == 18 && t0[0].help_id == 9002,
@@ -52,7 +52,7 @@ void builds_rows_in_game_format() {
 void maps_ids_to_rows() {
     static OptionsModel m;
     const char* why = nullptr;
-    m.build("Mods", kTabs, kRows, 3, kFree, why);
+    m.build("Mods", kTabs, kTabCount, kRows, 3, kFree, why);
     check(m.source(100) == 0 && m.source(101) == 1 && m.source(102) == 2, "input rows");
     check(m.source(103) == OptionsModel::kPlaceholder, "placeholder");
     check(m.source(106) == OptionsModel::kNotOurs && m.source(99) == OptionsModel::kNotOurs &&
@@ -64,7 +64,7 @@ void maps_ids_to_rows() {
 void resolves_texts() {
     static OptionsModel m;
     const char* why = nullptr;
-    m.build("Mods", kTabs, kRows, 3, kFree, why);
+    m.build("Mods", kTabs, kTabCount, kRows, 3, kFree, why);
     check(same(m.label_text(9100), "Test toggle"), "label");
     check(same(m.label_text(9101), "Off") && same(m.label_text(9102), "On"), "values follow the label");
     check(same(m.label_text(9103), "Test choice") && same(m.label_text(9106), "Gamma"), "second row");
@@ -85,7 +85,7 @@ void follows_rewritten_texts() {
     static const char* values[] = {value};
     const RowSpec rows[] = {{"Status", help, values, 1, 0}};
     const char* why = nullptr;
-    check(m.build("Mods", kTabs, rows, 1, kFree, why), "build");
+    check(m.build("Mods", kTabs, kTabCount, rows, 1, kFree, why), "build");
     std::snprintf(help, sizeof help, "After.");
     std::snprintf(value, sizeof value, "2 frames");
     check(same(m.help_text(9002), "After.") && same(m.label_text(9101), "2 frames"), "texts read at lookup");
@@ -95,21 +95,39 @@ void rejects_bad_rows() {
     static OptionsModel m;
     const char* why = nullptr;
     const RowSpec bad_tab[] = {{"x", "", kOnOff, 2, 5}};
-    check(!m.build("Mods", kTabs, bad_tab, 1, kFree, why), "tab out of range");
+    check(!m.build("Mods", kTabs, kTabCount, bad_tab, 1, kFree, why), "tab out of range");
     const RowSpec no_values[] = {{"x", "", kOnOff, 0, 0}};
-    check(!m.build("Mods", kTabs, no_values, 1, kFree, why), "no values");
+    check(!m.build("Mods", kTabs, kTabCount, no_values, 1, kFree, why), "no values");
     const RowSpec no_help[] = {{"x", nullptr, kOnOff, 2, 0}};
-    check(!m.build("Mods", kTabs, no_help, 1, kFree, why), "help must be a string");
+    check(!m.build("Mods", kTabs, kTabCount, no_help, 1, kFree, why), "help must be a string");
     const RowSpec bad_free = {"x", "", kOnOff, 0, 0};
-    check(!m.build("Mods", kTabs, kRows, 3, bad_free, why), "invalid placeholder");
-    check(m.build("Mods", kTabs, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
+    check(!m.build("Mods", kTabs, kTabCount, kRows, 3, bad_free, why), "invalid placeholder");
+    check(m.build("Mods", kTabs, kTabCount, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
     // The title Options page holds 24 rows per tab.
     RowSpec many[kMaxRowsPerTab + 1];
     for (RowSpec& s : many) {
         s = {"x", "", kOnOff, 2, 0};
     }
-    check(m.build("Mods", kTabs, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
-    check(!m.build("Mods", kTabs, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+    check(m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
+    check(!m.build("Mods", kTabs, kTabCount, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+}
+
+void builds_more_tabs() {
+    // The title page scrolls: up to kMaxTabs tabs, each with a row.
+    static OptionsModel m;
+    static TabSpec tabs[kMaxTabs];
+    for (std::size_t t = 0; t < kMaxTabs; ++t) {
+        tabs[t] = {"T", "H"};
+    }
+    const RowSpec rows[] = {{"Last", "On the last tab.", kOnOff, 2, kMaxTabs - 1}};
+    const char* why = nullptr;
+    check(m.build("Mods", tabs, kMaxTabs, rows, 1, kFree, why) && m.tab_count() == kMaxTabs, "25 tabs");
+    check(m.table(kMaxTabs - 1)[0].value_count == 2 && m.table(kMaxTabs - 2)[0].value_count == 1,
+          "the last tab's row, placeholders elsewhere");
+    check(!m.build("Mods", tabs, kMaxTabs + 1, rows, 1, kFree, why), "26 tabs refused");
+    check(!m.build("Mods", tabs, 4, rows, 0, kFree, why), "fewer than 5 tabs refused");
+    const RowSpec beyond[] = {{"x", "", kOnOff, 2, 7}};
+    check(!m.build("Mods", tabs, kTabCount, beyond, 1, kFree, why), "a row beyond the tab count");
 }
 
 void runs_out_of_text_ids() {
@@ -124,7 +142,7 @@ void runs_out_of_text_ids() {
         rows[i] = {"x", "", values, static_cast<std::uint32_t>(kMaxValues), static_cast<std::uint32_t>(1 + i / kMaxRowsPerTab)};
     }
     const char* why = nullptr;
-    check(!m.build("Mods", kTabs, rows, 4 * kMaxRowsPerTab, kFree, why) && same(why, "text ids exhausted"),
+    check(!m.build("Mods", kTabs, kTabCount, rows, 4 * kMaxRowsPerTab, kFree, why) && same(why, "text ids exhausted"),
           "text ids exhausted");
     check(m.row_count() == 0 && m.source(100) == OptionsModel::kNotOurs, "a failed build leaves no rows");
 }
@@ -143,6 +161,7 @@ int main() {
     resolves_texts();
     follows_rewritten_texts();
     rejects_bad_rows();
+    builds_more_tabs();
     runs_out_of_text_ids();
     knows_its_ids();
     if (g_failures == 0) {

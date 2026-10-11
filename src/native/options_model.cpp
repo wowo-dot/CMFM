@@ -19,15 +19,21 @@ bool valid(const RowSpec& s) {
 
 }  // namespace
 
-bool OptionsModel::build(const char* header, const TabSpec* tabs, const RowSpec* rows, std::size_t count,
-                         const RowSpec& placeholder, const char*& why) {
+bool OptionsModel::build(const char* header, const TabSpec* tabs, std::size_t tab_count, const RowSpec* rows,
+                         std::size_t count, const RowSpec& placeholder, const char*& why) {
+    count_ = 0;
     if (!valid(placeholder)) {
         why = "invalid placeholder row";
         return false;
     }
-    std::size_t per_tab[kTabCount] = {};
+    if (tab_count < kTabCount || tab_count > kMaxTabs) {
+        why = "tab count out of range";
+        return false;
+    }
+    std::size_t per_tab[kMaxTabs] = {};
+    std::size_t empty = 0;
     for (std::size_t i = 0; i < count; ++i) {
-        if (rows[i].tab >= kTabCount || !valid(rows[i])) {
+        if (rows[i].tab >= tab_count || !valid(rows[i])) {
             why = "invalid row";
             return false;
         }
@@ -36,9 +42,17 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, const RowSpec*
             return false;
         }
     }
+    for (std::size_t t = 0; t < tab_count; ++t) {
+        empty += per_tab[t] == 0 ? 1 : 0;
+    }
+    if (count + empty > kMaxRows) {
+        why = "too many rows";
+        return false;
+    }
 
     header_ = header ? header : "";
-    for (std::size_t t = 0; t < kTabCount; ++t) {
+    tab_count_ = tab_count;
+    for (std::size_t t = 0; t < tab_count; ++t) {
         tabs_[t].name = tabs && tabs[t].name ? tabs[t].name : "";
         tabs_[t].help = tabs && tabs[t].help ? tabs[t].help : "";
         per_tab[t] = 0;
@@ -72,7 +86,7 @@ bool OptionsModel::build(const char* header, const TabSpec* tabs, const RowSpec*
             return false;
         }
     }
-    for (std::size_t t = 0; t < kTabCount; ++t) {
+    for (std::size_t t = 0; t < tab_count; ++t) {
         if (per_tab[t] == 0 && !add(placeholder, t, kPlaceholder)) {
             why = "text ids exhausted";
             count_ = 0;

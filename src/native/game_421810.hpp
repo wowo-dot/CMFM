@@ -117,6 +117,19 @@ inline constexpr char kGetInstanceFromNamePattern[] = "48 89 5C 24 08 48 89 74 2
 // cGUIInstance::setPlay(instance, bool) at RVA 0x18BAEA0.
 inline constexpr char kSetPlayPattern[] = "48 85 C9 74 50 48 89 5C 24 08 57 48 83 EC 20 0F B6 FA";
 
+// cGUIFixedScrollList::enable(scroll, owner, callback) at RVA 0xB65B20. Every
+// button list holds one at +736 (attached at list init). Switched on, it
+// turns moves past the last visible row into scrolls (the list's wrap must
+// be on) and calls callback(owner, from, to) after each scroll; a game menu
+// sets it up like this at 0x140556030.
+inline constexpr char kScrollEnablePattern[] =
+    "80 79 09 00 48 89 91 A0 00 00 00 4C 89 81 88 00 00 00 4C 89 81 90 00 00 00";
+// uGUIOption::initCategory(tab object, unit, tab, name, title) at RVA
+// 0x1E8DFE0: finds the tab's layout objects and fills its rows from
+// TitleOptionTabTables[tab] (buildCategories calls it per category).
+inline constexpr char kInitCategoryPattern[] =
+    "4C 8B DC 49 89 7B 20 55 41 56 41 57 49 8D 6B A9 48 81 EC A0 00 00 00 41 8D 40 FB";
+
 // uGUIOption::buildCategories(categories, unit) at RVA 0x1E8D5A0: slot 5 of
 // the categories object's vtable; builds the category list and every tab's
 // rows from TitleOptionTabTables. Called through that slot after checking it.
@@ -130,6 +143,9 @@ inline constexpr std::size_t kTitleOptionTabTableCount = 6;
 inline constexpr std::uintptr_t kRvaTitleOptionRows[kTitleOptionTabTableCount] = {
     0x31BEEE0, 0x31BE870, 0x31BEB70, 0x31BED00, 0x31BF000, 0x31BE190};
 inline constexpr std::size_t kTitleViewTabs = 5;
+// The tab objects' layout names, as buildCategories passes them to initCategory.
+inline constexpr const char* kTitleTabNames[kTitleViewTabs] = {"settings", "display", "audio", "language",
+                                                               "display_G"};
 // The category labels for tabs 0-4 (file 12), asked for by buildCategories,
 // and the help line while a category is highlighted (file 18, set by
 // sub_141E8C8F0; run 20261011-native-m3 showed the game's).
@@ -155,6 +171,16 @@ inline constexpr std::size_t kListRowCount = 0x1D8;
 inline constexpr std::size_t kListRows = 0x1E8;
 inline constexpr std::size_t kListDuplicateNum = 0x298;
 inline constexpr std::size_t kListCursor = 0x274;
+inline constexpr std::size_t kListWrap = 656;             // byte
+inline constexpr std::size_t kListScroll = 736;           // cGUIFixedScrollList
+inline constexpr std::size_t kListScrollOn = 744;         // byte (scroll +8)
+inline constexpr std::size_t kListScrollKeepWrap = 745;   // byte (scroll +9)
+inline constexpr std::size_t kListScrollVisible = 852;    // scroll +116
+inline constexpr std::size_t kListScrollTotal = 856;      // scroll +120
+inline constexpr std::size_t kListScrollSelected = 868;   // scroll +132: the selected item's index
+inline constexpr std::size_t kListScrollCallback = 872;   // scroll +136
+inline constexpr std::size_t kListScrollCallback2 = 880;  // scroll +144
+inline constexpr std::size_t kListScrollOwner = 896;      // scroll +160
 // List row (cGUIInstance) fields.
 inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
 inline constexpr std::size_t kInstFlags = 0x628;
