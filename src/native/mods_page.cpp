@@ -756,8 +756,8 @@ bool split_view() {
 }
 
 // The mod list's rows in its window: each mod's entry (a mod with several
-// pages marked with a triangle: down while folded, up while its dropdown is
-// open) and the open dropdown's pages, indented; the entry or page that shows
+// pages marked with a small grey triangle: down while folded, up while its
+// dropdown is open) and the open dropdown's pages, indented; the entry or page that shows
 // in light green; the cursor on the highlighted row. The scrollbar says when
 // more rows lie beyond.
 void show_mod_list() {
@@ -787,10 +787,14 @@ void show_mod_list() {
         }
         const menu::Mod& mod = mods[lr.mod];
         std::string text;
+        std::string marker;
         if (lr.page < 0) {
             text = mod.name;
             if (mod.tabs.size() > 1) {
-                text += g_list.open() == lr.mod ? "  \xE2\x96\xB2" : "  \xE2\x96\xBC";  // up / down triangle
+                // A small grey triangle (the text's own size is about 28): down
+                // while folded, up while open; outside the shown row's colour.
+                marker = std::string("  <STYL MOJI_WHITE_DEFAULT2><SIZE 14>") +
+                         (g_list.open() == lr.mod ? "\xE2\x96\xB2" : "\xE2\x96\xBC") + "</SIZE></STYL>";
             }
         } else {
             const char* title = model.tab_name(mod.tabs[static_cast<std::size_t>(lr.page)]);
@@ -799,6 +803,7 @@ void show_mod_list() {
         if (g_mod_top + r == shown) {
             text = "<STYL MOJI_LIGHTGREEN_DEFAULT>" + text + "</STYL>";
         }
+        text += marker;
         std::snprintf(g_row_labels[r], sizeof g_row_labels[r], "%s", text.c_str());
         set_row_text(row, "msg_1", nullptr, g_row_labels[r]);
         field<std::uint32_t>(row, game::kInstFlags) |= game::kInstFlagActive | game::kInstFlagEnabled;

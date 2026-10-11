@@ -888,6 +888,18 @@ study afterwards):**
   `<STYL MOJI_YELLOW_DEFAULT>...</STYL>` (also RED, LIGHTBLUE, ORANGE,
   LIGHTGREEN), icons `<ICON STAR_1>`, `<ICON NOTE>`. formatText renders them
   for CMFM's texts as for the game's.
+- More tags (from the notes of the mod "Colored Shoutout" by Popyhead/Lyn,
+  which the user pointed to, 2026-10-12; the English message files use only
+  some of them): `<SIZE n>...</SIZE>` sets the font size (0 to 60; 20 the
+  usual default), `<CNTR>` centres a line, `<col ff0000>...</col>` any colour,
+  more colours (`MOJI_GREEN`, `BLUE`, `PURPLE`, `LIGHTYELLOW`, `SLGREEN`,
+  `BROWN`, `BLACK`, `WHITE`, `WHITE_DEFAULT2` a light grey, `WHITE_SELECTED2`
+  silver, all `_DEFAULT`), icons for pad buttons (`PAD_L1`, `PAD_R1`, `PAD_RD`
+  ...) and keyboard menu keys (`FORCED_KB_MENU_KEY_L` / `_R`), and these
+  characters: ▲ △ □ ○ ◎ ● ■ ∞ ♥ † α ß Γ Ω Φ δ π Σ ¥ £ ¢ and box drawing. CMFM's
+  mod list marks mods with pages with `<SIZE 14>` triangles in
+  `MOJI_WHITE_DEFAULT2` (run `modlist-2`; the full-size triangle of run
+  `modlist-1` was too heavy).
 - Panel and header texts: the header `a_title_options` has one text,
   `msg_title`; each panel title `a_title_menu_<tab>` has `msg_sub_title`
   (300 x 50, font 24, centred, AutoScale shrinks long text).

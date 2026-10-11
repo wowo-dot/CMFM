@@ -150,7 +150,8 @@ on the page (ids from `CMFM_RESERVED_IDS`, 0xFFFFFF00, are CMFM's); a
 default must lie in range. Strings are UTF-8. The game's own
 text styles work in labels, help and TEXT lines, for example
 `<STYL MOJI_YELLOW_DEFAULT>warning</STYL>` (also RED, LIGHTBLUE, ORANGE,
-LIGHTGREEN).
+LIGHTGREEN, GREEN, BLUE, PURPLE, WHITE_DEFAULT2 a light grey) and
+`<SIZE 16>smaller</SIZE>` (20 is the usual size).
 
 ## 3. The callbacks
 
