@@ -596,6 +596,64 @@ range, so the view stays off unless every hook is active (as now).
 - Back to the title from the game (a new uGUITitle unit): the Mods row and
   page work again (run `-m3b`).
 
+## Scrolling and a page of CMFM's own (study, 2026-10-11)
+
+**The game's scroll controller** (`cGUIFixedScrollList`, embedded in every
+`cGUIInstButtonList` at +736, attached at list init; enabled as a game menu
+does at 0x140556030: +744 on, +852 visible rows, +856 total, `0xB65B20`
+(scroll, owner, callback), +745 and the list's wrap +656) slides rows during
+a scroll and expects a clipped list with spare rows; on the title page's
+plain category list it drifted (run `20261011-scroll-1`). CMFM keeps its own
+window instead: a hook on the list's cursor move (`0xB74060`, vtable slot 28
+via a thunk) turns Down on the bottom row / Up on the top row into a window
+move; the wheel comes from al.input's window messages and is applied in
+`uGUIOption::update` (slot 81, `0x1E8EF50`; +10480 is 0 while the category
+list has the focus). Works (run `20261011-scroll-2`).
+
+**GUI layout files** (`.gui`, `rGUI`): `rGUI::Deserialize` (0x1422A70B0)
+checks magic `GUI\0` and version 0x23316 and reads the whole file;
+`sub_1422A7310` turns the header's section offsets (u32 in u64 slots,
+0xA8..0x190) into pointers and fixes up every record table. Counts at
+0x28..0x64; design size at 0x98/0x9C (1920x1080). Class ids are MT DTI ids,
+`(~crc32(name)) & 0x7FFFFFFF`. `tools/re/gui_dump.py` prints a file:
+animations (templates such as one settings row), sequences, the parts
+(`cGUIObj*`) and the instances (`cGUIInst*`). `ui\title\options.gui` holds
+**seven** panels with row lists (settings, controls, camera, display, audio,
+language, display_G); `uGUIOption`'s code, not the layout, keeps the page at
+five (category rows 5 and 6 are Key Config and Default in code).
+
+**Pages and their lifetime:**
+- A class description (MT DTI, e.g. `uGUIOption::DTI::Instance`
+  0x14502B370): vtable (slot 1 creates an object: `sub_141E87060` allocates
+  0x7810 bytes with the DTI's allocator and runs the constructor
+  `0x141E88400`), name at +8, parent at +0x20, size/flags at +0x30, id at
+  +0x34. Registered by `MtDti::ctor(dti, name, parent, size, ...)`.
+- `sMhUnit::newUnit(sMhUnit, dti)` = `dti->vtable[1]()`.
+  `sMhUnit::addBottom(sMhUnit, line, unit, group bits)` (0x142219070) puts
+  it on a move line (GUI pages: line 20, bits 0x40000000).
+- The registry (`createGUIObjects`) is not the only way: **the title scene
+  (`aTitle`, `sub_14025CF70`) creates its pages itself** with newUnit +
+  addBottom(20) and keeps reference-counted pointers (scene+216 the title
+  menu, scene+312 the Options page); its destructor (`sub_14025B670`) only
+  releases its references. Group 0 (`sub_141ADC8A0`, once) holds the common
+  pages alive at the title and in game (units get +20 |= 8).
+- A page names its layout through vtable slot 71 (`uGUIOption`:
+  `ui\title\options`).
+- `uMhGUI::requestOpen(unit, opener)` sets state 0x10 and stores the opener
+  at +8448; on close (slot 87 `0x141FB89B0`) the opener gets vtable +160
+  with a "child closed" message (`off_143499310`). The title scene passes no
+  opener and polls the page's state instead (flow 9).
+
+**A page of CMFM's own (plan, not built):** a class description copied
+from `uGUIOption`'s with CMFM's name, id and vtable (slot 1: the original
+create, then CMFM's page vtable); the page vtable is `uGUIOption`'s with
+overrides (getDti, getGuiPath, play, close, update). CMFM creates the page
+itself (newUnit + addBottom(20)), keeps the reference and opens it from both
+Mods entries: on the title by pointing the scene's flow 9 at CMFM's page
+for that one flow; in game from the Start menu (to be studied). The game's
+own Options pages stay untouched; CMFM's rows go into the page only while
+CMFM builds it. A layout of CMFM's own (decision 10) can follow.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
