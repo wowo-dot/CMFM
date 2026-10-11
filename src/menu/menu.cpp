@@ -21,6 +21,8 @@ constexpr std::size_t kSettingSize10 = offsetof(cmfm_setting_t, button);
 // write them).
 constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
 constexpr char kSectionEnd[] = "</STYL>";
+// Plain buttons (Menu::is_plain_button): the label in its own colour.
+constexpr char kPlainButtonStart[] = "<STYL MOJI_LIGHTBLUE_DEFAULT>";
 const char* const kOffOn[] = {"Off", "On"};
 const char* const kDash[] = {"-"};
 const char* const kNoValue[] = {""};
@@ -426,6 +428,9 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             } else if (s.type == CMFM_TYPE_TEXT) {
                 r.value_ptrs = {r.text};
             } else if (s.type == CMFM_TYPE_BUTTON) {
+                if (s.id == kResetId) {
+                    r.label = kPlainButtonStart + s.label + kSectionEnd;
+                }
                 r.values = {s.button};
                 r.value_ptrs = {r.values[0].c_str()};
             } else if (s.type == CMFM_TYPE_BOOL) {
@@ -536,6 +541,11 @@ Menu::Row* Menu::setting_row(std::uint32_t setting_id) {
 bool Menu::is_button(std::uint32_t setting_id) const {
     const Row* r = any_setting_row(setting_id);
     return r != nullptr && pages_[r->page].settings[r->setting].type == CMFM_TYPE_BUTTON;
+}
+
+bool Menu::is_plain_button(std::uint32_t setting_id) const {
+    const Row* r = any_setting_row(setting_id);
+    return r != nullptr && pages_[r->page].settings[r->setting].id == kResetId;
 }
 
 const char* Menu::button_question(std::uint32_t setting_id) const {

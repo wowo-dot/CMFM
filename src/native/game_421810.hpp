@@ -332,6 +332,22 @@ inline constexpr char kTitleText[] = "msg_sub_title";
 inline constexpr char kRowLabelText[] = "msg_config";
 inline constexpr char kRowValueText[] = "text_config_L";  // the value box
 inline constexpr char kRowStar[] = "null_star";
+// A text part (cGUIObjMessage; its property list, 0x14233A920): `Size` (two
+// floats), the flags whose 0x10000 asks for the text to be laid out again at
+// the next update (as the FontSize setter does; slot 13 runs it), and
+// `Layout` (a byte: low nibble 0 left, 1 centre, 2 right; high nibble 1
+// middle), which the layout reads with the box width.
+inline constexpr std::size_t kMessageWidth = 248;
+inline constexpr std::size_t kMessageFlags = 328;
+inline constexpr std::uint32_t kMessageRelayout = 0x10000;
+inline constexpr std::size_t kMessageLayout = 336;
+// The row label in CMFM's layout (menu_config/msg_config: PosX 10, anchored
+// left-middle): left in its 340 px box, or centred in a box to x 796, i.e.
+// on x 403 like the mod's header (kPanelHeaderName) over the panel.
+inline constexpr std::uint8_t kLabelLeft = 0x10;
+inline constexpr std::uint8_t kLabelCentred = 0x11;
+inline constexpr float kLabelWidth = 340.0f;
+inline constexpr float kCentredLabelWidth = 786.0f;
 
 // Sliders (docs/research/native-menu.md, "Sliders"). A panel row object (96
 // bytes, tab + 96 * (row + 1)) as the row filler (RVA 0x1E8D890) fills it.

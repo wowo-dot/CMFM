@@ -134,6 +134,9 @@ public:
     // BUTTON rows: press() calls the page's `press` (false if it failed or
     // the row is no button); afterwards texts and locks are read again.
     bool is_button(std::uint32_t setting_id) const;
+    // A BUTTON drawn as its label alone, centred and coloured, without a value
+    // box (like the game's "Advanced Graphics Settings" row): CMFM's reset row.
+    bool is_plain_button(std::uint32_t setting_id) const;
     const char* button_question(std::uint32_t setting_id) const;  // nullptr: none
     bool press(std::uint32_t setting_id);
     // Locks (the pages' `locked`), read when a page opens and after every

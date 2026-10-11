@@ -1082,6 +1082,33 @@ each fill, on open and when a restart state changes.
   sound, no cursor move. CMFM calls it after refilling the panel for rows
   that came or went, then puts the cursor back on its setting.
 
+**Centred labels (plain button rows, run `plain-1`; static):**
+- The game's "Advanced Graphics Settings" row is a label alone: no value
+  box, the row itself takes Confirm. CMFM draws its reset row that way: the
+  value box hidden as for headings, the label centred and light blue
+  (`<STYL MOJI_LIGHTBLUE_DEFAULT>`).
+- Text parts are `cGUIObjMessage` (property list `0x14233A920`, getters and
+  setters plain field accesses): +232 `FontStyleId`, +236 `Color`, +248
+  `Size` (w, h floats), +328 flags (bit 0 `AutoScale`), +332 `Font`, +336
+  `Layout` (a byte; low nibble 0 left, 1 centre, 2 right, high nibble the
+  vertical, 1 middle; bits 8-11 `LetterHAlign`/`VAlign`, 18-19 `AutoWrap`),
+  +348 `MessageId`. The base `cGUIObject` (`0x142338650`): +160 `PosX`,
+  +164 `PosY`, +192 `ControlPoint` (bits 0-1 horizontal: 0 left, 1 centre,
+  2 right; bits 2-3 vertical).
+- The text is laid out once and cached. The layout (`cGUIMessageAnalyzer`,
+  `sub_1424DF0C0` reads `Layout & 0xF`, `sub_1424E1CD0` the width) runs
+  again when flags +328 bit 0x10000 is set: the `FontSize` setter
+  (`0x142343210`) sets it, vtable slot 13 (`0x1423424D0`) clears it and
+  calls slot 28 (`0x1423427B0`, re-format and dirty). `sub_142340EC0` gives
+  a line's x from the same fields (`(width - line) / 2` for centre, the box
+  starting at 0, -w/2 or -w by `ControlPoint`).
+- The row template's label (`menu_config/msg_config`) sits at PosX 10,
+  `ControlPoint` 4 (left-middle), box 340 x 40, `Layout` 0x10. Centred:
+  `Layout` 0x11 and a box 786 wide (to x 796), so the text centres on x 403
+  like the mod's header. Row objects are reused as the panel scrolls, so
+  `decorate_panel` sets every label back (left, 340) unless it is a plain
+  button's, and requests the re-layout only when it changed something.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,

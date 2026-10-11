@@ -247,6 +247,10 @@ bool service_is_button(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_button(setting_id);
 }
 
+bool service_is_plain_button(std::uint32_t setting_id) {
+    return g_menu && g_model_ok && g_menu->is_plain_button(setting_id);
+}
+
 const char* service_button_question(std::uint32_t setting_id) {
     return g_menu && g_model_ok ? g_menu->button_question(setting_id) : nullptr;
 }

@@ -319,6 +319,7 @@ void select_tab(void* unit, std::size_t index);
 // looks_cursor: the cursor row the row looks were given (the list stores a
 // moved cursor only after its cursor callback); -1: the list's.
 void decorate_panel(void* unit, std::int32_t looks_cursor = -1);
+void centre_label(void* label, bool centred);
 void show_restart_line(void* unit);
 void show_panel_header(void* unit);
 void request_split_help(void* unit);
@@ -1358,8 +1359,9 @@ void update_sliders(void* unit) {
 // What the game's row filler does not know about CMFM's rows, after every
 // fill of the split panel, focus change and restart state change: section
 // headings the cursor skips (the row's "selectable" flag off, as the list's
-// moves and hover test it) and without a value box, and the restart mark
-// (the row's star icon) on settings waiting for a restart.
+// moves and hover test it) and without a value box, plain buttons (the label
+// centred, no value box), and the restart mark (the row's star icon) on
+// settings waiting for a restart.
 void decorate_panel(void* unit, std::int32_t looks_cursor) {
     char* tab = tab_object(unit, game::kSplitPanel);
     void* list = field<void*>(tab, game::kTabList);
@@ -1400,8 +1402,12 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
         if (void* star = root != nullptr ? gui_get_object(root, game::kRowStar) : nullptr) {
             gui_set_hidden(star, !menu::service_restart_pending(id));
         }
+        const bool plain = menu::service_is_plain_button(id);
         if (void* value = root != nullptr ? gui_get_object(root, game::kRowValueText) : nullptr) {
-            gui_set_hidden(value, section || slider);  // a heading has no value box, a slider its own text
+            gui_set_hidden(value, section || slider || plain);  // a heading has no value box, a slider its own text
+        }
+        if (void* label = root != nullptr ? gui_get_object(root, game::kRowLabelText) : nullptr) {
+            centre_label(label, plain);  // row objects are reused as the panel scrolls
         }
     }
     if (first >= 0) {
@@ -1441,6 +1447,31 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
         }
     }
     update_scrollbars();
+}
+
+// A row label left in its box, or centred over the row (plain buttons, like
+// the game's "Advanced Graphics Settings"): its layout and box width, then the
+// request to lay the text out again. A label that is neither is left alone.
+void centre_label(void* label, bool centred) {
+    std::uint8_t& layout = field<std::uint8_t>(label, game::kMessageLayout);
+    float& width = field<float>(label, game::kMessageWidth);
+    if ((layout != game::kLabelLeft && layout != game::kLabelCentred) ||
+        (width != game::kLabelWidth && width != game::kCentredLabelWidth)) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            logf(AL_LOG_WARNING, "Mods page: a row label is not as expected (layout %u, width %.1f); not centred",
+                 static_cast<unsigned>(layout), static_cast<double>(width));
+        }
+        return;
+    }
+    const std::uint8_t want_layout = centred ? game::kLabelCentred : game::kLabelLeft;
+    const float want_width = centred ? game::kCentredLabelWidth : game::kLabelWidth;
+    if (layout != want_layout || width != want_width) {
+        layout = want_layout;
+        width = want_width;
+        field<std::uint32_t>(label, game::kMessageFlags) |= game::kMessageRelayout;
+    }
 }
 
 // The line above the mod list: empty unless changes wait for a restart.

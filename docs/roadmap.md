@@ -68,13 +68,16 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    upscaler's settings; "Advanced" shows its section. Uses the `locked`
    callback authors already write (MCM: hidden flag, display conditions).
 2. **Reset to defaults per mod.** Done (tag `reset-defaults-1`, run
-   `reset-1`; it resets locked and hidden settings too). A "Reset to defaults" row CMFM adds at the
+   `reset-1`; it resets locked and hidden settings too). Since run
+   `plain-1` the row looks like the game's "Advanced Graphics Settings"
+   row: its label alone, centred and light blue. A "Reset to defaults" row CMFM adds at the
    end of every page (with the game's Yes/No question), restoring every
    setting's `default_value` through `set`; a page can opt out. Today each
    author has to build a Reset button (MCM: the Default key).
-3. **Live status lines.** TEXT rows marked live are read again while the
-   page is open (a few times a second), not only on open: counters, damage
-   numbers, "active" states, debug pages.
+3. **Live status lines.** Done (tag `live-lines-1`, run `live-1`).
+   `CMFM_FLAG_LIVE`: TEXT rows are read again four times a second while
+   shown, not only on open: counters, damage numbers, "active" states,
+   debug pages. A changed line gets only its value rewritten (no flicker).
 4. **Key bindings.** A KEY setting type: Confirm, press a key (with Ctrl,
    Shift, Alt), Esc cancels; the row shows the key's name; CMFM warns when
    another mod's KEY setting already uses it (MCM: key maps with conflict
