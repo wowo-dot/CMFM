@@ -305,6 +305,40 @@ Whether the game's code check covers `.rdata` or the hooked functions is
 not known (and is not something we reverse); a long play session with the
 change in place will show whether it is stable.
 
+## Native popups (from SharpPluginLoader, verified on the clean image)
+
+SharpPluginLoader (MIT; the user's local clone at
+`D:\mh world modding\base body\plugin\reference\SharpPluginLoader`, commit
+1d57554; AL keeps its notice in `third_party/notices`) wraps the game's
+messages in `SharpPluginLoader.Core/Gui.cs` and
+`mhw-cs-plugin-loader/GuiModule.cpp`, with patterns in
+`Assets/Common/AddressRecords.json`. Each pattern matches exactly once on
+the clean image (target = match + offset):
+
+| SPL record | Target | Call (from SPL) |
+|---|---|---|
+| `Gui:DisplayPopup` | 0x141AE33D0 | `(sMhGUI*, const char* msg, float seconds, float delay, bool, float xOff, float yOff)` |
+| `Gui:DisplayMessage` | 0x141A540D0 | chat: `(sChat*, const char* msg, float delay, u32 0, bool important)` |
+| `Gui:DisplayMessageWindow` | 0x141AE3EF0 (= Fexty's `sMhGUI::DisplayMessageWindow`) | `(sMhGUI*, const char* msg, 0, float* offset, bool)` |
+| `Gui:DisplayYesNoDialog` | 0x141AE2050 (= Fexty's `sMhGUI::DisplayYesNoDialog`) | `(sMhGUI*, request*)`; SPL builds two 0x48-byte elements, the second a callback object with a dialog vtable whose slot 2 receives the answer |
+| `Gui:LoadDialogVTable` | 0x141ECE597 (inside `uGUIStartMenu::onItemAction`) | rel32 to the dialog callback vtable SPL copies slots 3-5 from |
+| `Gui:DisplayAlert` | 0x1418D6630 | `(const char* msg)` |
+| `Chat:MessageSent` | 0x14239EA20 | SPL hooks it; this is one of the 29 hooked spots in the old glavenus image, so that dump had SPL loaded |
+
+SPL has nothing on the game's menus themselves (Start menu, Options,
+registry, text injection); its own menu is an ImGui overlay. Its
+`game_functions.h` hard-codes addresses from an older game build; only the
+pattern records apply to 421810.
+
+## Prototype 1 in game (runs 20261011-native-m1, -m1b)
+
+The first attempt refused its own table swap (wrong field) and changed
+nothing; after the fix (c65a397) **"Mods" appears right below Options in
+the System tab, labelled by our text hook, with our help line, also in
+quests; selecting it runs our action** (the Options page as a stand-in);
+the other entries work; the original table is restored on quit. Long-session
+stability is still to be checked.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
