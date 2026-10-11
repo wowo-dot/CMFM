@@ -385,6 +385,61 @@ quests; selecting it runs our action** (the Options page as a stand-in);
 the other entries work; the original table is restored on quit. Long-session
 stability is still to be checked.
 
+## Option values: getter, setter, rows (confirmed, static)
+
+The Options page draws and changes rows through a shared option-row module
+(0x140EE8F90-0x140EEC800), also used by the title screen's `uGUIOption`,
+the sound page and the camera page:
+
+- **Mode** is set by the open request's functor: `sMhGUI::open_uGUIMenuOption`
+  wraps functor `off_143482600` whose call (0x141EC9220) writes
+  `unit+10484 = 0` (mode) and `unit+10488 = 1` (opened from the Start menu);
+  modes 1 and 3 use functors 0x141EC94F0 / 0x141EC9510. Item 71 is the only
+  path to mode 0 (0x141EC7870 is the functor's clone method).
+- **Getter** `sub_140EEA350(kind, id)`: kind 1 -> byte `sUserData+256+id`;
+  kind 2 -> graphics getters; kind 0 **and any unknown kind** -> byte
+  `save+1311704+id`.
+- **Setter** `sub_140EEB450(kind, id, value)`: kind 1 -> `sub_141329080
+  (sUserData+224, id, value)` plus side effects for ids 11, 16, 25; kind 2 ->
+  graphics setters; kind 0 **and any unknown kind** ->
+  `cUserData::setHudElementVisible(save, id, value)`, a save-data write.
+  Callers: the Options page (0x141E82890), the title `uGUIOption`
+  (0x141E89EA0, 0x141E8EF50), the sound page, 0x140EEB860.
+- **Row drawing** `refreshRows` (0x141E82170) -> `sub_140EEA6A0(rowInst,
+  nameText, valueText, row)`: label from file 12; with values, value index =
+  getter, text id = `sub_140EEA620(row, v)`: `valueLabels[v]` (16-byte
+  records) or, without them, `labelId + 1 + v` (flag 1) /
+  `labelId + valueCount + 1 + v` (flag 0); without values: hidden for kind 0
+  ids 77, 129, 130 (rows that open a page), else a number.
+- **Enabled** `sub_140EEAE80` and **visible** `OptionRow_isVisible`: unknown
+  kinds are enabled and visible. In game the visible check hides kind 2 ids
+  0, 1, 2 (NVIDIA DLSS), 6, 7, 10, 12, 13 (FidelityFX CAS): title-only rows.
+- **Value help** `sub_140EEB160(page, row, v)`: `valueLabels[v]` +8/+12, or
+  `helpCat`, `helpId + v + 1`.
+- **Sliders** `sub_140EEA2D0(kind, id)`: slider types only for kind 0 ids
+  45-48, 50-53, 87; anything else is not a slider.
+
+### Prototype 2 design: a CMFM view of the Options page (not built yet)
+
+"Mods" opens the same `uGUIMenuOption` page in mode 0 with CMFM's own tab
+tables:
+
+1. On item 77: point `OptionTabTables[0..4]` (writable `.data`) at CMFM's
+   row tables, set "CMFM view", then run the Options action (item 71).
+2. CMFM rows: `kind` 7, `settingId` = CMFM row index, `flag` 1, label and
+   value texts in file 12 ids 9100-9999 (value ids follow the label), help in
+   file 18 ids 9002-9999 (value help follows the help id); all answered by
+   the existing text hook.
+3. Hooks on the getter and setter answer kind 7 from CMFM and pass every
+   other kind on; without them a kind-7 change would write the save data.
+4. While the view is on, the text hook also answers the header (file 12 id
+   0, "Options" -> "Mods") and the tab names (ids 1-5).
+5. A hook on the page's close (0x141E80D40) and on item 71 restores the
+   original tab tables and ends the view.
+
+Hooks then: text, action, getter, setter, close (5). Sliders, read-only
+lines and rows that open sub-pages come after.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
