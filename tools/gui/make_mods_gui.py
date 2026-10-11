@@ -95,6 +95,9 @@ def build(gui):
     b.like("auto_menu_config_camera", "PosX", 0.0, "auto_menu_title")
     b.like("cursor_camera", "SclX", 81.0, "cursor_menu")
     b.like("cursor_camera", "SclY", 5.2, "cursor_menu")
+    print("the camera panel's number control no longer writes into the row template (its object 2 is no")
+    print("longer a text in the category row style; run 20261011-split-1 crashed in formatText at setup)")
+    b.number("num_input_camera", "MsgInstID", 38, -1)
 
 
 def main():
