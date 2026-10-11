@@ -730,9 +730,17 @@ Tested in run `20261011-own-page-1` (tag own-page-1).
   (`sub_141EC9220`) writes `unit+10484 = 0` and the byte `unit+10488 = 1`;
   on a uGUIOption, +10488 is the categories object's vtable pointer.
 - **Menu mode:** sMhGUI computes per frame `+83664` = Start menu open or its
-  `+0x29BC` set; sMhKeyboard::handleInput and other input code read it. So
-  while a page the menu opened is up, the game stays in menu mode (the
-  hunter does not move). The menu clears `+0x29BC` when it opens again.
+  `+0x29BC` set; sMhKeyboard::handleInput and other input code read it, and
+  sMhGUI's update (`sub_141AE0300`) then locks player input channels 4, 1
+  and 5 (`sub_141B16F80(input manager, channel, player)`, a per-frame mask).
+  The menu clears `+0x29BC` when it opens again. **That alone does not hold
+  the hunter** (run `20261011-own-page-2`): the Start menu locks every
+  channel in its own update while open, and the in-game Options page locks
+  channel 1, plus channel 2 when the Start menu opened it (+10488, set by
+  the open functor), and sets sMhArea's menu bytes (`+0xD31C = 0x0101`, as
+  every game menu does each frame), in `uGUIMenuOption::update`'s open state
+  (RVA 0x1E82596). CMFM's page does the same in its update (slot 81, state 2
+  only) while the Start menu opened it.
 - **Close timing:** `sub_141FB55E0` (begin close) sets `+7428 = 3` and calls
   slot 91 (the close handler) on the same frame, the frame the return record
   fires. Slot 72 (force close, used for kept pages at a scene change through
@@ -752,7 +760,7 @@ Tested in run `20261011-own-page-1` (tag own-page-1).
 - All GUI classes allocate from allocator 27 (class flags), the common pages
   of group 0 included, so a page kept for the session is ordinary.
 
-**Step 2 design (built, not yet tested):** CMFM's page is made once, at the
+**Step 2 design (built; run `20261011-own-page-2`: page correct, hunter moved, fixed as above):** CMFM's page is made once, at the
 first title, and marked kept (`+20 |= 8`, like group 0), so the title and
 the Start menu share it. Start menu > Mods (item 77): if the page is
 running, CMFM does what case 71 does to the menu with its own page (no

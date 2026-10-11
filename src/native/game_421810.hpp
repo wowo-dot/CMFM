@@ -68,6 +68,24 @@ inline constexpr std::int32_t kStartMenuNoDialog = 76;
 inline constexpr std::size_t kStartMenuChildOpen = 0x29BC;
 inline constexpr std::size_t kStartMenuAction = 0x2960;
 
+// How the game's in-game Options page (uGUIMenuOption::update, RVA 0x1E82590)
+// holds the hunter while it is open: every frame in its open state it locks
+// player input channel 1, and channel 2 when the Start menu opened it, and
+// sets the area manager's two menu bytes (+0xD31C = 0x0101, as every game
+// menu does each frame). The pattern starts at RVA 0x1E82596; CMFM reads the
+// input manager and area manager globals and the lock function from it.
+inline constexpr char kOptionsInputLockPattern[] =
+    "F7 81 98 22 00 00 11 00 00 80 48 8B D9 0F 84 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 45 33 C0 41 8D 50 01 E8 ?? ?? ?? ?? 80 BB F8 28 00 00 01 75 13 48 8B 0D ?? ?? ?? ?? 45 33 C0 41 8D 50 02 E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 66 C7 80 1C D3 00 00 01 01";
+inline constexpr std::size_t kInputLockInput1 = 19;  // mov rcx, [rip+rel32] (input manager)
+inline constexpr std::size_t kInputLockCall1 = 33;   // call lockChannel(input, channel, player)
+inline constexpr std::size_t kInputLockInput2 = 47;
+inline constexpr std::size_t kInputLockCall2 = 61;
+inline constexpr std::size_t kInputLockArea = 66;    // mov rax, [rip+rel32] (sMhArea)
+inline constexpr std::size_t kAreaMenuFlags = 0xD31C;
+inline constexpr std::uint16_t kAreaMenuFlagsOn = 0x0101;
+inline constexpr std::int32_t kInputChannelMenu = 1;
+inline constexpr std::int32_t kInputChannelMove = 2;  // only when the Start menu opened the page
+
 // Start menu item ids.
 inline constexpr std::int32_t kItemOptions = 71;  // opens uGUIMenuOption
 inline constexpr std::int32_t kItemMods = 77;     // ours: 76 is the end marker
@@ -231,6 +249,10 @@ inline constexpr std::size_t kRequestOpenSetRefCall = 46;  // E8 rel32: setRef
 // uMhGUI::requestClose(unit, now) at RVA 0x1FB7CC0.
 inline constexpr char kRequestClosePattern[] =
     "44 8B 81 98 22 00 00 41 83 C8 20 41 8B C0 41 0F BA F0 07 0F BA E8 07 84 D2 44 0F 45 C0 44 89 81 98 22 00 00 C3";
+
+// uMhGUI state (+8856): any of these bits while open or opening.
+inline constexpr std::size_t kGuiState = 0x2298;
+inline constexpr std::uint32_t kGuiStateOpen = 0x80000011;
 
 // cUnit fields.
 inline constexpr std::size_t kUnitState = 12;  // byte: & 0xE while alive (2 new, 8 running; 16 killed)

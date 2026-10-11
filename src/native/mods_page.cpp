@@ -23,10 +23,16 @@ using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
 using BuildCategoriesFn = void (*)(void* categories, void* unit);
+using LockChannelFn = std::uint64_t (*)(void* input, std::int32_t channel, std::uint32_t player);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
 InitCategoryFn g_init_category = nullptr;
+// From uGUIMenuOption::update: the input manager and area manager globals and
+// the input lock.
+void* const* g_input_manager = nullptr;
+void* const* g_area_manager = nullptr;
+LockChannelFn g_lock_channel = nullptr;
 
 enum Hook { kShowCategory, kListMove, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
@@ -39,6 +45,9 @@ bool g_create_failed = false;  // logged once; no page this session then
 std::atomic<bool> g_view{false};
 // The Start menu that opened the page: it opens again when the page closes.
 GameRef g_return_menu = {};
+// The page is open from the Start menu: it holds the hunter as the game's
+// Options page does.
+std::atomic<bool> g_hold_player{false};
 std::uint32_t g_opened_in_game = 0;
 // TitleOptionTabTables, pointed at CMFM's tables only while CMFM's page builds.
 QwordPatch g_tabs[game::kTitleViewTabs];
@@ -247,8 +256,28 @@ std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t messag
     return 1;
 }
 
-// CMFM's page, vtable slot 81: every frame while it runs (the menu's thread).
+// What uGUIMenuOption::update does first in its open state when the Start
+// menu opened it: lock the player's menu and movement input channels and set
+// the area manager's menu bytes, every frame.
+void hold_player(void* unit) {
+    if ((field<std::uint32_t>(unit, game::kGuiState) & game::kGuiStateOpen) == 0) {
+        return;
+    }
+    if (void* input = *g_input_manager) {
+        g_lock_channel(input, game::kInputChannelMenu, 0);
+        g_lock_channel(input, game::kInputChannelMove, 0);
+    }
+    if (void* area = *g_area_manager) {
+        field<std::uint16_t>(area, game::kAreaMenuFlags) = game::kAreaMenuFlagsOn;
+    }
+}
+
+// CMFM's page, vtable slot 81: every frame while it is open (state 2; the
+// menu's thread).
 std::uint64_t page_update(void* unit) {
+    if (g_hold_player.load(std::memory_order_relaxed)) {
+        hold_player(unit);
+    }
     if (g_wheel.load(std::memory_order_relaxed) != 0) {
         const int delta = g_wheel.exchange(0, std::memory_order_relaxed) + g_wheel_rest;
         constexpr int kNotch = 120;  // WHEEL_DELTA
@@ -389,6 +418,7 @@ std::uint64_t page_open(void* unit) {
 // stay on screen while the page closes; the next open fills it again.
 std::uint64_t page_close(void* unit) {
     const std::uint64_t result = page_next(game::kSlotClose)(unit);
+    g_hold_player.store(false, std::memory_order_relaxed);  // slot 81 stops running here too
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
         logf(AL_LOG_INFO, "Mods page: closed");
@@ -419,6 +449,32 @@ std::uint64_t show_category_detour(void* categories, std::int32_t category) {
     return result;
 }
 
+// The target of a rip-relative operand whose rel32 ends `end` bytes into
+// `code` (rel32 at end - 4).
+std::uintptr_t rip_target(const std::uint8_t* code, std::size_t end) {
+    std::int32_t rel = 0;
+    std::memcpy(&rel, code + end - 4, sizeof rel);
+    return reinterpret_cast<std::uintptr_t>(code) + end + rel;
+}
+
+bool find_input_lock(const Env& env, std::string& why) {
+    void* match = nullptr;
+    if (!find_game_function(env, "uGUIMenuOption input lock", game::kOptionsInputLockPattern, &match, why)) {
+        return false;
+    }
+    const auto* code = static_cast<const std::uint8_t*>(match);
+    const std::uintptr_t input = rip_target(code, game::kInputLockInput1 + 7);
+    const std::uintptr_t lock = rip_target(code, game::kInputLockCall1 + 5);
+    if (rip_target(code, game::kInputLockInput2 + 7) != input || rip_target(code, game::kInputLockCall2 + 5) != lock) {
+        why = "uGUIMenuOption's input lock differs";
+        return false;
+    }
+    g_input_manager = reinterpret_cast<void* const*>(input);
+    g_lock_channel = reinterpret_cast<LockChannelFn>(lock);
+    g_area_manager = reinterpret_cast<void* const*>(rip_target(code, game::kInputLockArea + 7));
+    return true;
+}
+
 }  // namespace
 
 bool mods_page_register(const Env& env, std::string& why) {
@@ -426,7 +482,7 @@ bool mods_page_register(const Env& env, std::string& why) {
     if (!gui_register(env, why) ||
         !find_game_function(env, "initCategory", game::kInitCategoryPattern,
                             reinterpret_cast<void**>(&g_init_category), why) ||
-        !page_class_register(env, why)) {
+        !page_class_register(env, why) || !find_input_lock(env, why)) {
         return false;
     }
     struct Spec {
@@ -534,6 +590,7 @@ bool mods_page_open_from_start_menu(void* menu) {
     // does not move; sMhGUI+83664) and close the menu. The page's close
     // handler opens the menu again.
     field<std::int32_t>(menu, game::kStartMenuDialog) = game::kStartMenuNoDialog;
+    g_hold_player.store(true, std::memory_order_relaxed);
     gui_request_open(page, nullptr);
     game_ref_set(g_return_menu, menu);
     field<std::uint8_t>(menu, game::kStartMenuChildOpen) = 1;
