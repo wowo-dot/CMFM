@@ -864,7 +864,32 @@ study afterwards):**
   the panel's Back runs first (tab slot 9). Moving onto the panel's window
   in focus 0: the category list's Confirm (categories slot 8,
   `sub_141E89C40` -> `sub_141E8A890`) enters it. Both slots are checked
-  against their RVAs before each call.
+  against their RVAs before each call. Tested in run `20261011-split-4`
+  (tag split-layout-1).
+
+**Rows, marks and text (static, 2026-10-11; used by run `20261011-design-1`):**
+- A list row's +0x628 (1576) flags: bit 0x2 "active" (the list's moves,
+  hover and start row skip rows without it), bit 0x4 greyed.
+  `sub_140B732A0(row, on, animate)` flips 0x2 and plays animation 5 (on) or
+  9 (off); `sub_140B72F00` / `sub_140B72EE0` set and clear 0x4 (9 = the
+  greyed look). The row filler calls `sub_140B732A0(row, 1, 1)` on every
+  fill, so a heading made by clearing 0x2 directly (no animation, normal
+  look) has to be redone after each fill.
+- The row filler (`sub_141E8D890`) finds `text_config_L` (value),
+  `msg_config` (label), `msg_slider_00/01`, and `null_star`, a star icon it
+  hides unless row +86 is set; nothing in uGUIOption sets +86, so the title
+  page never shows it. CMFM shows it as the restart mark
+  (`cGUIObject::setHidden`, 0x142343310).
+- The greyed state comes from `sub_140EEAE80(row entry, ..., 1)` in the
+  row's deactivate (`sub_141E8D200`): false gives animation 9 and text
+  colour 7.
+- Text style tags as the game's message files write them:
+  `<STYL MOJI_YELLOW_DEFAULT>...</STYL>` (also RED, LIGHTBLUE, ORANGE,
+  LIGHTGREEN), icons `<ICON STAR_1>`, `<ICON NOTE>`. formatText renders them
+  for CMFM's texts as for the game's.
+- Panel and header texts: the header `a_title_options` has one text,
+  `msg_title`; each panel title `a_title_menu_<tab>` has `msg_sub_title`
+  (300 x 50, font 24, centred, AutoScale shrinks long text).
 
 ## Answers so far
 
