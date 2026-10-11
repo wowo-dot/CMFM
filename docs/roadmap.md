@@ -55,8 +55,42 @@ each part works go into `docs/research/native-menu.md`.
 
 The first draft is complete.
 
-## Next
+## Interface 1.2: what mod authors use (chosen 2026-10-12)
 
+Chosen with the user, MCM (Skyrim's and Fallout 4's Mod Configuration Menu)
+as inspiration: its success confirms what authors reach for. Not every MCM
+feature; the ones MHW mods need. Built in this order, each tested in game:
+
+1. **Conditional rows.** `CMFM_FLAG_HIDE_LOCKED`: while a row is locked it
+   is hidden instead of greyed. One upscaler choice shows only that
+   upscaler's settings; "Advanced" shows its section. Uses the `locked`
+   callback authors already write (MCM: hidden flag, display conditions).
+2. **Reset to defaults per mod.** A "Reset to defaults" row CMFM adds at the
+   end of every page (with the game's Yes/No question), restoring every
+   setting's `default_value` through `set`; a page can opt out. Today each
+   author has to build a Reset button (MCM: the Default key).
+3. **Live status lines.** TEXT rows marked live are read again while the
+   page is open (a few times a second), not only on open: counters, damage
+   numbers, "active" states, debug pages.
+4. **Key bindings.** A KEY setting type: Confirm, press a key (with Ctrl,
+   Shift, Alt), Esc cancels; the row shows the key's name; CMFM warns when
+   another mod's KEY setting already uses it (MCM: key maps with conflict
+   detection, its most used feature). Keyboard first.
+5. **More settings per page.** The panel scrolls, so a page may hold more
+   than 24 rows (the limit to check against the text-id budget).
+
+## Then: config pages without code (1.3, its own design first)
+
+A mod ships a small description file next to its config; CMFM shows the
+page and edits the mod's own config file from it. No C interface needed,
+so Stracker and SharpPluginLoader plugins can join (MCM Helper's step,
+which made MCM support nearly free for authors). The config file stays the
+mod's; how CMFM tells a running mod about a change is part of the design.
+
+## Later
+
+- Colour settings (overlay and HUD mods), translations of mod texts, text
+  input, a per-row Default key.
 - Choice lists longer than 14 entries: a scrolling pick list (arrows today).
 - The author guide and the handoff to the DLSS mod: written 2026-10-12
   (`docs/author-guide.md`, `docs/handoff-dlss-mod-20261012.md`); `cmfm.menu`
@@ -65,8 +99,6 @@ The first draft is complete.
   rows, refusals and status lines cover the known cases. The sketch
   (`cmfm_popups_design_v1`: the game's message window, its message log, a
   Messages list on the Overview) stays on file in case a real need appears.
-- Status pages with live values (the DLSS mod: render size to output size,
-  frame generation multiplier, Reflex, last failure); debug pages.
 - A long play session; then drop the old options view fallback and turn the
   data-patch helper into an AL request (decision 9).
 - SharpPluginLoader compatibility (it swaps the same Start menu entries).
