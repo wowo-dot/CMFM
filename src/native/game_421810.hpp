@@ -393,7 +393,13 @@ inline constexpr std::size_t kTabNumInput = 72;      // num_input_<tab>: the arr
 // the count from the row (sub_140B82900) but the value (this function,
 // value(arrows, value) at RVA 0xB82890) only for the game's own kind-1 ids
 // below 32, so CMFM sets it for its rows (run 20261012-hide-1: after a panel
-// refill the arrows never reached value 0).
+// refill the arrows never reached value 0). It always reports a change to the
+// arrows' callback (it sets the stored value to -1 first); the tab's callback
+// (sub_141E89E00) does nothing while this tab byte is set, and the row looks
+// set it around their own call; without it the callback runs the setter and a
+// refresh whose row looks set the value again, without end (run
+// 20261012-hide-2: stack overflow).
+inline constexpr std::size_t kTabArrowGuard = 2400;
 inline constexpr char kArrowValuePattern[] =
     "48 83 EC 38 44 0F B6 81 58 02 00 00 45 33 C9 C7 81 40 02 00 00 FF FF FF FF C6 44 24 20 00 E8";
 inline constexpr char kPickText[] = "msg_language";

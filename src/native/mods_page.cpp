@@ -1395,7 +1395,11 @@ void decorate_panel(void* unit, std::int32_t looks_cursor) {
         if (arrows != nullptr && is_cmfm_row(rows[cursor].kind, id) && !menu::service_is_section(id) &&
             field<std::uint8_t>(cursor_object, game::kRowIsSlider) == 0 &&
             field<std::uint8_t>(cursor_object, game::kRowOpensList) == 0) {
+            std::uint8_t& guard = field<std::uint8_t>(tab, game::kTabArrowGuard);  // as the row looks do
+            const std::uint8_t was = guard;
+            guard = 1;
             g_arrow_value(arrows, static_cast<std::int32_t>(menu::service_get(id)));
+            guard = was;
         }
     }
     update_scrollbars();
