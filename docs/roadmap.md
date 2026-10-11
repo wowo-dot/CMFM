@@ -67,7 +67,8 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    greyed. One upscaler choice shows only that
    upscaler's settings; "Advanced" shows its section. Uses the `locked`
    callback authors already write (MCM: hidden flag, display conditions).
-2. **Reset to defaults per mod.** A "Reset to defaults" row CMFM adds at the
+2. **Reset to defaults per mod.** Done (tag `reset-defaults-1`, run
+   `reset-1`; it resets locked and hidden settings too). A "Reset to defaults" row CMFM adds at the
    end of every page (with the game's Yes/No question), restoring every
    setting's `default_value` through `set`; a page can opt out. Today each
    author has to build a Reset button (MCM: the Default key).
