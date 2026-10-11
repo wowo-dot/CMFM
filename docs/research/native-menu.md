@@ -482,6 +482,24 @@ It keeps only **kind 1** rows and kind 2 rows whose id byte is 0-1, 4-7 or
 and unknown kinds are dropped. It resizes the list with `setRowCount` and
 fills rows with 0x141E8D890; values go through the same getter and setter.
 
+**Title Options layout (run `20261011-title-inspect`, read-only):** a
+category list on the left (`btnlist_menu`): Interface, Display, Audio,
+Language, Privacy, Key Config, Default; the highlighted category's rows on
+the right. `sub_141E8D5A0` (the +10488 object's vtable slot 5, called from
+setup 0x141E8B360) builds it: names `settings`, `display`, `audio`,
+`language`, `display_G`, `controls`, `default`, label ids 392, 347, 348,
+349, 395, 10212, 350; `setRowCount(6 + Key-Config-condition)`; then
+`sub_141E8DFE0(sub-object, gui, tab, name, ...)` per category, which finds
+`btnlist_<name>` and fills it from `off_143FC0480[tab]` (0x141E8DDD0).
+Live: sub-objects 0-4 = tabs 0-4 with 6, 12, 9, 3, 2 rows (Interface:
+HUD/Help Text Size...; Display: Display Output Settings...; Audio: Voice
+Volume...; Language: Text, Voice, Subtitles; Privacy: Privacy Policy, Play
+Data Collection/Analysis); sub-objects 5-6 have no list (Key Config,
+Default are actions). **The lists are built once, at setup**, so a CMFM
+view must re-run the category builder after swapping the tables (and again
+after restoring), and trim the category list to 5 rows so Key Config and
+Default (a full reset) are out of reach.
+
 **Consequence for CMFM rows:** use **kind 1 with setting ids 100-199**
 instead of kind 7. Both pages keep kind 1 rows, draw their values through
 the generic path (value count > 0), treat them as enabled and visible, and
