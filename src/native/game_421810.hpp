@@ -286,6 +286,11 @@ inline constexpr std::uintptr_t kRvaResourceManager = 0x5123A00;  // sMhResource
 inline constexpr std::uintptr_t kRvaResourceManagerVtable = 0x33FC610;
 inline constexpr std::uintptr_t kRvaGuiResourceClass = 0x51C4608;  // rGUI::DTI::Instance
 inline constexpr char kGuiResourceClassName[] = "rGUI";
+// In CMFM's layout: the mod list (the spare camera list, styled like the
+// category list) and the panel that shows the highlighted mod (audio: its
+// rows carry a slider part).
+inline constexpr char kModListName[] = "btnlist_camera";
+inline constexpr std::size_t kSplitPanel = 2;
 inline constexpr char kOptionPageClassName[] = "uGUIOption";
 inline constexpr std::uint32_t kOptionPageClassId = 0x165BDEB6;  // (~crc32(name)) & 0x7FFFFFFF
 // MtDTI as MtDti::ctor fills it; its vtable has 4 slots (1: new object).

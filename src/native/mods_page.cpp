@@ -73,6 +73,14 @@ struct SavedWrap {
 // Edge rows with an arrow when more tabs lie beyond them.
 char g_label_up[96];
 char g_label_down[96];
+// Split mode (CMFM's own layout, docs/research/native-menu.md "Layout
+// study"): the mod list (the layout's spare camera list, styled like the
+// category list) shows every menu tab; the page's category list, off screen,
+// keeps its cursor on the audio panel, which shows the highlighted tab.
+std::atomic<bool> g_split{false};
+std::atomic<void*> g_mod_list{nullptr};  // while the page shows CMFM's menu
+std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
+std::size_t g_mod_top = 0;               // the first tab in the mod list's window
 
 // Short lines on user actions only (no allocation).
 void logf(al_log_level_t level, const char* format, ...) {
@@ -148,17 +156,25 @@ void restore_tables() {
     }
 }
 
-// Runs `build` with TitleOptionTabTables[t] pointing at CMFM's tab top + t:
+// The menu tab shown by tab object t: in split mode every panel holds the
+// highlighted tab (a panel must never be empty, and only the audio panel is
+// shown); otherwise the window's tab.
+std::size_t menu_tab(std::size_t t) {
+    return g_split.load(std::memory_order_relaxed) ? g_selected.load(std::memory_order_relaxed)
+                                                    : g_top.load(std::memory_order_relaxed) + t;
+}
+
+// Runs `build` with TitleOptionTabTables[t] pointing at CMFM's menu_tab(t):
 // the game reads those tables only while it fills a category's rows
 // (fillCategoryRows), so the game's own Options pages never see CMFM's.
 template <class Build>
-bool with_tables(const OptionsModel& model, std::size_t top, Build build) {
+bool with_tables(const OptionsModel& model, Build build) {
     for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
         std::string why;
         const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model.table(top + t));
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model.table(menu_tab(t)));
         if (!g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
-            logf(AL_LOG_WARNING, "Mods page: could not point tab %zu at CMFM's tab %zu: %s", t, top + t,
+            logf(AL_LOG_WARNING, "Mods page: could not point tab %zu at CMFM's tab %zu: %s", t, menu_tab(t),
                  why.c_str());
             restore_tables();
             return false;
@@ -172,6 +188,8 @@ bool with_tables(const OptionsModel& model, std::size_t top, Build build) {
 // ---- Scrolling the category list (more than five tabs) ----
 
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
+bool split_view();
+void select_tab(void* unit, std::size_t index);
 
 bool scrolling() {
     return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
@@ -185,7 +203,7 @@ void refill_window(void* unit) {
     void* categories = field<void*>(unit, game::kOptCategoryList);
     const std::size_t top = g_top.load(std::memory_order_relaxed);
     const std::size_t entries = g_entries.load(std::memory_order_relaxed);
-    const bool filled = with_tables(model, top, [&] {
+    const bool filled = with_tables(model, [&] {
         for (std::size_t r = 0; r < game::kTitleViewTabs; ++r) {
             prepare_tab(unit, r);
             g_init_category(tab_object(unit, r), unit, static_cast<std::int32_t>(r), game::kTitleTabNames[r],
@@ -221,6 +239,19 @@ void scroll_to(void* unit, std::size_t top) {
 // Directional moves on the category list: past the bottom or top row the
 // window moves instead of the cursor; at the very end and start it wraps.
 std::uint64_t list_move_detour(void* list, std::int32_t row) {
+    if (list == g_window_list.load(std::memory_order_acquire) && split_view() &&
+        g_mod_list.load(std::memory_order_acquire) != nullptr) {
+        // Split mode: the category cursor stays on the audio panel; the move
+        // goes to the mod list (wrapping at both ends).
+        const std::int32_t old = field<std::int32_t>(list, game::kListCursor);
+        const std::size_t entries = g_entries.load(std::memory_order_relaxed);
+        if (row != old && entries > 1) {
+            const std::size_t selected = g_selected.load(std::memory_order_relaxed);
+            select_tab(g_view_unit.load(std::memory_order_acquire),
+                       row > old ? (selected + 1) % entries : (selected + entries - 1) % entries);
+        }
+        return 0;
+    }
     if (list == g_window_list.load(std::memory_order_acquire) && scrolling()) {
         void* unit = g_view_unit.load(std::memory_order_acquire);
         const std::int32_t old = field<std::int32_t>(list, game::kListCursor);
@@ -249,7 +280,7 @@ std::uint64_t list_move_detour(void* list, std::int32_t row) {
 std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t message, std::uintptr_t wparam,
                                        std::intptr_t, void*) {
     constexpr std::uint32_t kMouseWheel = 0x020A;  // WM_MOUSEWHEEL
-    if (message != kMouseWheel || !scrolling()) {
+    if (message != kMouseWheel || !(scrolling() || split_view())) {
         return 0;
     }
     void* unit = g_view_unit.load(std::memory_order_acquire);
@@ -287,7 +318,13 @@ std::uint64_t page_update(void* unit) {
         constexpr int kNotch = 120;  // WHEEL_DELTA
         const int steps = delta / kNotch;
         g_wheel_rest = delta % kNotch;
-        if (steps != 0 && scrolling() && unit == g_view_unit.load(std::memory_order_acquire)) {
+        if (steps != 0 && split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
+            // Wheel up (positive) selects earlier tabs; no wrap.
+            std::int64_t next = static_cast<std::int64_t>(g_selected.load(std::memory_order_relaxed)) - steps;
+            const std::int64_t last = static_cast<std::int64_t>(g_entries.load(std::memory_order_relaxed)) - 1;
+            next = next < 0 ? 0 : next > last ? last : next;
+            select_tab(unit, static_cast<std::size_t>(next));
+        } else if (steps != 0 && scrolling() && unit == g_view_unit.load(std::memory_order_acquire)) {
             const std::size_t top = g_top.load(std::memory_order_relaxed);
             const std::size_t last_top = g_entries.load(std::memory_order_relaxed) - game::kTitleViewTabs;
             // Wheel up (positive) shows earlier tabs; no wrap.
@@ -348,6 +385,81 @@ void set_header(void* unit, const char* text) {
     }
 }
 
+// ---- Split mode: the mod list and the panel of the highlighted tab ----
+
+bool split_view() {
+    return g_split.load(std::memory_order_relaxed) && g_view.load(std::memory_order_acquire);
+}
+
+// The mod list's rows: the tabs in its window, arrows on the edge rows when
+// more lie beyond, the highlight on the selected tab.
+void show_mod_list() {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    if (list == nullptr) {
+        return;
+    }
+    const OptionsModel& model = menu::service_model();
+    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
+    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    const std::size_t rows = entries < visible ? entries : visible;
+    if (field<std::uint32_t>(list, game::kListRowCount) != rows) {
+        cursor_to_top(list);
+        gui_set_row_count(list, rows);
+    }
+    for (std::size_t r = 0; r < rows; ++r) {
+        void* row = list_row(list, static_cast<std::uint32_t>(r));
+        if (row == nullptr) {
+            continue;
+        }
+        const char* label = model.tab_name(g_mod_top + r);
+        if (r == 0 && g_mod_top > 0) {
+            std::snprintf(g_label_up, sizeof g_label_up, "\xE2\x96\xB2 %s", label);  // up-pointing triangle
+            label = g_label_up;
+        } else if (r == rows - 1 && g_mod_top + rows < entries) {
+            std::snprintf(g_label_down, sizeof g_label_down, "%s \xE2\x96\xBC", label);  // down-pointing triangle
+            label = g_label_down;
+        }
+        set_row_text(row, "msg_1", nullptr, label);
+        field<std::uint32_t>(row, game::kInstFlags) |= game::kInstFlagActive | game::kInstFlagEnabled;
+        gui_set_play(row, true);
+    }
+    const std::size_t cursor = g_selected.load(std::memory_order_relaxed) - g_mod_top;
+    if (cursor < rows) {
+        gui_set_cursor(list, static_cast<std::uint32_t>(cursor));
+    }
+}
+
+// The panels show the selected tab again, the game's way (initCategory), and
+// the audio panel is shown with its help line.
+void fill_split_panel(void* unit) {
+    const OptionsModel& model = menu::service_model();
+    const std::size_t selected = g_selected.load(std::memory_order_relaxed);
+    with_tables(model, [&] {
+        prepare_tab(unit, game::kSplitPanel);
+        g_init_category(tab_object(unit, game::kSplitPanel), unit, static_cast<std::int32_t>(game::kSplitPanel),
+                        game::kTitleTabNames[game::kSplitPanel], model.tab_name(selected));
+    });
+    show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
+                         static_cast<std::int32_t>(game::kSplitPanel));
+}
+
+void select_tab(void* unit, std::size_t index) {
+    void* list = g_mod_list.load(std::memory_order_acquire);
+    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
+    if (list == nullptr || index >= entries || index == g_selected.load(std::memory_order_relaxed)) {
+        return;
+    }
+    const std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    if (index < g_mod_top) {
+        g_mod_top = index;
+    } else if (index >= g_mod_top + visible) {
+        g_mod_top = index - visible + 1;
+    }
+    g_selected.store(index, std::memory_order_relaxed);
+    show_mod_list();
+    fill_split_panel(unit);
+}
+
 // Fills CMFM's page with CMFM's menu: the status tab and the plugin pages,
 // at most five category rows (more scroll), so Key Config and Default (a
 // full reset) stay out of reach. False if anything is off; the caller closes
@@ -365,12 +477,27 @@ bool enter_view(void* unit) {
     stop_window(unit);
     g_top.store(0, std::memory_order_relaxed);
     g_entries.store(menu::service_used_tabs(), std::memory_order_relaxed);
+    void* mod_list = nullptr;
+    if (g_split.load(std::memory_order_relaxed)) {
+        mod_list = gui_get_instance(unit, game::kModListName);
+        if (mod_list == nullptr || field<void*>(mod_list, 0) != field<void*>(categories, 0) ||
+            field<std::uint32_t>(mod_list, game::kListDuplicateNum) == 0) {
+            logf(AL_LOG_WARNING, "Mods page: the layout has no mod list (%s)", game::kModListName);
+            menu::service_abort();
+            return false;
+        }
+        // The last selection again, if it still exists.
+        if (g_selected.load(std::memory_order_relaxed) >= g_entries.load(std::memory_order_relaxed)) {
+            g_selected.store(0, std::memory_order_relaxed);
+            g_mod_top = 0;
+        }
+    }
     if (!prepare_rebuild(unit)) {
         menu::service_abort();
         return false;
     }
     g_view.store(true, std::memory_order_release);  // the text hook answers the category labels
-    if (!with_tables(*model, 0, [&] { build(static_cast<char*>(unit) + game::kOptCategories, unit); })) {
+    if (!with_tables(*model, [&] { build(static_cast<char*>(unit) + game::kOptCategories, unit); })) {
         g_view.store(false, std::memory_order_release);
         menu::service_abort();
         return false;
@@ -394,7 +521,21 @@ bool enter_view(void* unit) {
         menu::service_abort();
         return false;
     }
-    if (entries > game::kTitleViewTabs) {
+    if (mod_list != nullptr) {
+        // The category list keeps its cursor on the audio panel (set after the
+        // game's open handler); Up/Down on it move the mod list instead.
+        g_wheel.store(0, std::memory_order_relaxed);
+        g_wheel_rest = 0;
+        g_view_unit.store(unit, std::memory_order_release);
+        g_window_list.store(categories, std::memory_order_release);
+        g_mod_list.store(mod_list, std::memory_order_release);
+        const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
+        if (g_selected.load(std::memory_order_relaxed) >= g_mod_top + visible) {
+            g_mod_top = g_selected.load(std::memory_order_relaxed) - visible + 1;
+        }
+        show_mod_list();
+        logf(AL_LOG_INFO, "Mods page: mod list on (%zu tabs, %zu rows visible)", entries, visible);
+    } else if (entries > game::kTitleViewTabs) {
         start_window(unit, categories);
     }
     set_header(unit, model->header());
@@ -410,6 +551,13 @@ std::uint64_t page_open(void* unit) {
     }
     const bool on = enter_view(unit);
     const std::uint64_t result = page_next(game::kSlotOpen)(unit);
+    if (on && g_mod_list.load(std::memory_order_acquire) != nullptr) {
+        // The game's open put the category cursor on row 0.
+        gui_set_cursor(field<void*>(unit, game::kOptCategoryList), static_cast<std::uint32_t>(game::kSplitPanel));
+        show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
+                             static_cast<std::int32_t>(game::kSplitPanel));
+        show_mod_list();
+    }
     if (!on) {
         logf(AL_LOG_WARNING, "Mods page: CMFM's page could not be filled; closing it");
         gui_request_close(unit);
@@ -423,6 +571,7 @@ std::uint64_t page_open(void* unit) {
 std::uint64_t page_close(void* unit) {
     const std::uint64_t result = page_next(game::kSlotClose)(unit);
     g_hold_player.store(false, std::memory_order_relaxed);  // slot 81 stops running here too
+    g_mod_list.store(nullptr, std::memory_order_release);
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
         logf(AL_LOG_INFO, "Mods page: closed");
@@ -579,7 +728,8 @@ void use_own_layout() {
         return;
     }
     page_set_layout(game::kModsLayout);
-    logf(AL_LOG_INFO, "Mods page: layout %s loaded (CMFM's own)", game::kModsLayout);
+    g_split.store(true, std::memory_order_relaxed);
+    logf(AL_LOG_INFO, "Mods page: layout %s loaded (CMFM's own; mod list and one panel)", game::kModsLayout);
 }
 
 }  // namespace
@@ -640,17 +790,16 @@ const char* mods_page_text(void* message_file_ptr, std::uint32_t id) {
     if (!g_view.load(std::memory_order_relaxed)) {
         return nullptr;
     }
-    const std::size_t top = g_top.load(std::memory_order_relaxed);
     if (message_file_ptr == message_file(game::kRvaMessages12)) {
         for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
             if (id == game::kTitleCategoryLabelIds[t]) {
-                return menu::service_model().tab_name(top + t);
+                return menu::service_model().tab_name(menu_tab(t));
             }
         }
     } else if (message_file_ptr == message_file(game::kRvaMessages18)) {
         for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
             if (id == game::kTitleCategoryHelpIds[t]) {
-                return menu::service_model().tab_help(top + t);
+                return menu::service_model().tab_help(menu_tab(t));
             }
         }
     }
