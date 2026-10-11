@@ -124,6 +124,12 @@ inline constexpr char kTitleDecidedPattern[] =
 inline constexpr char kTitleOptionsOpenPattern[] =
     "48 89 5C 24 18 55 56 57 41 56 41 57 48 8D 6C 24 C9 48 81 EC E0 00 00 00 48 8B F9";
 inline constexpr char kTitleOptionsClosePattern[] = "40 55 53 57 41 57 48 8D 6C 24 98 48 81 EC 68 01 00 00 48 8B F9";
+// uGUIOption's tab refresh(tab) at RVA 0x1E8EB40: re-writes every row's
+// label and value through the row text filler (RVA 0xEEA6A0, which un-hides
+// the value box) and replays the rows' looks. The tab's cursor handler (tab
+// slot 10) calls it on every cursor move; value changes and the page's open
+// too. Hooked: CMFM redoes its row touches right after it.
+inline constexpr char kTabRefreshPattern[] = "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 30 48 8B F1 48 8D 59 78";
 // uGUIOption's showCategory(categories, category) at RVA 0x1E8C8F0: shows the
 // category's rows and help line, and the VRAM panel for category 1 (Display).
 inline constexpr char kTitleShowCategoryPattern[] =

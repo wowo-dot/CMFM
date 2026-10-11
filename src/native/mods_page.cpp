@@ -19,6 +19,7 @@ namespace {
 // Hooked.
 using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
 using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
+using TabRefreshFn = std::uint64_t (*)(void* tab);
 // Called.
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
@@ -34,6 +35,7 @@ using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, 
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
+TabRefreshFn g_tab_refresh_next = nullptr;
 InitCategoryFn g_init_category = nullptr;
 // From uGUIMenuOption::update: the input manager and area manager globals and
 // the input lock.
@@ -57,7 +59,7 @@ std::uint32_t g_help_flip = 0;
 // CMFM's layout as loaded once (kept for the session, like the page).
 void* g_layout_resource = nullptr;
 
-enum Hook { kShowCategory, kListMove, kHookCount };
+enum Hook { kShowCategory, kListMove, kTabRefresh, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -101,6 +103,7 @@ std::atomic<void*> g_mod_list{nullptr};  // while the page shows CMFM's menu
 std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
 std::size_t g_mod_top = 0;               // the first tab in the mod list's window
 std::uint32_t g_restart_seen = 0;        // the menu's restart revision the page shows
+std::int32_t g_decorated_focus = -1;     // the page's focus when the panel was last decorated
 char g_restart_line[96];
 
 // Short lines on user actions only (no allocation).
@@ -425,7 +428,8 @@ std::uint64_t page_update(void* unit) {
         const std::uint32_t revision = menu::service_restart_revision();
         if (revision != g_restart_seen) {
             g_restart_seen = revision;
-            show_restart_line(unit);  // the rows' marks follow below, every frame
+            decorate_panel(unit);
+            show_restart_line(unit);
         }
     }
     if (g_hold_player.load(std::memory_order_relaxed)) {
@@ -452,14 +456,17 @@ std::uint64_t page_update(void* unit) {
         }
     }
     const std::uint64_t result = page_next(game::kSlotUpdate)(unit);
-    // The game shows and hides the rows' parts again by its own rules when
-    // the panel takes or gives up the focus, and some of it lands a few frames
-    // later (run 20261011-design-3: heading value boxes back once the panel
-    // had the focus, though redone on the focus change). So CMFM's row touches
-    // are kept every frame while the page is open: they do nothing when the
-    // state already holds, and they always go through the list's current rows.
+    // A focus change activates or deactivates the panel, and the tab's
+    // setActive (RVA 0x1E8C530) hides the rows' stars again by the game's own
+    // rule; keys, clicks and the mouse above all change the focus before this
+    // point, so the marks are back before the frame is drawn. (The value
+    // boxes come back through the tab refresh, handled in its hook.)
     if (split_view() && unit == g_view_unit.load(std::memory_order_acquire)) {
-        decorate_panel(unit);
+        const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+        if (focus != g_decorated_focus) {
+            g_decorated_focus = focus;
+            decorate_panel(unit);
+        }
     }
     return result;
 }
@@ -763,6 +770,7 @@ std::uint64_t page_open(void* unit) {
                              static_cast<std::int32_t>(game::kSplitPanel));
         show_mod_list();
         g_restart_seen = menu::service_restart_revision();
+        g_decorated_focus = field<std::int32_t>(unit, game::kOptFocus);
         decorate_panel(unit);
         show_restart_line(unit);
         request_split_help(unit);
@@ -807,6 +815,18 @@ std::uint64_t show_category_detour(void* categories, std::int32_t category) {
         if (vram != nullptr) {
             gui_set_play(vram, false);
         }
+    }
+    return result;
+}
+
+// The tab refresh re-writes every row and so shows the value boxes again
+// (every cursor move in the panel runs it): on the split panel of CMFM's page
+// the headings and restart marks are redone before anything is drawn.
+std::uint64_t tab_refresh_detour(void* tab) {
+    const std::uint64_t result = g_tab_refresh_next(tab);
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    if (unit != nullptr && split_view() && tab == tab_object(unit, game::kSplitPanel)) {
+        decorate_panel(unit);
     }
     return result;
 }
@@ -888,6 +908,8 @@ bool mods_page_register(const Env& env, std::string& why) {
          reinterpret_cast<void*>(&show_category_detour), reinterpret_cast<void**>(&g_show_category_next)},
         {"CMFM:cGUIInstButtonList::moveCursor", game::kListMovePattern, reinterpret_cast<void*>(&list_move_detour),
          reinterpret_cast<void**>(&g_list_move_next)},
+        {"CMFM:uGUIOption::refreshTab", game::kTabRefreshPattern, reinterpret_cast<void*>(&tab_refresh_detour),
+         reinterpret_cast<void**>(&g_tab_refresh_next)},
     };
     for (int i = 0; i < kHookCount; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
@@ -904,7 +926,7 @@ bool mods_page_register(const Env& env, std::string& why) {
             return false;
         }
     }
-    logf(AL_LOG_INFO, "Mods page: hooks registered (Options show category; list cursor moves)");
+    logf(AL_LOG_INFO, "Mods page: hooks registered (Options show category; list cursor moves; tab refresh)");
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
