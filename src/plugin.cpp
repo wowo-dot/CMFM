@@ -1,9 +1,12 @@
 // CMFM: the in-game settings menu for MHW mods, an Astera Loader plugin.
-// Native menu prototypes (decisions.md items 7-9): a "Mods" entry in the
-// Start menu's System tab and on the title screen, both opening the game's
-// Options page with CMFM's rows. Exe 421810 only; on any other exe, or when a
-// check fails, CMFM leaves that part alone and reports DEGRADED with the reason.
+// It publishes "cmfm.menu" (include/cmfm/cmfm.h) for other plugins' settings
+// pages, and shows them natively (decisions.md items 7-9): a "Mods" entry in
+// the Start menu's System tab and on the title screen, both opening the
+// game's Options page with CMFM's rows. Exe 421810 only; on any other exe, or
+// when a check fails, CMFM leaves that part alone and reports DEGRADED with
+// the reason (cmfm.menu stays available; pages are then not shown).
 #include "al/al_plugin.h"
+#include "menu/service.hpp"
 #include "native/game_421810.hpp"
 #include "native/options_view.hpp"
 #include "native/start_menu.hpp"
@@ -29,7 +32,7 @@ const al_plugin_info_t kInfo = {
     "CMFM",       // display name
     "0.1.0-dev",  // this plugin's version
     AL_PHASE_BIT(AL_PHASE_WIN_MAIN) | AL_PHASE_BIT(AL_PHASE_SHUTDOWN),
-    0,            // order
+    -100,         // order: early, so clients find cmfm.menu in their al_plugin_init
     nullptr,      // load_after
     nullptr,      // load_before
     nullptr,      // exe_sha256: loads on any exe; the native menu checks for 421810
@@ -102,6 +105,12 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
         degrade("this Astera Loader has no services (API 1.1 or newer needed)");
         return AL_OK;
     }
+    // First, whatever the exe: plugins can always add their pages.
+    std::string why;
+    if (!cmfm::menu::service_publish(api, init->self, kInfo.version, why)) {
+        degrade("cmfm.menu not published: " + why);
+        return AL_OK;
+    }
     const auto* game = static_cast<const al_game_t*>(api->get_interface(init->self, AL_GAME_INTERFACE, AL_GAME_VERSION));
     if (game == nullptr || game->exe_sha256 == nullptr) {
         degrade("al.game is unavailable, so the exe cannot be checked");
@@ -121,7 +130,6 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
         static_cast<const al_scanner_t*>(api->get_interface(init->self, AL_SCANNER_INTERFACE, AL_SCANNER_VERSION));
     log(AL_LOG_INFO, "exe 421810 confirmed (" + std::string(game->exe_sha256).substr(0, 12) + "...)");
 
-    std::string why;
     if (!cmfm::native::start_menu_register(g_env, why)) {
         degrade(why);
         return AL_OK;

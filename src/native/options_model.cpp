@@ -4,9 +4,9 @@ namespace cmfm::native {
 
 namespace {
 
-bool valid(const OptionSpec& s) {
-    if (s.label == nullptr || s.values == nullptr || s.value_count == 0 || s.value_count > kMaxValues ||
-        s.initial >= s.value_count) {
+bool valid(const RowSpec& s) {
+    if (s.label == nullptr || s.help == nullptr || s.values == nullptr || s.value_count == 0 ||
+        s.value_count > kMaxValues) {
         return false;
     }
     for (std::uint32_t v = 0; v < s.value_count; ++v) {
@@ -19,30 +19,19 @@ bool valid(const OptionSpec& s) {
 
 }  // namespace
 
-bool OptionsModel::build(const char* header, const char* const* tab_names, const char* const* tab_helps,
-                         const OptionSpec* specs, std::size_t count, const OptionSpec& placeholder, const char*& why) {
+bool OptionsModel::build(const char* header, const TabSpec* tabs, const RowSpec* rows, std::size_t count,
+                         const RowSpec& placeholder, const char*& why) {
     if (!valid(placeholder)) {
         why = "invalid placeholder row";
         return false;
     }
     std::size_t per_tab[kTabCount] = {};
     for (std::size_t i = 0; i < count; ++i) {
-        if (specs[i].tab >= kTabCount || !valid(specs[i])) {
-            why = "invalid row spec";
+        if (rows[i].tab >= kTabCount || !valid(rows[i])) {
+            why = "invalid row";
             return false;
         }
-        ++per_tab[specs[i].tab];
-    }
-    std::size_t empty = 0;
-    for (const std::size_t n : per_tab) {
-        empty += n == 0 ? 1 : 0;
-    }
-    if (count + empty > kMaxRows) {
-        why = "too many rows";
-        return false;
-    }
-    for (const std::size_t n : per_tab) {
-        if (n > kMaxRowsPerTab) {
+        if (++per_tab[rows[i].tab] > kMaxRowsPerTab) {
             why = "too many rows on one tab";
             return false;
         }
@@ -50,21 +39,21 @@ bool OptionsModel::build(const char* header, const char* const* tab_names, const
 
     header_ = header ? header : "";
     for (std::size_t t = 0; t < kTabCount; ++t) {
-        tab_names_[t] = tab_names && tab_names[t] ? tab_names[t] : "";
-        tab_helps_[t] = tab_helps && tab_helps[t] ? tab_helps[t] : "";
+        tabs_[t].name = tabs && tabs[t].name ? tabs[t].name : "";
+        tabs_[t].help = tabs && tabs[t].help ? tabs[t].help : "";
         per_tab[t] = 0;
     }
     std::uint32_t label = kLabelIdFirst;
     std::uint32_t help = kHelpIdFirst;
     std::size_t row = 0;
-    const auto add = [&](const OptionSpec& s, std::size_t tab) {
+    const auto add = [&](const RowSpec& s, std::size_t tab, std::int32_t source) {
         // Label then its values in file 12; help then one per value in file 18.
         if (label + 1 + s.value_count > kTextIdLimit || help + 1 + s.value_count > kTextIdLimit) {
             return false;
         }
         specs_[row] = s;
         specs_[row].tab = static_cast<std::uint32_t>(tab);
-        values_[row] = s.initial;
+        sources_[row] = source;
         label_ids_[row] = label;
         help_ids_[row] = help;
         tables_[tab][per_tab[tab]++] = GameOptionRow{
@@ -77,14 +66,16 @@ bool OptionsModel::build(const char* header, const char* const* tab_names, const
         return true;
     };
     for (std::size_t i = 0; i < count; ++i) {
-        if (!add(specs[i], specs[i].tab)) {
+        if (!add(rows[i], rows[i].tab, static_cast<std::int32_t>(i))) {
             why = "text ids exhausted";
+            count_ = 0;
             return false;
         }
     }
     for (std::size_t t = 0; t < kTabCount; ++t) {
-        if (per_tab[t] == 0 && !add(placeholder, t)) {
+        if (per_tab[t] == 0 && !add(placeholder, t, kPlaceholder)) {
             why = "text ids exhausted";
+            count_ = 0;
             return false;
         }
         tables_[t][per_tab[t]] = GameOptionRow{kRowTableEnd, 0, 0, 0, 0, 0, 0, 0, nullptr};
@@ -118,40 +109,20 @@ const char* OptionsModel::help_text(std::uint32_t id) const {
     for (std::size_t i = 0; i < count_; ++i) {
         const std::uint32_t first = help_ids_[i];
         if (id >= first && id <= first + specs_[i].value_count) {
-            // Row help and, for now, the same text for every value.
-            return specs_[i].help ? specs_[i].help : "";
+            return specs_[i].help;  // the row's help, for every value too
         }
     }
     return nullptr;
 }
 
-const OptionSpec* OptionsModel::spec(std::uint32_t setting_id) const {
+std::int32_t OptionsModel::source(std::uint32_t setting_id) const {
     const std::uint32_t row = setting_id - kSettingIdFirst;  // wraps for ids below ours
-    return row < count_ ? &specs_[row] : nullptr;
+    return row < count_ ? sources_[row] : kNotOurs;
 }
 
-bool OptionsModel::get(std::uint32_t setting_id, std::uint32_t& value) const {
+std::uint32_t OptionsModel::value_count(std::uint32_t setting_id) const {
     const std::uint32_t row = setting_id - kSettingIdFirst;
-    if (row >= count_) {
-        return false;
-    }
-    value = values_[row];
-    return true;
-}
-
-void OptionsModel::reset() {
-    for (std::size_t i = 0; i < count_; ++i) {
-        values_[i] = specs_[i].initial;
-    }
-}
-
-bool OptionsModel::set(std::uint32_t setting_id, std::uint32_t value) {
-    const std::uint32_t row = setting_id - kSettingIdFirst;
-    if (row >= count_ || value >= specs_[row].value_count) {
-        return false;
-    }
-    values_[row] = value;
-    return true;
+    return row < count_ ? specs_[row].value_count : 0;
 }
 
 }  // namespace cmfm::native

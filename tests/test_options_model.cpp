@@ -21,20 +21,19 @@ bool same(const char* a, const char* b) { return a && b && std::strcmp(a, b) == 
 
 const char* const kOnOff[] = {"Off", "On"};
 const char* const kAbc[] = {"Alpha", "Beta", "Gamma"};
-const char* const kTabs[] = {"CMFM", "", "", "", ""};
-const char* const kHelps[] = {"CMFM's rows.", nullptr, "", "", ""};
-const OptionSpec kSpecs[] = {
-    {"Test toggle", "A test switch.", kOnOff, 2, 1, 0},
-    {"Test choice", "A test choice.", kAbc, 3, 0, 0},
-    {"Other tab", "On tab 2.", kOnOff, 2, 0, 2},
+const TabSpec kTabs[kTabCount] = {{"CMFM", "CMFM's rows."}, {"", nullptr}, {"", ""}, {"", ""}, {"", ""}};
+const RowSpec kRows[] = {
+    {"Test toggle", "A test switch.", kOnOff, 2, 0},
+    {"Test choice", "A test choice.", kAbc, 3, 0},
+    {"Other tab", "On tab 2.", kOnOff, 2, 2},
 };
 const char* const kDash[] = {"-"};
-const OptionSpec kFree = {"Free tab", "Nothing here.", kDash, 1, 0, 0};
+const RowSpec kFree = {"Free tab", "Nothing here.", kDash, 1, 0};
 
 void builds_rows_in_game_format() {
     static OptionsModel m;
     const char* why = nullptr;
-    check(m.build("Mods", kTabs, kHelps, kSpecs, 3, kFree, why), "build succeeds");
+    check(m.build("Mods", kTabs, kRows, 3, kFree, why), "build succeeds");
     const GameOptionRow* t0 = m.table(0);
     check(t0[0].kind == 1 && t0[0].setting_id == 100 && t0[0].value_count == 2, "row 0: kind 1, id 100");
     check(t0[0].label_id == 9100 && t0[0].flag == 1 && t0[0].help_cat == 18 && t0[0].help_id == 9002,
@@ -50,10 +49,22 @@ void builds_rows_in_game_format() {
     check(m.row_count() == 6, "3 rows + 3 placeholders (tabs 1, 3, 4)");
 }
 
+void maps_ids_to_rows() {
+    static OptionsModel m;
+    const char* why = nullptr;
+    m.build("Mods", kTabs, kRows, 3, kFree, why);
+    check(m.source(100) == 0 && m.source(101) == 1 && m.source(102) == 2, "input rows");
+    check(m.source(103) == OptionsModel::kPlaceholder, "placeholder");
+    check(m.source(106) == OptionsModel::kNotOurs && m.source(99) == OptionsModel::kNotOurs &&
+              m.source(0) == OptionsModel::kNotOurs,
+          "outside the model");
+    check(m.value_count(101) == 3 && m.value_count(103) == 1 && m.value_count(5) == 0, "value counts");
+}
+
 void resolves_texts() {
     static OptionsModel m;
     const char* why = nullptr;
-    m.build("Mods", kTabs, kHelps, kSpecs, 3, kFree, why);
+    m.build("Mods", kTabs, kRows, 3, kFree, why);
     check(same(m.label_text(9100), "Test toggle"), "label");
     check(same(m.label_text(9101), "Off") && same(m.label_text(9102), "On"), "values follow the label");
     check(same(m.label_text(9103), "Test choice") && same(m.label_text(9106), "Gamma"), "second row");
@@ -66,47 +77,61 @@ void resolves_texts() {
     check(same(m.tab_help(0), "CMFM's rows.") && same(m.tab_help(1), "") && m.tab_help(5) == nullptr, "tab help");
 }
 
-void gets_and_sets() {
+void follows_rewritten_texts() {
+    // CMFM rewrites help lines and status texts in place.
     static OptionsModel m;
+    static char help[32] = "Before.";
+    static char value[32] = "1 frame";
+    static const char* values[] = {value};
+    const RowSpec rows[] = {{"Status", help, values, 1, 0}};
     const char* why = nullptr;
-    m.build("Mods", kTabs, kHelps, kSpecs, 3, kFree, why);
-    std::uint32_t v = 99;
-    check(m.get(100, v) && v == 1, "initial value");
-    check(m.set(101, 2) && m.get(101, v) && v == 2, "set within range");
-    check(!m.set(101, 3) && m.get(101, v) && v == 2, "out of range refused, value kept");
-    check(!m.set(103, 1) && m.set(103, 0), "placeholder accepts only its one value");
-    check(!m.set(107, 0) && !m.get(107, v), "unknown row refused");
-    check(!m.set(0, 0) && !m.get(1, v) && !m.get(99, v) && m.spec(99) == nullptr, "game ids are not ours");
-    check(m.spec(100) != nullptr && same(m.spec(101)->label, "Test choice"), "spec by setting id");
-    m.set(100, 0);
-    m.reset();
-    check(m.get(100, v) && v == 1 && m.get(101, v) && v == 0, "reset restores the initial values");
+    check(m.build("Mods", kTabs, rows, 1, kFree, why), "build");
+    std::snprintf(help, sizeof help, "After.");
+    std::snprintf(value, sizeof value, "2 frames");
+    check(same(m.help_text(9002), "After.") && same(m.label_text(9101), "2 frames"), "texts read at lookup");
 }
 
-void rejects_bad_specs() {
+void rejects_bad_rows() {
     static OptionsModel m;
     const char* why = nullptr;
-    const OptionSpec bad_tab[] = {{"x", "", kOnOff, 2, 0, 5}};
-    check(!m.build("Mods", kTabs, kHelps, bad_tab, 1, kFree, why), "tab out of range");
-    const OptionSpec bad_initial[] = {{"x", "", kOnOff, 2, 2, 0}};
-    check(!m.build("Mods", kTabs, kHelps, bad_initial, 1, kFree, why), "initial out of range");
-    const OptionSpec no_values[] = {{"x", "", kOnOff, 0, 0, 0}};
-    check(!m.build("Mods", kTabs, kHelps, no_values, 1, kFree, why), "no values");
-    const OptionSpec bad_free = {"x", "", kOnOff, 0, 0, 0};
-    check(!m.build("Mods", kTabs, kHelps, kSpecs, 3, bad_free, why), "invalid placeholder");
-    check(m.build("Mods", kTabs, kHelps, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
+    const RowSpec bad_tab[] = {{"x", "", kOnOff, 2, 5}};
+    check(!m.build("Mods", kTabs, bad_tab, 1, kFree, why), "tab out of range");
+    const RowSpec no_values[] = {{"x", "", kOnOff, 0, 0}};
+    check(!m.build("Mods", kTabs, no_values, 1, kFree, why), "no values");
+    const RowSpec no_help[] = {{"x", nullptr, kOnOff, 2, 0}};
+    check(!m.build("Mods", kTabs, no_help, 1, kFree, why), "help must be a string");
+    const RowSpec bad_free = {"x", "", kOnOff, 0, 0};
+    check(!m.build("Mods", kTabs, kRows, 3, bad_free, why), "invalid placeholder");
+    check(m.build("Mods", kTabs, nullptr, 0, kFree, why) && m.row_count() == 5, "no rows: 5 placeholders");
     // The title Options page holds 24 rows per tab.
-    OptionSpec many[kMaxRowsPerTab + 1];
-    for (OptionSpec& s : many) {
-        s = {"x", "", kOnOff, 2, 0, 0};
+    RowSpec many[kMaxRowsPerTab + 1];
+    for (RowSpec& s : many) {
+        s = {"x", "", kOnOff, 2, 0};
     }
-    check(m.build("Mods", kTabs, kHelps, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
-    check(!m.build("Mods", kTabs, kHelps, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+    check(m.build("Mods", kTabs, many, kMaxRowsPerTab, kFree, why), "24 rows on one tab");
+    check(!m.build("Mods", kTabs, many, kMaxRowsPerTab + 1, kFree, why), "25 rows on one tab refused");
+}
+
+void runs_out_of_text_ids() {
+    // 900 label ids: 4 tabs x 24 rows x (1 + 32 values) do not fit.
+    static OptionsModel m;
+    static const char* values[kMaxValues];
+    for (const char*& v : values) {
+        v = "v";
+    }
+    static RowSpec rows[4 * kMaxRowsPerTab];
+    for (std::size_t i = 0; i < 4 * kMaxRowsPerTab; ++i) {
+        rows[i] = {"x", "", values, static_cast<std::uint32_t>(kMaxValues), static_cast<std::uint32_t>(1 + i / kMaxRowsPerTab)};
+    }
+    const char* why = nullptr;
+    check(!m.build("Mods", kTabs, rows, 4 * kMaxRowsPerTab, kFree, why) && same(why, "text ids exhausted"),
+          "text ids exhausted");
+    check(m.row_count() == 0 && m.source(100) == OptionsModel::kNotOurs, "a failed build leaves no rows");
 }
 
 void knows_its_ids() {
-    check(is_cmfm_row(1, 100) && is_cmfm_row(1, 199), "kind 1, ids 100-199");
-    check(!is_cmfm_row(1, 34) && !is_cmfm_row(1, 99) && !is_cmfm_row(1, 200), "game kind-1 ids pass on");
+    check(is_cmfm_row(1, 100) && is_cmfm_row(1, 299), "kind 1, ids 100-299");
+    check(!is_cmfm_row(1, 34) && !is_cmfm_row(1, 99) && !is_cmfm_row(1, 300), "game kind-1 ids pass on");
     check(!is_cmfm_row(0, 100) && !is_cmfm_row(2, 100) && !is_cmfm_row(7, 100), "other kinds pass on");
 }
 
@@ -114,9 +139,11 @@ void knows_its_ids() {
 
 int main() {
     builds_rows_in_game_format();
+    maps_ids_to_rows();
     resolves_texts();
-    gets_and_sets();
-    rejects_bad_specs();
+    follows_rewritten_texts();
+    rejects_bad_rows();
+    runs_out_of_text_ids();
     knows_its_ids();
     if (g_failures == 0) {
         std::printf("test_options_model: all passed\n");

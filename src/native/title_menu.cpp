@@ -1,5 +1,6 @@
 #include "native/title_menu.hpp"
 
+#include "menu/service.hpp"
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
 #include "native/options_model.hpp"
@@ -287,46 +288,59 @@ void enter_view(void* unit) {
     if (build == nullptr || categories == nullptr) {
         return;
     }
-    const OptionsModel& model = options_view_model();
+    const OptionsModel* model = menu::service_prepare();  // CMFM's texts on from here
+    if (model == nullptr) {
+        return;  // the plain Options page opens
+    }
     for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
         std::string why;
         const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model.table(t));
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model->table(t));
         if (!g_tabs[t].applied() && !g_tabs[t].apply("title Options tab", title_tab_slot(t), expected, ours, why)) {
             logf(AL_LOG_WARNING, "title options: could not swap tab %zu: %s", t, why.c_str());
             restore_tables();
+            menu::service_abort();
             return;
         }
     }
     if (!prepare_rebuild(unit)) {
         restore_tables();
+        menu::service_abort();
         return;
     }
     g_view.store(true, std::memory_order_release);  // the text hook answers the category labels
     build(static_cast<char*>(unit) + game::kOptCategories, unit);
     g_built_unit = unit;
-    // Five categories: Key Config and Default (a full reset) out of reach.
+    // The status tab and the plugin pages only: the rest, Key Config and
+    // Default (a full reset) out of reach.
+    const std::uint32_t used = static_cast<std::uint32_t>(menu::service_used_tabs());
     if (field<std::uint32_t>(categories, game::kListRowCount) < game::kTitleViewTabs) {
         logf(AL_LOG_WARNING, "title options: only %u categories; game rows back",
              field<std::uint32_t>(categories, game::kListRowCount));
+        menu::service_abort();
         rebuild_game(unit);
         return;
     }
-    g_set_row_count(categories, game::kTitleViewTabs);
-    for (std::uint32_t t = 0; t < game::kTitleViewTabs; ++t) {
-        set_row_text(list_row(categories, t), "msg_1", nullptr, model.tab_name(t));
+    g_set_row_count(categories, used);
+    for (std::uint32_t t = 0; t < used; ++t) {
+        set_row_text(list_row(categories, t), "msg_1", nullptr, model->tab_name(t));
     }
-    if (field<std::uint32_t>(categories, game::kListRowCount) != game::kTitleViewTabs) {
+    if (field<std::uint32_t>(categories, game::kListRowCount) != used) {
         logf(AL_LOG_WARNING, "title options: the category list did not shrink; game rows back");
+        menu::service_abort();
         rebuild_game(unit);
         return;
     }
-    set_header(unit, model.header());
-    logf(AL_LOG_INFO, "title options: Mods page on (%zu rows)", model.row_count());
+    set_header(unit, model->header());
+    menu::service_opened();
+    logf(AL_LOG_INFO, "title options: Mods page on (%u categories, %zu rows)", used, model->row_count());
 }
 
 std::uint64_t open_detour(void* unit) {
     if (g_ready.load(std::memory_order_acquire)) {
+        if (g_view.load(std::memory_order_acquire)) {
+            menu::service_closed();  // the close hook did not run
+        }
         if (g_pending.exchange(false, std::memory_order_acq_rel)) {
             enter_view(unit);
         } else if (unit == g_built_unit || g_view.load(std::memory_order_acquire)) {
@@ -343,6 +357,7 @@ std::uint64_t close_detour(void* unit) {
         // rebuilds the game's lists.
         g_view.store(false, std::memory_order_release);
         restore_tables();
+        menu::service_closed();
         logf(AL_LOG_INFO, "title options: Mods page closed (game tables back)");
     }
     return result;
@@ -460,13 +475,13 @@ const char* title_menu_text(void* message_file_ptr, std::uint32_t id) {
     if (message_file_ptr == message_file(game::kRvaMessages12)) {
         for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
             if (id == game::kTitleCategoryLabelIds[t]) {
-                return options_view_model().tab_name(t);
+                return menu::service_model().tab_name(t);
             }
         }
     } else if (message_file_ptr == message_file(game::kRvaMessages18)) {
         for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
             if (id == game::kTitleCategoryHelpIds[t]) {
-                return options_view_model().tab_help(t);
+                return menu::service_model().tab_help(t);
             }
         }
     }
@@ -475,7 +490,9 @@ const char* title_menu_text(void* message_file_ptr, std::uint32_t id) {
 
 void title_menu_restore(const Env&) {
     g_ready.store(false, std::memory_order_release);
-    g_view.store(false, std::memory_order_release);
+    if (g_view.exchange(false, std::memory_order_acq_rel)) {
+        menu::service_closed();
+    }
     restore_tables();
     logf(AL_LOG_INFO, "title: tables restored; Mods selected %u time(s)", g_mods_selected);
 }

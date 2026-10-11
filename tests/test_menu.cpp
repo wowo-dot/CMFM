@@ -1,0 +1,432 @@
+// Unit tests for cmfm::menu (the cmfm.menu core) with a fake plugin.
+#include "menu/menu.hpp"
+
+#include <cstdio>
+#include <cstring>
+#include <string>
+
+using namespace cmfm;
+using namespace cmfm::menu;
+using native::OptionsModel;
+
+namespace {
+
+int g_failures = 0;
+
+void check(bool ok, const char* what) {
+    if (!ok) {
+        std::printf("FAIL: %s\n", what);
+        ++g_failures;
+    }
+}
+
+bool same(const char* a, const char* b) { return a && b && std::strcmp(a, b) == 0; }
+
+// ---- A fake plugin: values in memory, every call counted. ----
+struct Fake {
+    cmfm_value_t values[8] = {};
+    int sets = 0;
+    int opened = 0;
+    int closed = 0;
+    int texts = 0;
+    bool fail_get = false;
+};
+
+enum : std::uint32_t { kToggle = 10, kChoice = 11, kPercent = 12, kScale = 13, kStatus = 14, kRestart = 15 };
+
+std::uint32_t slot(std::uint32_t id) { return id - kToggle; }
+
+cmfm_result_t CMFM_CALL fake_get(void* user, std::uint32_t id, cmfm_value_t* v) {
+    auto* f = static_cast<Fake*>(user);
+    if (f->fail_get) {
+        return CMFM_ERROR;
+    }
+    *v = f->values[slot(id)];
+    return CMFM_OK;
+}
+
+cmfm_result_t CMFM_CALL fake_set(void* user, std::uint32_t id, const cmfm_value_t* v) {
+    auto* f = static_cast<Fake*>(user);
+    f->values[slot(id)] = *v;
+    ++f->sets;
+    return CMFM_OK;
+}
+
+// "Gamma" (index 2) only while the toggle is on.
+cmfm_result_t CMFM_CALL fake_validate(void* user, std::uint32_t id, const cmfm_value_t* v, char* why,
+                                      std::uint32_t why_size) {
+    auto* f = static_cast<Fake*>(user);
+    if (id == kChoice && v->i == 2 && f->values[slot(kToggle)].i == 0) {
+        std::snprintf(why, why_size, "Gamma needs the toggle on.");
+        return CMFM_ERROR;
+    }
+    return CMFM_OK;
+}
+
+void CMFM_CALL fake_text(void* user, std::uint32_t, char* text, std::uint32_t size) {
+    auto* f = static_cast<Fake*>(user);
+    ++f->texts;
+    std::snprintf(text, size, "Opened %d times", f->opened);
+}
+
+void CMFM_CALL fake_event(void* user, cmfm_event_t event) {
+    auto* f = static_cast<Fake*>(user);
+    (event == CMFM_EVENT_OPENED ? f->opened : f->closed)++;
+}
+
+const char* const kAbc[] = {"Alpha", "Beta", "Gamma"};
+
+cmfm_setting_t setting(std::uint32_t id, cmfm_type_t type, const char* label) {
+    cmfm_setting_t s = {};
+    s.size = sizeof s;
+    s.id = id;
+    s.type = type;
+    s.label = label;
+    s.help = "Help.";
+    return s;
+}
+
+struct Demo {
+    cmfm_setting_t settings[6];
+    cmfm_page_t page;
+};
+
+Demo demo_page(Fake* f, const char* title = "Demo") {
+    Demo d = {};
+    d.settings[0] = setting(kToggle, CMFM_TYPE_BOOL, "Toggle");
+    d.settings[1] = setting(kChoice, CMFM_TYPE_CHOICE, "Choice");
+    d.settings[1].choices = kAbc;
+    d.settings[1].choice_count = 3;
+    d.settings[2] = setting(kPercent, CMFM_TYPE_INT, "Percent");
+    d.settings[2].min = 0;
+    d.settings[2].max = 100;
+    d.settings[2].step = 10;
+    d.settings[2].unit = "%";
+    d.settings[2].default_value.i = 50;
+    d.settings[3] = setting(kScale, CMFM_TYPE_FLOAT, "Scale");
+    d.settings[3].min = 0.5;
+    d.settings[3].max = 2.0;
+    d.settings[3].step = 0.25;
+    d.settings[3].decimals = 2;
+    d.settings[3].unit = "x";
+    d.settings[3].default_value.f = 1.0;
+    d.settings[4] = setting(kStatus, CMFM_TYPE_TEXT, "Status");
+    d.settings[5] = setting(kRestart, CMFM_TYPE_BOOL, "Restart thing");
+    d.settings[5].flags = CMFM_FLAG_RESTART;
+    d.settings[5].default_value.i = 1;
+    d.page.size = sizeof d.page;
+    d.page.plugin = "fake";
+    d.page.title = title;
+    d.page.help = "A fake page.";
+    d.page.settings = d.settings;
+    d.page.setting_count = 6;
+    d.page.user = f;
+    d.page.get = fake_get;
+    d.page.set = fake_set;
+    d.page.validate = fake_validate;
+    d.page.get_text = fake_text;
+    d.page.on_event = fake_event;
+    return d;
+}
+
+// Adds a page as the service does: copy or refusal.
+bool add(Menu& m, const cmfm_page_t& page) {
+    Page copy;
+    std::string why;
+    if (!copy_page(&page, copy, why)) {
+        m.add_refused(page.plugin ? page.plugin : "", why);
+        return false;
+    }
+    m.add(std::move(copy));
+    return true;
+}
+
+bool refused(const cmfm_page_t& page, const char* reason_part) {
+    Page copy;
+    std::string why;
+    return !copy_page(&page, copy, why) && why.find(reason_part) != std::string::npos;
+}
+
+// A Demo is copied around: point its page at its own settings first.
+cmfm_page_t& page_of(Demo& d) {
+    d.page.settings = d.settings;
+    return d.page;
+}
+
+// The model row with this label on a tab, or nullptr.
+const native::GameOptionRow* find(const OptionsModel& m, std::size_t tab, const char* label) {
+    for (const native::GameOptionRow* r = m.table(tab); r->kind != native::kRowTableEnd; ++r) {
+        if (same(m.label_text(static_cast<std::uint32_t>(r->label_id)), label)) {
+            return r;
+        }
+    }
+    return nullptr;
+}
+
+const char* value_text(const OptionsModel& m, const native::GameOptionRow* r, std::uint32_t v) {
+    return m.label_text(static_cast<std::uint32_t>(r->label_id) + 1 + v);
+}
+
+const char* help_text(const OptionsModel& m, const native::GameOptionRow* r) {
+    return m.help_text(static_cast<std::uint32_t>(r->help_id));
+}
+
+std::uint32_t id(const native::GameOptionRow* r) { return static_cast<std::uint32_t>(r->setting_id); }
+
+// ---- Tests ----
+
+void validates_pages() {
+    Fake f;
+    Demo d = demo_page(&f);
+    Page copy;
+    std::string why;
+    check(copy_page(&page_of(d), copy, why) && copy.settings.size() == 6, "the demo page is valid");
+    check(copy.settings[2].value_count == 11 && copy.settings[3].value_count == 7, "range value counts");
+
+    Demo bad = demo_page(&f);
+    bad.page.title = "A title much longer than the tab has room for";
+    check(refused(page_of(bad), "title"), "long title");
+    bad = demo_page(&f);
+    bad.page.setting_count = 0;
+    check(refused(page_of(bad), "settings"), "no settings");
+    bad = demo_page(&f);
+    bad.settings[1].id = kToggle;
+    check(refused(page_of(bad), "id used twice"), "duplicate id");
+    bad = demo_page(&f);
+    bad.settings[1].default_value.i = 3;
+    check(refused(page_of(bad), "default"), "choice default out of range");
+    bad = demo_page(&f);
+    bad.settings[2].max = 330;
+    check(refused(page_of(bad), "32 steps"), "34 steps refused");
+    bad = demo_page(&f);
+    bad.settings[2].max = 310;
+    check(!refused(page_of(bad), ""), "32 steps accepted");
+    bad = demo_page(&f);
+    bad.settings[2].step = 2.5;
+    check(refused(page_of(bad), "whole"), "INT step must be whole");
+    bad = demo_page(&f);
+    bad.settings[3].decimals = 4;
+    check(refused(page_of(bad), "decimals"), "decimals above 3");
+    bad = demo_page(&f);
+    bad.settings[3].default_value.f = 3.0;
+    check(refused(page_of(bad), "default"), "float default out of range");
+    bad = demo_page(&f);
+    bad.settings[0].flags = 0x8;
+    check(refused(page_of(bad), "flags"), "unknown flag");
+    bad = demo_page(&f);
+    bad.settings[0].type = 9;
+    check(refused(page_of(bad), "type"), "unknown type");
+    bad = demo_page(&f);
+    bad.page.set = nullptr;
+    check(refused(page_of(bad), "get and set"), "set callback needed");
+    bad = demo_page(&f);
+    bad.page.get_text = nullptr;
+    check(refused(page_of(bad), "get_text"), "get_text needed for TEXT");
+    bad = demo_page(&f);
+    bad.page.size = 8;
+    check(refused(page_of(bad), "smaller"), "page smaller than 1.0");
+    Page none;
+    check(!copy_page(nullptr, none, why), "no page");
+}
+
+void reads_later_setting_sizes() {
+    // A plugin built for a later minor version passes bigger settings.
+    struct Later {
+        cmfm_setting_t s;
+        std::uint64_t added_in_1_1;
+    };
+    Fake f;
+    Later later[2] = {};
+    later[0].s = setting(1, CMFM_TYPE_BOOL, "One");
+    later[1].s = setting(2, CMFM_TYPE_BOOL, "Two");
+    later[0].s.size = later[1].s.size = sizeof(Later);
+    cmfm_page_t page = {};
+    page.size = sizeof page;
+    page.plugin = "later";
+    page.title = "Later";
+    page.settings = &later[0].s;
+    page.setting_count = 2;
+    page.user = &f;
+    page.get = fake_get;
+    page.set = fake_set;
+    Page copy;
+    std::string why;
+    check(copy_page(&page, copy, why) && copy.settings.size() == 2 && copy.settings[1].label == "Two",
+          "steps through the array by settings[0].size");
+}
+
+void lays_out_the_status_page() {
+    static OptionsModel model;
+    Menu m("0.1.0-dev");
+    std::string why;
+    check(m.build(model, why) && m.used_tabs() == 1, "no pages: only the status tab");
+    check(same(model.tab_name(0), "CMFM") && same(model.tab_name(1), "-"), "tab names");
+    const native::GameOptionRow* r = find(model, 0, "CMFM");
+    check(r != nullptr && same(value_text(model, r, 0), "0.1.0-dev"), "CMFM's version row");
+    check(find(model, 0, "No mod pages yet") != nullptr, "says there are no pages");
+    check(find(model, 1, "Empty") != nullptr, "empty tabs get a row");
+    check(m.get(id(r)) == 0 && !m.set(id(r), 0), "status rows have no value");
+}
+
+void shows_a_page() {
+    static OptionsModel model;
+    Fake f;
+    Menu m("0.1.0-dev");
+    Demo d = demo_page(&f);
+    check(add(m, page_of(d)) && m.dirty(), "page added");
+    std::string why;
+    check(m.build(model, why) && !m.dirty() && m.used_tabs() == 2, "built with one page");
+    check(same(model.tab_name(1), "Demo") && same(model.tab_help(1), "A fake page."), "the page's tab");
+    const native::GameOptionRow* status = find(model, 0, "fake");
+    check(status && same(value_text(model, status, 0), "Shown") && std::strstr(help_text(model, status), "Demo"),
+          "status row for the page");
+
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    const native::GameOptionRow* percent = find(model, 1, "Percent");
+    const native::GameOptionRow* scale = find(model, 1, "Scale");
+    const native::GameOptionRow* restart = find(model, 1, "Restart thing");
+    check(toggle && toggle->value_count == 2 && same(value_text(model, toggle, 1), "On"), "bool values");
+    check(percent && percent->value_count == 11 && same(value_text(model, percent, 0), "0%") &&
+              same(value_text(model, percent, 10), "100%"),
+          "int values with unit");
+    check(scale && scale->value_count == 7 && same(value_text(model, scale, 0), "0.50x") &&
+              same(value_text(model, scale, 6), "2.00x"),
+          "float values with decimals");
+    check(restart && std::strstr(help_text(model, restart), "restarting the game"), "restart note in the help");
+}
+
+void reads_and_writes_through_callbacks() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo d = demo_page(&f);
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    const native::GameOptionRow* choice = find(model, 1, "Choice");
+    const native::GameOptionRow* percent = find(model, 1, "Percent");
+    const native::GameOptionRow* scale = find(model, 1, "Scale");
+
+    f.values[slot(kPercent)].i = 37;  // between steps: shown as the nearest
+    f.values[slot(kScale)].f = 1.3;
+    check(m.get(id(percent)) == 4 && m.get(id(scale)) == 3, "values shown as the nearest step");
+    check(m.set(id(percent), 3) && f.values[slot(kPercent)].i == 30, "index 3 -> 30");
+    check(m.set(id(scale), 6) && f.values[slot(kScale)].f == 2.0, "index 6 -> 2.0");
+    check(!m.set(id(percent), 11) && f.values[slot(kPercent)].i == 30, "out-of-range index ignored");
+
+    // validate refuses Gamma while the toggle is off: value kept, reason shown.
+    const int sets = f.sets;
+    check(!m.set(id(choice), 2) && f.values[slot(kChoice)].i == 0 && f.sets == sets, "refused value not set");
+    check(same(help_text(model, choice), "Not changed: Gamma needs the toggle on."), "reason in the help line");
+    check(m.set(id(toggle), 1) && m.set(id(choice), 2) && f.values[slot(kChoice)].i == 2, "accepted once toggled");
+    check(same(help_text(model, choice), "Help."), "help line back after a good value");
+
+    f.fail_get = true;
+    check(m.get(id(choice)) == 0, "a failed read shows the first value");
+    f.fail_get = false;
+
+    m.reset_defaults();
+    check(f.values[slot(kToggle)].i == 0 && f.values[slot(kPercent)].i == 50 && f.values[slot(kScale)].f == 1.0 &&
+              f.values[slot(kRestart)].i == 1,
+          "Set To Default writes every default");
+}
+
+void refreshes_texts_and_sends_events() {
+    static OptionsModel model;
+    Fake f;
+    Menu m;
+    Demo d = demo_page(&f);
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    const native::GameOptionRow* status = find(model, 1, "Status");
+    m.send(CMFM_EVENT_OPENED);
+    m.refresh();
+    check(f.opened == 1 && f.texts == 1 && same(value_text(model, status, 0), "Opened 1 times"), "text at opening");
+    check(m.get(id(status)) == 0 && !m.set(id(status), 0), "TEXT rows have no value to set");
+    m.send(CMFM_EVENT_CLOSED);
+    check(f.closed == 1, "closed event");
+}
+
+void lists_every_page_on_the_status_tab() {
+    static OptionsModel model;
+    Fake f[5];
+    Menu m;
+    Demo d[5] = {demo_page(&f[0], "One"), demo_page(&f[1], "Two"), demo_page(&f[2], "Three"),
+                 demo_page(&f[3], "Four"), demo_page(&f[4], "Five")};
+    for (Demo& x : d) {
+        add(m, page_of(x));
+    }
+    Demo bad = demo_page(&f[0]);
+    bad.page.plugin = "broken";
+    bad.page.set = nullptr;
+    add(m, page_of(bad));
+    std::string why;
+    check(m.build(model, why) && m.used_tabs() == 5, "four pages shown");
+    check(same(model.tab_name(4), "Four"), "in the order added");
+    std::size_t shown = 0;
+    std::size_t not_shown = 0;
+    std::size_t refusals = 0;
+    for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
+        const char* v = value_text(model, r, 0);
+        shown += same(v, "Shown");
+        not_shown += same(v, "Not shown");
+        refusals += same(v, "Refused");
+    }
+    check(shown == 4 && not_shown == 1 && refusals == 1, "status: 4 shown, 1 not shown, 1 refused");
+    const native::GameOptionRow* broken = find(model, 0, "broken");
+    check(broken && std::strstr(help_text(model, broken), "get and set"), "the refusal's reason");
+    m.send(CMFM_EVENT_OPENED);
+    check(f[3].opened == 1 && f[4].opened == 0, "events go to shown pages only");
+}
+
+void drops_pages_that_do_not_fit() {
+    // Four pages of 24 settings with 32 values each overflow the text ids.
+    static OptionsModel model;
+    static Fake f;
+    static cmfm_setting_t big[CMFM_MAX_SETTINGS];
+    for (std::uint32_t i = 0; i < CMFM_MAX_SETTINGS; ++i) {
+        big[i] = setting(i, CMFM_TYPE_INT, "Big");
+        big[i].min = 0;
+        big[i].max = 31;
+        big[i].step = 1;
+    }
+    Menu m;
+    for (int p = 0; p < 4; ++p) {
+        cmfm_page_t page = {};
+        page.size = sizeof page;
+        page.plugin = "big";
+        page.title = "Big";
+        page.settings = big;
+        page.setting_count = CMFM_MAX_SETTINGS;
+        page.user = &f;
+        page.get = fake_get;
+        page.set = fake_set;
+        add(m, page);
+    }
+    std::string why;
+    check(m.build(model, why) && m.used_tabs() == 2, "only the first big page fits");
+    std::size_t not_shown = 0;
+    for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r) {
+        not_shown += same(value_text(model, r, 0), "Not shown");
+    }
+    check(not_shown == 3, "the others are listed as not shown");
+}
+
+}  // namespace
+
+int main() {
+    validates_pages();
+    reads_later_setting_sizes();
+    lays_out_the_status_page();
+    shows_a_page();
+    reads_and_writes_through_callbacks();
+    refreshes_texts_and_sends_events();
+    lists_every_page_on_the_status_tab();
+    drops_pages_that_do_not_fit();
+    if (g_failures == 0) {
+        std::printf("test_menu: all passed\n");
+    }
+    return g_failures == 0 ? 0 : 1;
+}

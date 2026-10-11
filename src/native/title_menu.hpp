@@ -4,10 +4,11 @@
 //   menu's cursor and selected callbacks shift the rows below it by one, so
 //   the game's own row numbers still hold; "Mods" acts as Options.
 // - page: when the title Options page opens after "Mods", CMFM swaps in its
-//   tab tables, rebuilds the page's lists with the game's own builder, keeps
-//   five categories (Key Config and Default, a full reset, out of reach) and
-//   renames the header and categories (and hides the Display category's
-//   VRAM panel). The next plain open rebuilds the game's lists.
+//   menu's tab tables (menu/service.hpp), rebuilds the page's lists with the
+//   game's own builder, keeps one category per tab in use (Key Config and
+//   Default, a full reset, out of reach) and renames the header and
+//   categories (and hides the Display category's VRAM panel). The next plain
+//   open rebuilds the game's lists.
 // Exe 421810 only; any unexpected value leaves the title as the game made it.
 #pragma once
 

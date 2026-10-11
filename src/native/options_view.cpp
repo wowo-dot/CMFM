@@ -1,5 +1,6 @@
 #include "native/options_view.hpp"
 
+#include "menu/service.hpp"
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
 #include "native/options_model.hpp"
@@ -29,23 +30,7 @@ std::uint32_t g_defaults_hook = 0;
 Env g_env = {};
 bool g_ready = false;
 std::atomic<bool> g_view{false};
-OptionsModel g_model;
 QwordPatch g_tabs[kTabCount];
-
-// Prototype 2 content: one tab with two test rows.
-const char* const kTabNames[kTabCount] = {"CMFM", "-", "-", "-", "-"};
-const char* const kTabHelps[kTabCount] = {"CMFM's own test rows (prototype).", "No mod settings on this tab yet.",
-                                          "No mod settings on this tab yet.", "No mod settings on this tab yet.",
-                                          "No mod settings on this tab yet."};
-const char* const kOnOff[] = {"Off", "On"};
-const char* const kChoice[] = {"Alpha", "Beta", "Gamma"};
-const OptionSpec kTestRows[] = {
-    {"Test toggle", "Prototype row: switches between Off and On.", kOnOff, 2, 0, 0},
-    {"Test choice", "Prototype row: picks one of three values.", kChoice, 3, 0, 0},
-};
-// Every tab needs a row (the page reads the row under the cursor unchecked).
-const char* const kDash[] = {"-"};
-const OptionSpec kFreeTab = {"Free tab", "No mod settings on this tab yet.", kDash, 1, 0, 0};
 
 // Short lines from the game thread on user actions only (no allocation).
 void logf(al_log_level_t level, const char* format, ...) {
@@ -67,9 +52,7 @@ std::uintptr_t tab_slot(std::size_t tab) {
 
 std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
     if (is_cmfm_row(kind, id)) {
-        std::uint32_t value = 0;
-        g_model.get(id, value);
-        return value;
+        return menu::service_get(id);
     }
     return g_get_next(kind, id);
 }
@@ -77,12 +60,7 @@ std::uint64_t get_detour(std::int32_t kind, std::uint32_t id) {
 std::uint64_t set_detour(std::int32_t kind, std::uint32_t id, std::int32_t value) {
     if (is_cmfm_row(kind, id)) {
         // Never reaches the game's setter: it would write sUserData out of range.
-        if (value >= 0 && g_model.set(id, static_cast<std::uint32_t>(value))) {
-            const OptionSpec* s = g_model.spec(id);
-            logf(AL_LOG_INFO, "options view: %s = %s", s->label, s->values[value]);
-        } else {
-            logf(AL_LOG_WARNING, "options view: refused row %u value %d", id, value);
-        }
+        menu::service_set(id, value);
         return 0;
     }
     return g_set_next(kind, id, value);
@@ -104,12 +82,11 @@ void defaults_detour(void* closure, void* unknown, std::int32_t* answer) {
         return;
     }
     if (answer != nullptr && *answer == 0) {  // Yes
-        g_model.reset();
+        menu::service_reset();
         void* page = *reinterpret_cast<void* const*>(static_cast<char*>(closure) + 8);
         if (g_refresh != nullptr && page != nullptr) {
             g_refresh(page);
         }
-        logf(AL_LOG_INFO, "options view: Set To Default reset the CMFM rows only");
     }
 }
 
@@ -157,11 +134,6 @@ bool register_hook(const char* name, const char* pattern, void* detour, void** n
 
 bool options_view_register(const Env& env, std::string& why) {
     g_env = env;
-    const char* fail = nullptr;
-    if (!g_model.build("Mods", kTabNames, kTabHelps, kTestRows, sizeof kTestRows / sizeof kTestRows[0], kFreeTab, fail)) {
-        why = std::string("test rows: ") + fail;
-        return false;
-    }
     if (!register_hook("CMFM:OptionRow::get", game::kOptionGetPattern, reinterpret_cast<void*>(&get_detour),
                        reinterpret_cast<void**>(&g_get_next), g_get_hook) ||
         !register_hook("CMFM:OptionRow::set", game::kOptionSetPattern, reinterpret_cast<void*>(&set_detour),
@@ -189,9 +161,7 @@ bool options_view_register(const Env& env, std::string& why) {
     } else {
         logf(AL_LOG_WARNING, "options view: refreshRows not found; Set To Default redraws later");
     }
-    logf(AL_LOG_INFO,
-         "options view: hooks registered (option get, option set, Options close, Set To Default); %u rows",
-         static_cast<unsigned>(g_model.row_count()));
+    logf(AL_LOG_INFO, "options view: hooks registered (option get, option set, Options close, Set To Default)");
     return true;
 }
 
@@ -223,8 +193,6 @@ bool options_view_check(const Env& env, std::string& why) {
 
 bool options_view_ready() { return g_ready; }
 
-const OptionsModel& options_view_model() { return g_model; }
-
 bool options_view_enter() {
     if (!g_ready) {
         return false;
@@ -232,20 +200,26 @@ bool options_view_enter() {
     if (g_view.load(std::memory_order_acquire)) {
         return true;
     }
+    const OptionsModel* model = menu::service_prepare();
+    if (model == nullptr) {
+        return false;
+    }
     std::string why;
     for (std::size_t t = 0; t < kTabCount; ++t) {
         const std::uint64_t expected = g_env.base + game::kRvaOptionRows[t];
-        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(g_model.table(t));
+        const std::uint64_t ours = reinterpret_cast<std::uint64_t>(model->table(t));
         if (!g_tabs[t].apply("Options tab", tab_slot(t), expected, ours, why)) {
             for (std::size_t u = 0; u < t; ++u) {
                 std::string ignored;
                 g_tabs[u].restore(ignored);
             }
+            menu::service_abort();
             logf(AL_LOG_WARNING, "options view: could not swap tab %zu: %s", t, why.c_str());
             return false;
         }
     }
     g_view.store(true, std::memory_order_release);
+    menu::service_opened();
     logf(AL_LOG_INFO, "options view: on");
     return true;
 }
@@ -261,19 +235,24 @@ void options_view_exit() {
         }
     }
     g_view.store(false, std::memory_order_release);
+    menu::service_closed();
     logf(AL_LOG_INFO, "options view: off (game tables back)");
 }
 
 const char* options_view_text(void* message_file_ptr, std::uint32_t id) {
+    if (!menu::service_texts_on()) {
+        return nullptr;
+    }
+    const OptionsModel& model = menu::service_model();
     if (id >= kLabelIdFirst && id < kTextIdLimit && message_file_ptr == message_file(game::kRvaMessages12)) {
-        return g_model.label_text(id);
+        return model.label_text(id);
     }
     if (id >= kHelpIdFirst && id < kTextIdLimit && message_file_ptr == message_file(game::kRvaMessages18)) {
-        return g_model.help_text(id);
+        return model.help_text(id);
     }
     if (id <= kTabCount && g_view.load(std::memory_order_relaxed) &&
         message_file_ptr == message_file(game::kRvaMessages12)) {
-        return id == 0 ? g_model.header() : g_model.tab_name(id - 1);
+        return id == 0 ? model.header() : model.tab_name(id - 1);
     }
     return nullptr;
 }
