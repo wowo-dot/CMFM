@@ -103,6 +103,19 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    per page and 1024 pages (limits against mistakes), and per setting the
    pick list's 14 rows and the slider's 101 positions (Later: long pick
    lists, finer sliders).
+7. **One entry per mod, its pages in a dropdown** (designed with the user,
+   2026-10-12, from two mockups). The mod list shows one entry per mod (the
+   pages of one Astera Loader plugin); a mod with several pages opens a
+   dropdown under its entry listing every page, the default (first) one
+   included. A select philosophy: hover and the arrow keys only highlight;
+   a click or Confirm selects (a mod: its dropdown opens and its default
+   page shows; a page: it shows; the open mod's entry again: the dropdown
+   folds, the page stays). One dropdown open at a time; a mod always opens
+   on its default page. Q / E (pad LB / RB, once the game is known not to
+   use them there) step through the selected mod's pages. The header names
+   mod and page; the help line says which page of how many. The Overview
+   lists one line per mod. Interface: an optional mod name on the page
+   (`cmfm_page_t.mod`, since 1.2; without it, the first page's title).
 
 ## Then: config pages without code (1.3, its own design first)
 
