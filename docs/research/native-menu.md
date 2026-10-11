@@ -146,11 +146,66 @@ Layout elements can also be found by name: `uGUI::getInstanceFromName(gui,
   `+0xD8`). uGUIMenuOption's row labels are category 12 (qword_145012E20),
   ids 426 + row. Encoding not verified yet (MT Framework uses UTF-8).
 
+## How GUIs are registered, created and opened (confirmed, static)
+
+- **Registry.** `sMhGUI` (instance `sMhGUI::Instance` 0x1451C4640) keeps 11
+  groups at `+85936` (0x14FB0): `{record table, count}` pairs, 16 bytes
+  each. A record is 0x18 bytes: `{DTI*, const char* layout path, uint32
+  flags}`. Tables (named `GUIRegistry_Group*_cmfm` in IDA):
+
+  | Group | Table | Count | Contents |
+  |---|---|---|---|
+  | 0 | 0x143F9CF40 | 18 | common: select/message windows, dialog, save/load, cursor |
+  | 1 | 0x143F9D0F0 | 125 | menus: hud_info, start_menu, item menus, **option_hud (index 12, uGUIMenuOption)**, guild card… (filled by 0x141ADC060) |
+  | 2 | 0x143F9DCB0 | 45 | facilities and shops |
+  | 3 | 0x143F9E190 | 26 | HUD |
+  | 5 | 0x143F9E430 | 29 | includes language, HDR, keyboard, PC graphics |
+  | 6 | 0x143F9E6F0 | 9 | includes sound settings |
+  | 4, 7–10 | 0x143F9E400, 0x143F9E100, 0x143F9E0E8, 0x143F9E178, 0x143F9E130 | 1–3 | small |
+
+- **Creation.** `sMhGUI::createGUIObjects(gui, group, out)` (0x141AD6230)
+  creates every unit of a group at once (`sMhUnit::newUnit`, then
+  `addTop`/`addBottom` on move line 20 or 22). Flags: 1 = skip, 2 = line 22,
+  4 = top, 8 = conditional flag. So a page's unit exists before it opens.
+- **Opening.** Each page has an open function (`sMhGUI::open_uGUIMenuOption`
+  0x141EC40B0 for item 71): find the live unit by DTI id among
+  `sMhGUI`'s units (`+616` count, `+632` array; compare
+  `unit->getDti()->id` at DTI+0x34), wrap the caller's arguments in two
+  functors, set flag 1, and push the request into the queue at
+  `sMhGUI+0x8F68` (0x14114F680, hypothesis: "push open request").
+- **Start menu entries.** Static tables of 16-byte entries
+  `{item id, label text id, help text id, extra}`; 76 ends a group.
+  `StartMenu_ItemTable_cmfm` 0x143FC0BD0 has 5 groups (likely the 5 tabs):
+  items 0–9, 11–22, 23–45, 46–63, 71–75. Submenus have small tables of their
+  own (items 64–69 under 63, 58–62 under 57, …). `uGUIStartMenu::populateSubMenu`
+  (0x141ED1880) keeps up to 10 visible entries; the action switch
+  `uGUIStartMenu::onItemAction` (0x141ECDC30) has one case per item id
+  (yes/no dialogs, page opens, submenus). Item 71 opens `uGUIMenuOption`.
+- **Native popups exist:** `sMhGUI::DisplayYesNoDialog` (0x141AE2050) and
+  `sMhGUI::DisplayMessageWindow` (0x141AE3EF0), used by the Start menu.
+
+### What a CMFM page could look like (design idea, not tested)
+
+1. A page class of our own (an `uMhGUI` subclass with our own vtable and an
+   MT DTI registered under the parent `uMhGUI`), reusing an existing list
+   layout such as `ui\start_menu\option_hud`.
+2. A record for it in group 1's registry (a larger copy of the table, with
+   the group's pointer and count changed before the group is created).
+3. A Start menu entry: an extra entry in one category table, our label via
+   `formatText`, and our item id handled before the action switch (a hook on
+   `onItemAction` through `al.hooks`).
+4. Rows built with `setRowCount` and `formatText`, values changed through the
+   list callbacks, everything read from and written to the owning plugin
+   through CMFM's interface.
+
+Each step needs checking in the running game first (with Frida, read-only
+logging on functions we already know, after the user's OK).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** Rows: yes in principle; the game resizes
-   lists at runtime. A page: not answered yet (how pages are opened, and
-   whether a page class of our own can reuse a game layout).
+   lists at runtime. A page: the registry, creation and open path are known
+   (see above); a page of our own looks possible but is not tested.
 2. **Can CMFM show its own text?** Yes in principle: `formatText` takes any
    string.
 3. **Can CMFM see value changes?** Probably, through the list callbacks; not
