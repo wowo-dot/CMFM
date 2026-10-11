@@ -268,6 +268,24 @@ inline constexpr std::size_t kSlotGetDti = 4;    // lea rax, [DTI]; ret
 inline constexpr std::size_t kSlotUpdate = 81;   // kTitleOptionsUpdatePattern
 inline constexpr std::size_t kSlotOpen = 90;     // kTitleOptionsOpenPattern
 inline constexpr std::size_t kSlotClose = 91;    // kTitleOptionsClosePattern
+inline constexpr std::size_t kSlotGetGuiPath = 71;  // lea rax, [layout path]; ret
+inline constexpr char kOptionPageLayout[] = "ui\\title\\options";
+
+// CMFM's own page layout (decisions.md item 10): assets/nativePC/ui/cmfm/
+// mods.gui, built by tools/gui/make_mods_gui.py and loaded by the game from
+// nativePC (CMFM's mod folder under MO2).
+inline constexpr char kModsLayout[] = "ui\\cmfm\\mods";
+// sMhResource::loadResource(resources, class, path, flags) at RVA 0x22228D0:
+// slot 11 of sMhResource's vtable; returns nullptr if the file is not found.
+// Flag 1 loads from file, as uMhGUI's layout load does.
+inline constexpr char kLoadResourcePattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 54 41 56 41 57 48 83 EC 30 80 B9 7B 80 20 00 00 45 8B F9 49 8B F8 4C 8B E2";
+inline constexpr std::size_t kLoadResourceSlot = 11;
+inline constexpr std::uint32_t kLoadFromFile = 1;
+inline constexpr std::uintptr_t kRvaResourceManager = 0x5123A00;  // sMhResource::Instance (pointer)
+inline constexpr std::uintptr_t kRvaResourceManagerVtable = 0x33FC610;
+inline constexpr std::uintptr_t kRvaGuiResourceClass = 0x51C4608;  // rGUI::DTI::Instance
+inline constexpr char kGuiResourceClassName[] = "rGUI";
 inline constexpr char kOptionPageClassName[] = "uGUIOption";
 inline constexpr std::uint32_t kOptionPageClassId = 0x165BDEB6;  // (~crc32(name)) & 0x7FFFFFFF
 // MtDTI as MtDti::ctor fills it; its vtable has 4 slots (1: new object).

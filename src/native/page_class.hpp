@@ -60,6 +60,10 @@ void* page_alive();
 void* page_create(std::string& why);
 // The game's own function behind one of the overridden slots.
 UnitFn page_next(std::size_t slot);
+// The layout the page loads at its setup (vtable slot 71): uGUIOption's
+// (ui/title/options) unless set before page_create. `path` must stay valid.
+void page_set_layout(const char* path);
+const char* page_layout();
 // uMhGUI::requestOpen(unit, opener) and requestClose(unit, now): the open or
 // close happens on the unit's next update.
 void gui_request_open(void* unit, void* opener);

@@ -24,6 +24,7 @@ using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t ind
                                          const char* title);
 using BuildCategoriesFn = void (*)(void* categories, void* unit);
 using LockChannelFn = std::uint64_t (*)(void* input, std::int32_t channel, std::uint32_t player);
+using LoadResourceFn = void* (*)(void* resources, const void* resource_class, const char* path, std::uint32_t flags);
 
 ShowCategoryFn g_show_category_next = nullptr;
 ListMoveFn g_list_move_next = nullptr;
@@ -33,6 +34,9 @@ InitCategoryFn g_init_category = nullptr;
 void* const* g_input_manager = nullptr;
 void* const* g_area_manager = nullptr;
 LockChannelFn g_lock_channel = nullptr;
+LoadResourceFn g_load_resource = nullptr;
+// CMFM's layout as loaded once (kept for the session, like the page).
+void* g_layout_resource = nullptr;
 
 enum Hook { kShowCategory, kListMove, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
@@ -482,7 +486,9 @@ bool mods_page_register(const Env& env, std::string& why) {
     if (!gui_register(env, why) ||
         !find_game_function(env, "initCategory", game::kInitCategoryPattern,
                             reinterpret_cast<void**>(&g_init_category), why) ||
-        !page_class_register(env, why) || !find_input_lock(env, why)) {
+        !page_class_register(env, why) || !find_input_lock(env, why) ||
+        !find_game_function(env, "sMhResource::loadResource", game::kLoadResourcePattern,
+                            reinterpret_cast<void**>(&g_load_resource), why)) {
         return false;
     }
     struct Spec {
@@ -550,6 +556,34 @@ bool mods_page_check(const Env& env, std::string& why) {
     return true;
 }
 
+namespace {
+
+// Loads CMFM's own layout through the game's resource manager before the page
+// exists; only if the game finds it does the page use it (a missing layout
+// would leave the page without its parts).
+void use_own_layout() {
+    void* resources = *reinterpret_cast<void* const*>(g_env.base + game::kRvaResourceManager);
+    const auto* resource_class = reinterpret_cast<const char* const*>(g_env.base + game::kRvaGuiResourceClass);
+    if (resources == nullptr ||
+        *static_cast<const std::uintptr_t*>(resources) != g_env.base + game::kRvaResourceManagerVtable ||
+        static_cast<void* const*>(*static_cast<void* const* const*>(resources))[game::kLoadResourceSlot] !=
+            reinterpret_cast<void*>(g_load_resource) ||
+        resource_class[1] == nullptr || std::strcmp(resource_class[1], game::kGuiResourceClassName) != 0) {
+        logf(AL_LOG_WARNING, "Mods page: the resource manager is not as expected; the page uses the game's layout");
+        return;
+    }
+    g_layout_resource = g_load_resource(resources, resource_class, game::kModsLayout, game::kLoadFromFile);
+    if (g_layout_resource == nullptr) {
+        logf(AL_LOG_WARNING, "Mods page: layout %s not found (nativePC); the page uses the game's layout (%s)",
+             game::kModsLayout, page_layout());
+        return;
+    }
+    page_set_layout(game::kModsLayout);
+    logf(AL_LOG_INFO, "Mods page: layout %s loaded (CMFM's own)", game::kModsLayout);
+}
+
+}  // namespace
+
 bool mods_page_ready() {
     return g_ready.load(std::memory_order_acquire);
 }
@@ -562,6 +596,7 @@ void* mods_page_ensure() {
     if (page != nullptr || g_create_failed) {
         return page;
     }
+    use_own_layout();
     std::string why;
     page = page_create(why);
     if (page == nullptr) {

@@ -74,6 +74,7 @@ void* g_vtable[game::kOptionPageVtableSlots] = {};
 UnitFn g_next_update = nullptr;
 UnitFn g_next_open = nullptr;
 UnitFn g_next_close = nullptr;
+const char* g_layout = game::kOptionPageLayout;
 GameRef g_ref = {};
 bool g_ready = false;
 
@@ -142,6 +143,10 @@ const void* get_dti(void*) {
     return &g_dti;
 }
 
+const char* get_gui_path(void*) {
+    return g_layout;
+}
+
 }  // namespace
 
 bool page_class_register(const Env& env, std::string& why) {
@@ -184,6 +189,12 @@ bool page_class_check(const Env& env, const PageHandlers& handlers, std::string&
         why = "uGUIOption's vtable does not return its class description";
         return false;
     }
+    const auto* path =
+        reinterpret_cast<const char*>(lea_return(static_cast<const std::uint8_t*>(vtable[game::kSlotGetGuiPath])));
+    if (path == nullptr || std::strcmp(path, game::kOptionPageLayout) != 0) {
+        why = "uGUIOption's vtable does not name its layout";
+        return false;
+    }
     if (vtable[game::kSlotUpdate] != g_found_update || vtable[game::kSlotOpen] != g_found_open ||
         vtable[game::kSlotClose] != g_found_close) {
         why = "uGUIOption's vtable does not hold its update, open and close functions";
@@ -206,6 +217,7 @@ bool page_class_check(const Env& env, const PageHandlers& handlers, std::string&
     g_next_open = reinterpret_cast<UnitFn>(vtable[game::kSlotOpen]);
     g_next_close = reinterpret_cast<UnitFn>(vtable[game::kSlotClose]);
     g_vtable[game::kSlotGetDti] = reinterpret_cast<void*>(&get_dti);
+    g_vtable[game::kSlotGetGuiPath] = reinterpret_cast<void*>(&get_gui_path);
     g_vtable[game::kSlotUpdate] = reinterpret_cast<void*>(handlers.update);
     g_vtable[game::kSlotOpen] = reinterpret_cast<void*>(handlers.open);
     g_vtable[game::kSlotClose] = reinterpret_cast<void*>(handlers.close);
@@ -285,6 +297,14 @@ UnitFn page_next(std::size_t slot) {
     default:
         return nullptr;
     }
+}
+
+void page_set_layout(const char* path) {
+    g_layout = path;
+}
+
+const char* page_layout() {
+    return g_layout;
 }
 
 void gui_request_open(void* unit, void* opener) {
