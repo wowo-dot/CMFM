@@ -128,6 +128,8 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
     g_env.base = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
     g_env.scanner =
         static_cast<const al_scanner_t*>(api->get_interface(init->self, AL_SCANNER_INTERFACE, AL_SCANNER_VERSION));
+    // Asked for here so AL installs its input layer (the title page's wheel).
+    g_env.input = static_cast<const al_input_t*>(api->get_interface(init->self, AL_INPUT_INTERFACE, AL_INPUT_VERSION));
     log(AL_LOG_INFO, "exe 421810 confirmed (" + std::string(game->exe_sha256).substr(0, 12) + "...)");
 
     if (!cmfm::native::start_menu_register(g_env, why)) {

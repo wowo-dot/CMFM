@@ -17,6 +17,7 @@ struct Env {
     const al_hooks_t* hooks;
     std::uintptr_t base;  // the game exe's base
     const al_scanner_t* scanner;  // may be NULL
+    const al_input_t* input;      // may be NULL (no mouse wheel then)
 };
 
 // The entry's label in the Start menu and on the title screen.

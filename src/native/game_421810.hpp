@@ -117,13 +117,16 @@ inline constexpr char kGetInstanceFromNamePattern[] = "48 89 5C 24 08 48 89 74 2
 // cGUIInstance::setPlay(instance, bool) at RVA 0x18BAEA0.
 inline constexpr char kSetPlayPattern[] = "48 85 C9 74 50 48 89 5C 24 08 57 48 83 EC 20 0F B6 FA";
 
-// cGUIFixedScrollList::enable(scroll, owner, callback) at RVA 0xB65B20. Every
-// button list holds one at +736 (attached at list init). Switched on, it
-// turns moves past the last visible row into scrolls (the list's wrap must
-// be on) and calls callback(owner, from, to) after each scroll; a game menu
-// sets it up like this at 0x140556030.
-inline constexpr char kScrollEnablePattern[] =
-    "80 79 09 00 48 89 91 A0 00 00 00 4C 89 81 88 00 00 00 4C 89 81 90 00 00 00";
+// cGUIInstButtonList::moveCursor(list, row) at RVA 0xB74060: the list's cursor
+// move from directional input (vtable slot 28 via a thunk, slot 94); calls
+// the owner's cursor callback. With wrap on, Down on the last row asks for
+// row 0 and Up on row 0 for the last row.
+inline constexpr char kListMovePattern[] = "48 89 5C 24 18 57 48 83 EC 30 48 63 81 74 02 00 00 48 8B D9 48 63 FA";
+// uGUIOption::update (vtable slot 81) at RVA 0x1E8EF50, every frame while the
+// title Options page runs; +10480 is 0 while its category list has the focus.
+inline constexpr char kTitleOptionsUpdatePattern[] =
+    "48 89 5C 24 10 48 89 6C 24 18 48 89 74 24 20 57 41 56 41 57 48 83 EC 30 48 8B F9";
+inline constexpr std::size_t kOptFocus = 0x28F0;  // 0: the category list
 // uGUIOption::initCategory(tab object, unit, tab, name, title) at RVA
 // 0x1E8DFE0: finds the tab's layout objects and fills its rows from
 // TitleOptionTabTables[tab] (buildCategories calls it per category).
@@ -171,16 +174,7 @@ inline constexpr std::size_t kListRowCount = 0x1D8;
 inline constexpr std::size_t kListRows = 0x1E8;
 inline constexpr std::size_t kListDuplicateNum = 0x298;
 inline constexpr std::size_t kListCursor = 0x274;
-inline constexpr std::size_t kListWrap = 656;             // byte
-inline constexpr std::size_t kListScroll = 736;           // cGUIFixedScrollList
-inline constexpr std::size_t kListScrollOn = 744;         // byte (scroll +8)
-inline constexpr std::size_t kListScrollKeepWrap = 745;   // byte (scroll +9)
-inline constexpr std::size_t kListScrollVisible = 852;    // scroll +116
-inline constexpr std::size_t kListScrollTotal = 856;      // scroll +120
-inline constexpr std::size_t kListScrollSelected = 868;   // scroll +132: the selected item's index
-inline constexpr std::size_t kListScrollCallback = 872;   // scroll +136
-inline constexpr std::size_t kListScrollCallback2 = 880;  // scroll +144
-inline constexpr std::size_t kListScrollOwner = 896;      // scroll +160
+inline constexpr std::size_t kListWrap = 656;  // byte: Down on the last row goes to row 0
 // List row (cGUIInstance) fields.
 inline constexpr std::size_t kInstRoot = 0x1C0;          // cGUIObjRoot*
 inline constexpr std::size_t kInstFlags = 0x628;

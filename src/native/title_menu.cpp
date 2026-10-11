@@ -16,12 +16,13 @@ namespace {
 
 // Hooked.
 using TitlePlayFn = std::uint64_t (*)(void* title);
-using TitleCursorFn = std::uint64_t (*)(void* title, void* list, std::int32_t row);
+using TitleCursorFn = std::uint64_t (*)(void* title, void* old_row, std::int32_t row);
 using TitleDecidedFn = void (*)(void* title, std::int32_t row);
 using OptionsOpenFn = std::uint64_t (*)(void* unit);
 using OptionsCloseFn = std::uint64_t (*)(void* unit);
 using ShowCategoryFn = std::uint64_t (*)(void* categories, std::int32_t category);
-using ScrollEnableFn = void (*)(void* scroll, void* owner, void* callback);
+using ListMoveFn = std::uint64_t (*)(void* list, std::int32_t row);
+using OptionsUpdateFn = std::uint64_t (*)(void* unit);
 using InitCategoryFn = std::uint64_t (*)(void* tab, void* unit, std::int32_t index, const char* name,
                                          const char* title);
 // Called.
@@ -39,16 +40,17 @@ TitleDecidedFn g_decided_next = nullptr;
 OptionsOpenFn g_open_next = nullptr;
 OptionsCloseFn g_close_next = nullptr;
 ShowCategoryFn g_show_category_next = nullptr;
+ListMoveFn g_list_move_next = nullptr;
+OptionsUpdateFn g_update_next = nullptr;
 SetRowCountFn g_set_row_count = nullptr;
 SetCursorFn g_set_cursor = nullptr;
 GetObjectFn g_get_object = nullptr;
 FormatTextFn g_format_text = nullptr;
 GetInstanceFn g_get_instance = nullptr;
 SetPlayFn g_set_play = nullptr;
-ScrollEnableFn g_scroll_enable = nullptr;
 InitCategoryFn g_init_category = nullptr;
 
-enum Hook { kPlay, kCursor, kDecided, kOpen, kClose, kShowCategory, kHookCount };
+enum Hook { kPlay, kCursor, kDecided, kOpen, kClose, kShowCategory, kListMove, kUpdate, kHookCount };
 std::uint32_t g_hooks[kHookCount] = {};
 
 Env g_env = {};
@@ -65,20 +67,23 @@ void* g_built_unit = nullptr;
 std::uint32_t g_mods_selected = 0;
 QwordPatch g_tabs[game::kTitleViewTabs];
 // The category list's window over the menu's tabs: physical row r shows tab
-// g_top + r (more than five tabs scroll; the game's code takes the row as
-// the tab object's index).
+// g_top + r. The game's code takes the row as the tab object's index, and
+// only five tab objects have row lists, so more than five tabs scroll.
 std::atomic<std::size_t> g_top{0};
-std::size_t g_entries = 0;
-// The category list's scroll fields before CMFM switched scrolling on.
-struct SavedScroll {
+std::atomic<std::size_t> g_entries{0};
+std::atomic<void*> g_window_list{nullptr};  // the category list while it scrolls
+std::atomic<void*> g_view_unit{nullptr};
+std::atomic<int> g_wheel{0};  // wheel delta from the window thread
+int g_wheel_rest = 0;
+// The category list's wrap flag before CMFM turned it on (it relies on it).
+struct SavedWrap {
     bool on = false;
     void* list = nullptr;
-    std::uint8_t wrap, scroll_on, keep_wrap;
-    std::uint32_t visible, total, selected;
-    void* callback;
-    void* callback2;
-    void* owner;
+    std::uint8_t wrap = 0;
 } g_saved;
+// Edge rows with an arrow when more tabs lie beyond them.
+char g_label_up[96];
+char g_label_down[96];
 
 template <class T>
 T& field(void* base, std::size_t offset) {
@@ -270,12 +275,18 @@ bool prepare_rebuild(void* unit) {
 
 std::uint64_t show_category_detour(void* categories, std::int32_t category);
 
+bool scrolling() {
+    return g_view.load(std::memory_order_acquire) && g_entries.load(std::memory_order_relaxed) > game::kTitleViewTabs;
+}
+
 // The window moved: point the five tab objects at their new tabs and fill
-// them again, the game's way (initCategory), then show the highlighted one.
+// them again, the game's way (initCategory), relabel the rows (arrows on the
+// edge rows when more lie beyond) and show the highlighted tab again.
 void refill_window(void* unit) {
     const OptionsModel& model = menu::service_model();
     void* categories = field<void*>(unit, game::kOptCategoryList);
     const std::size_t top = g_top.load(std::memory_order_relaxed);
+    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
     for (std::size_t r = 0; r < game::kTitleViewTabs; ++r) {
         std::string why;
         if (!g_tabs[r].retarget(reinterpret_cast<std::uint64_t>(model.table(top + r)), why)) {
@@ -285,27 +296,21 @@ void refill_window(void* unit) {
         prepare_tab(unit, r);
         g_init_category(tab_object(unit, r), unit, static_cast<std::int32_t>(r), game::kTitleTabNames[r],
                         model.tab_name(top + r));
-        set_row_text(list_row(categories, static_cast<std::uint32_t>(r)), "msg_1", nullptr, model.tab_name(top + r));
+        const char* label = model.tab_name(top + r);
+        if (r == 0 && top > 0) {
+            std::snprintf(g_label_up, sizeof g_label_up, "\xE2\x96\xB2 %s", label);  // up-pointing triangle
+            label = g_label_up;
+        } else if (r == game::kTitleViewTabs - 1 && top + game::kTitleViewTabs < entries) {
+            std::snprintf(g_label_down, sizeof g_label_down, "%s \xE2\x96\xBC", label);  // down-pointing triangle
+            label = g_label_down;
+        }
+        set_row_text(list_row(categories, static_cast<std::uint32_t>(r)), "msg_1", nullptr, label);
     }
     show_category_detour(static_cast<char*>(unit) + game::kOptCategories,
                          static_cast<std::int32_t>(field<std::uint32_t>(categories, game::kListCursor)));
 }
 
-// cGUIFixedScrollList's callback after a scroll (owner = our unit).
-void scroll_callback(void* unit, std::int32_t from, std::int32_t to) {
-    if (!g_view.load(std::memory_order_acquire) || unit == nullptr || g_entries <= game::kTitleViewTabs) {
-        return;
-    }
-    void* categories = field<void*>(unit, game::kOptCategoryList);
-    const std::uint32_t cursor = field<std::uint32_t>(categories, game::kListCursor);
-    const std::uint32_t selected = field<std::uint32_t>(categories, game::kListScrollSelected);
-    const std::size_t last_top = g_entries - game::kTitleViewTabs;
-    std::size_t top = selected > cursor ? selected - cursor : 0;
-    if (top > last_top) {
-        top = last_top;
-    }
-    logf(AL_LOG_INFO, "title options: scrolled (from %d, to %d, cursor %u, selected %u): top %zu -> %zu", from, to,
-         cursor, selected, g_top.load(std::memory_order_relaxed), top);
+void scroll_to(void* unit, std::size_t top) {
     if (top == g_top.load(std::memory_order_relaxed)) {
         return;
     }
@@ -313,51 +318,94 @@ void scroll_callback(void* unit, std::int32_t from, std::int32_t to) {
     refill_window(unit);
 }
 
-void enable_scroll(void* unit, void* categories) {
+// Directional moves on the category list: past the bottom or top row the
+// window moves instead of the cursor; at the very end and start it wraps.
+std::uint64_t list_move_detour(void* list, std::int32_t row) {
+    if (list == g_window_list.load(std::memory_order_acquire) && scrolling()) {
+        void* unit = g_view_unit.load(std::memory_order_acquire);
+        const std::int32_t old = field<std::int32_t>(list, game::kListCursor);
+        const std::int32_t last = static_cast<std::int32_t>(game::kTitleViewTabs) - 1;
+        const std::size_t top = g_top.load(std::memory_order_relaxed);
+        const std::size_t last_top = g_entries.load(std::memory_order_relaxed) - game::kTitleViewTabs;
+        if (old == last && row == 0) {  // Down on the bottom row
+            if (top < last_top) {
+                scroll_to(unit, top + 1);
+                return 0;  // the cursor stays
+            }
+            scroll_to(unit, 0);
+        } else if (old == 0 && row == last) {  // Up on the top row
+            if (top > 0) {
+                scroll_to(unit, top - 1);
+                return 0;
+            }
+            scroll_to(unit, last_top);
+        }
+    }
+    return g_list_move_next(list, row);
+}
+
+// The mouse wheel (window thread): kept for the page's next update while the
+// category list has the focus.
+std::uint32_t AL_CALL message_callback(al_plugin_t*, void*, std::uint32_t message, std::uintptr_t wparam,
+                                       std::intptr_t, void*) {
+    constexpr std::uint32_t kMouseWheel = 0x020A;  // WM_MOUSEWHEEL
+    if (message != kMouseWheel || !scrolling()) {
+        return 0;
+    }
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    if (unit == nullptr || field<std::int32_t>(unit, game::kOptFocus) != 0) {
+        return 0;  // inside a tab: the game handles the wheel
+    }
+    g_wheel.fetch_add(static_cast<std::int16_t>((wparam >> 16) & 0xFFFF), std::memory_order_relaxed);
+    return 1;
+}
+
+// Every frame while the title Options page runs (the menu's own thread).
+std::uint64_t update_detour(void* unit) {
+    if (g_wheel.load(std::memory_order_relaxed) != 0) {
+        const int delta = g_wheel.exchange(0, std::memory_order_relaxed) + g_wheel_rest;
+        constexpr int kNotch = 120;  // WHEEL_DELTA
+        const int steps = delta / kNotch;
+        g_wheel_rest = delta % kNotch;
+        if (steps != 0 && scrolling() && unit == g_view_unit.load(std::memory_order_acquire)) {
+            const std::size_t top = g_top.load(std::memory_order_relaxed);
+            const std::size_t last_top = g_entries.load(std::memory_order_relaxed) - game::kTitleViewTabs;
+            // Wheel up (positive) shows earlier tabs; no wrap.
+            std::int64_t next = static_cast<std::int64_t>(top) - steps;
+            next = next < 0 ? 0 : next > static_cast<std::int64_t>(last_top) ? static_cast<std::int64_t>(last_top) : next;
+            scroll_to(unit, static_cast<std::size_t>(next));
+        }
+    }
+    return g_update_next(unit);
+}
+
+void start_window(void* unit, void* categories) {
     char* list = static_cast<char*>(categories);
-    g_saved = {true,
-               list,
-               field<std::uint8_t>(list, game::kListWrap),
-               field<std::uint8_t>(list, game::kListScrollOn),
-               field<std::uint8_t>(list, game::kListScrollKeepWrap),
-               field<std::uint32_t>(list, game::kListScrollVisible),
-               field<std::uint32_t>(list, game::kListScrollTotal),
-               field<std::uint32_t>(list, game::kListScrollSelected),
-               field<void*>(list, game::kListScrollCallback),
-               field<void*>(list, game::kListScrollCallback2),
-               field<void*>(list, game::kListScrollOwner)};
-    // As the game's own scrolling lists do (0x140556030, 0x140555E50).
-    field<std::uint8_t>(list, game::kListScrollOn) = 1;
-    field<std::uint32_t>(list, game::kListScrollVisible) = game::kTitleViewTabs;
-    field<std::uint32_t>(list, game::kListScrollTotal) = static_cast<std::uint32_t>(g_entries);
-    field<std::uint32_t>(list, game::kListScrollSelected) = field<std::uint32_t>(list, game::kListCursor);
-    g_scroll_enable(list + game::kListScroll, unit, reinterpret_cast<void*>(&scroll_callback));
-    field<std::uint8_t>(list, game::kListScrollKeepWrap) = 1;
+    g_saved = {true, list, field<std::uint8_t>(list, game::kListWrap)};
     field<std::uint8_t>(list, game::kListWrap) = 1;
-    logf(AL_LOG_INFO, "title options: category list scrolls (%zu tabs, 5 rows; wrap was %u, scroll was %u)",
-         g_entries, g_saved.wrap, g_saved.scroll_on);
+    g_wheel.store(0, std::memory_order_relaxed);
+    g_wheel_rest = 0;
+    g_view_unit.store(unit, std::memory_order_release);
+    g_window_list.store(categories, std::memory_order_release);
+    // The bottom row's arrow: more tabs below.
+    const OptionsModel& model = menu::service_model();
+    std::snprintf(g_label_down, sizeof g_label_down, "%s \xE2\x96\xBC", model.tab_name(game::kTitleViewTabs - 1));
+    set_row_text(list_row(categories, game::kTitleViewTabs - 1), "msg_1", nullptr, g_label_down);
+    logf(AL_LOG_INFO, "title options: category list scrolls (%zu tabs, 5 rows; wrap was %u)",
+         g_entries.load(std::memory_order_relaxed), g_saved.wrap);
 }
 
 // Only on the unit CMFM changed: a new uGUIOption (back at the title from the
 // game) starts with the game's own values.
-void disable_scroll(void* unit) {
+void stop_window(void* unit) {
+    g_window_list.store(nullptr, std::memory_order_release);
+    g_view_unit.store(nullptr, std::memory_order_release);
     if (!g_saved.on) {
         return;
     }
-    if (field<void*>(unit, game::kOptCategoryList) != g_saved.list) {
-        g_saved.on = false;
-        return;
+    if (field<void*>(unit, game::kOptCategoryList) == g_saved.list) {
+        field<std::uint8_t>(static_cast<char*>(g_saved.list), game::kListWrap) = g_saved.wrap;
     }
-    char* list = static_cast<char*>(g_saved.list);
-    field<std::uint8_t>(list, game::kListWrap) = g_saved.wrap;
-    field<std::uint8_t>(list, game::kListScrollOn) = g_saved.scroll_on;
-    field<std::uint8_t>(list, game::kListScrollKeepWrap) = g_saved.keep_wrap;
-    field<std::uint32_t>(list, game::kListScrollVisible) = g_saved.visible;
-    field<std::uint32_t>(list, game::kListScrollTotal) = g_saved.total;
-    field<std::uint32_t>(list, game::kListScrollSelected) = g_saved.selected;
-    field<void*>(list, game::kListScrollCallback) = g_saved.callback;
-    field<void*>(list, game::kListScrollCallback2) = g_saved.callback2;
-    field<void*>(list, game::kListScrollOwner) = g_saved.owner;
     g_saved.on = false;
 }
 
@@ -393,7 +441,7 @@ void restore_tables() {
 // Rebuilds the page from the game's tables, with the game's texts.
 void rebuild_game(void* unit) {
     g_view.store(false, std::memory_order_release);
-    disable_scroll(unit);
+    stop_window(unit);
     g_top.store(0, std::memory_order_relaxed);
     restore_tables();
     BuildCategoriesFn build = build_categories(unit);
@@ -416,9 +464,9 @@ void enter_view(void* unit) {
     if (model == nullptr) {
         return;  // the plain Options page opens
     }
-    disable_scroll(unit);
+    stop_window(unit);
     g_top.store(0, std::memory_order_relaxed);
-    g_entries = menu::service_used_tabs();
+    g_entries.store(menu::service_used_tabs(), std::memory_order_relaxed);
     for (std::size_t t = 0; t < game::kTitleViewTabs; ++t) {
         std::string why;
         const std::uint64_t expected = g_env.base + game::kRvaTitleOptionRows[t];
@@ -440,8 +488,9 @@ void enter_view(void* unit) {
     g_built_unit = unit;
     // The status tab and the plugin pages only, at most five rows (more
     // scroll): Key Config and Default (a full reset) out of reach.
-    const std::uint32_t used = static_cast<std::uint32_t>(
-        g_entries < game::kTitleViewTabs ? g_entries : game::kTitleViewTabs);
+    const std::size_t entries = g_entries.load(std::memory_order_relaxed);
+    const std::uint32_t used =
+        static_cast<std::uint32_t>(entries < game::kTitleViewTabs ? entries : game::kTitleViewTabs);
     if (field<std::uint32_t>(categories, game::kListRowCount) < game::kTitleViewTabs) {
         logf(AL_LOG_WARNING, "title options: only %u categories; game rows back",
              field<std::uint32_t>(categories, game::kListRowCount));
@@ -459,12 +508,12 @@ void enter_view(void* unit) {
         rebuild_game(unit);
         return;
     }
-    if (g_entries > game::kTitleViewTabs) {
-        enable_scroll(unit, categories);
+    if (entries > game::kTitleViewTabs) {
+        start_window(unit, categories);
     }
     set_header(unit, model->header());
     menu::service_opened();
-    logf(AL_LOG_INFO, "title options: Mods page on (%zu categories, %zu rows)", g_entries, model->row_count());
+    logf(AL_LOG_INFO, "title options: Mods page on (%zu categories, %zu rows)", entries, model->row_count());
 }
 
 std::uint64_t open_detour(void* unit) {
@@ -530,7 +579,6 @@ bool title_menu_register(const Env& env, std::string& why) {
         !find("getInstanceFromName", game::kGetInstanceFromNamePattern, reinterpret_cast<void**>(&g_get_instance),
               why) ||
         !find("setPlay", game::kSetPlayPattern, reinterpret_cast<void**>(&g_set_play), why) ||
-        !find("scroll enable", game::kScrollEnablePattern, reinterpret_cast<void**>(&g_scroll_enable), why) ||
         !find("initCategory", game::kInitCategoryPattern, reinterpret_cast<void**>(&g_init_category), why)) {
         return false;
     }
@@ -553,6 +601,10 @@ bool title_menu_register(const Env& env, std::string& why) {
          reinterpret_cast<void**>(&g_close_next)},
         {"CMFM:uGUIOption::showCategory", game::kTitleShowCategoryPattern,
          reinterpret_cast<void*>(&show_category_detour), reinterpret_cast<void**>(&g_show_category_next)},
+        {"CMFM:cGUIInstButtonList::moveCursor", game::kListMovePattern, reinterpret_cast<void*>(&list_move_detour),
+         reinterpret_cast<void**>(&g_list_move_next)},
+        {"CMFM:uGUIOption::update", game::kTitleOptionsUpdatePattern, reinterpret_cast<void*>(&update_detour),
+         reinterpret_cast<void**>(&g_update_next)},
     };
     for (int i = 0; i < kHookCount; ++i) {
         al_hook_t h = {sizeof(al_hook_t)};
@@ -569,8 +621,12 @@ bool title_menu_register(const Env& env, std::string& why) {
             return false;
         }
     }
-    logf(AL_LOG_INFO,
-         "title: hooks registered (menu play, cursor, selected; title Options open, close, show category)");
+    logf(AL_LOG_INFO, "title: hooks registered (menu play, cursor, selected; title Options open, close, show "
+                      "category, update; list cursor moves)");
+    // The wheel scrolls a long category list; without al.input it does not.
+    if (env.input == nullptr || env.input->subscribe_messages(env.self, 0, &message_callback, nullptr) != AL_OK) {
+        logf(AL_LOG_WARNING, "title: no window messages from al.input; the mouse wheel will not scroll the list");
+    }
     return true;
 }
 
