@@ -10,8 +10,10 @@ what, why, the smallest API that would do, and its state.
 "al.patch" 1.0 (AL commits 87b010f code, aed4647 docs; AL's
 `docs/handoff-cmfm-patch-20261012.md`). The user chose AL's general
 version: one service for code, data and calls, one owner per byte shared
-with al.hooks. CMFM switched to it (see "CMFM's side" below); the in-game
-run with both is next, then AL tags `v0.2.0-dev.N`.
+with al.hooks. CMFM switched to it (see "CMFM's side" below). Confirmed
+in game with CMFM (AL's runs patch-1, patch-2, tag `v0.2.0-dev.1`; CMFM's
+copy of a run: `local/runs/20261012-alpatch-1`); released in AL `v0.2.0`
+(commit c6e0f6f).
 
 **What:** a service that writes one 8-byte value in the game exe's
 read-only data, only if the expected old value is there, and puts the old
