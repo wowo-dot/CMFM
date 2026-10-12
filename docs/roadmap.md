@@ -124,8 +124,10 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
 Status: steps 1-6 done: the test pages (tag `config-pages-1`, run
 `cfgpages-1`: only the edited values changed, backups byte-identical) and
 Fexty's Mod as the real case (tag `fexty-page-1`, runs `fexty-1`, `-2`: a
-community page; a hotkey rebound in the menu worked in game at once; its
-keys turned out to be hex Windows key codes, `vk-hex`). TOML is next. On the way, a crash fixed
+community page; a hotkey rebound in the in-game menu was written exactly,
+the backup byte-identical; the mod using it live in play is not checked
+yet; its keys turned out to be hex Windows key codes, `vk-hex`). TOML is
+next. On the way, a crash fixed
 (tag `slider-crash-fix-1`): the game's tab show read CMFM's slider rows from
 save data when the page opened again in game.
 
