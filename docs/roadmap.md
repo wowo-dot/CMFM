@@ -39,7 +39,9 @@ Not a date; the steps in order. Each ends with what it needs from others.
    guide). Frozen (the user's call): `cmfm.menu` 1.2 and description
    format 1 (decisions item 14, tag `cmfm-menu-1.2`). Community pages stay
    out of the package (Fexty's stays local). The repository is on GitHub,
-   private, for now. Left: release notes with known issues; version
+   private, for now. The plan (the user, 2026-10-12): the DLSS mod gets
+   ready to ship first; then the CMFM repository goes public and CMFM and
+   the DLSS mod ship on Nexus together, one after the other. Left: release notes with known issues; version
    0.1.0; the package (its own MO2 mod:
    `AsteraLoader\plugins\cmfm\cmfm.dll`, `nativePC\ui\cmfm\mods.gui`);
    VirusTotal; the user's OK before anything goes public (including the
