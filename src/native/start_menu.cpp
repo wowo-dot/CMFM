@@ -158,13 +158,15 @@ bool start_menu_activate(const Env& env, std::string& why) {
     }
 
     const std::uint64_t ours = reinterpret_cast<std::uint64_t>(&g_items[0]);
+    // The tab lists are constant tables (.rdata): the prototype helper until
+    // Astera Loader's service exists (docs/al-requests.md, item 1).
     std::string fail;
-    if (!g_patch_tabs.apply("tab list", system_items_slot(game::kRvaTabList), system_items, ours, fail)) {
+    if (!g_patch_tabs.apply_read_only("tab list", system_items_slot(game::kRvaTabList), system_items, ours, fail)) {
         why = "tab list: " + fail;
         return false;
     }
-    if (!g_patch_tabs_in_quest.apply("tab list (quest)", system_items_slot(game::kRvaTabListInQuest), system_items,
-                                     ours, fail)) {
+    if (!g_patch_tabs_in_quest.apply_read_only("tab list (quest)", system_items_slot(game::kRvaTabListInQuest),
+                                               system_items, ours, fail)) {
         std::string ignored;
         g_patch_tabs.restore(ignored);
         why = "tab list (quest): " + fail;
