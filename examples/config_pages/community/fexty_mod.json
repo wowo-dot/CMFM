@@ -1,0 +1,70 @@
+{
+  // A community page for Fexty's Mod (Nexus mod 4132, a Stracker's Loader
+  // plugin), written from the mod's own description: hotkeys are Windows
+  // key codes in hex without 0x ("62" is Numpad 2); hotkeys and cooldowns
+  // are read again while the game runs; the "default on" switches count at
+  // the game's start. Install: AsteraLoader\plugins\cmfm\pages\fexty_mod.json.
+  "cmfm": 1,
+  "mod": "Fexty's Mod",
+  "source": "community",
+  "made_by": "CMFM",
+  "config": {
+    "file": "nativePC/plugins/FextyModConfig.json",
+    "expect": ["Defaults.HeroicsModeDefaultOn", "Hotkeys.HeroicsModeHotkey", "Cooldowns.RegularModeCooldown"]
+  },
+  "applies": "restart",
+  "pages": [
+    {
+      "title": "At start",
+      "help": "What is on when the game starts. The hotkeys switch them while you play.",
+      "settings": [
+        { "section": "Palico attack buff" },
+        { "label": "Regular mode", "type": "bool", "path": "Defaults.RegularModeDefaultOn",
+          "help": "The next palico buff is the attack buff (with a cooldown after it)." },
+        { "label": "Heroics mode", "type": "bool", "path": "Defaults.HeroicsModeDefaultOn",
+          "help": "As Regular mode, and the palico plays neither Defense nor Health." },
+        { "label": "Speedrun mode", "type": "bool", "path": "Defaults.SpeedrunModeDefaultOn",
+          "help": "Only the first attack buff of a quest is certain." },
+        { "section": "Other" },
+        { "label": "Cat helpers", "type": "choice", "path": "Defaults.CatHelpersDefault",
+          "choices": { "gajalaka": "Gajalaka", "boaboa": "Boaboa" },
+          "help": "Which cat tribe appears in every quest, expedition and investigation." },
+        { "label": "Drunk bird", "type": "bool", "path": "Defaults.DrunkBirdDefaultOn",
+          "help": "The drunk bird whenever it is possible." },
+        { "label": "In-game messages", "type": "bool", "path": "Defaults.IngameMessageDefaultOn",
+          "help": "Messages on screen when a mode changes." }
+      ]
+    },
+    {
+      "title": "Hotkeys",
+      "help": "Keys that switch the modes while you play (the mod reads them again at once).",
+      "settings": [
+        { "label": "Regular mode", "type": "key", "path": "Hotkeys.RegularModeHotkey", "keys": "vk-hex",
+          "default": "Num 0", "applies": "live" },
+        { "label": "Heroics mode", "type": "key", "path": "Hotkeys.HeroicsModeHotkey", "keys": "vk-hex",
+          "default": "Num 2", "applies": "live" },
+        { "label": "Speedrun mode", "type": "key", "path": "Hotkeys.SpeedrunModeHotkey", "keys": "vk-hex",
+          "default": "Num 8", "applies": "live" },
+        { "label": "Gajalakas", "type": "key", "path": "Hotkeys.CatHelperGajiHotkey", "keys": "vk-hex",
+          "default": "Num 4", "applies": "live" },
+        { "label": "Boaboas", "type": "key", "path": "Hotkeys.CatHelperBoaHotkey", "keys": "vk-hex",
+          "default": "Num 5", "applies": "live" },
+        { "label": "Drunk bird", "type": "key", "path": "Hotkeys.DrunkBirdHotkey", "keys": "vk-hex",
+          "default": "Num 6", "applies": "live" },
+        { "label": "In-game messages", "type": "key", "path": "Hotkeys.IngameMessageHotkey", "keys": "vk-hex",
+          "default": "Num 7", "applies": "live" }
+      ]
+    },
+    {
+      "title": "Cooldowns",
+      "help": "The wait after an attack buff ends before the mode forces the next one.",
+      "settings": [
+        { "label": "Regular mode", "type": "int", "path": "Cooldowns.RegularModeCooldown",
+          "min": 0, "max": 100, "unit": " s", "applies": "live",
+          "help": "0: no cooldown. The mod's own default is 45 seconds." },
+        { "label": "Heroics mode", "type": "int", "path": "Cooldowns.HeroicsModeCooldown",
+          "min": 0, "max": 100, "unit": " s", "applies": "live", "help": "0: no cooldown." }
+      ]
+    }
+  ]
+}

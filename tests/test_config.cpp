@@ -214,7 +214,8 @@ const char* const kFextyPage = R"({
       { "label": "Missing value", "type": "bool", "path": "Defaults.NoSuchKey" }
     ]},
     { "title": "Hotkeys", "settings": [
-      { "label": "Heroics hotkey", "type": "key", "path": "Hotkeys.HeroicsModeHotkey", "keys": "dik", "default": "F4" },
+      { "label": "Heroics hotkey", "type": "key", "path": "Hotkeys.HeroicsModeHotkey", "keys": "vk-hex",
+        "default": "Num 2", "applies": "live" },
       { "label": "Cat helper", "type": "text", "path": "Defaults.CatHelpersDefault" }
     ]}
   ]
@@ -336,7 +337,9 @@ void shows_and_writes_a_config() {
     cmfm_value_t v = {};
     check(p[0].get(p[0].user, heroics->id, &v) == CMFM_OK && v.i == 1, "a bool from the file");
     check(p[0].get(p[0].user, cat->id, &v) == CMFM_OK && v.i == 0, "a choice from the file");
-    check(p[1].get(p[1].user, hotkey->id, &v) == CMFM_OK && v.i == 0x73, "a DirectInput hotkey: \"62\" is F4");
+    check(p[1].get(p[1].user, hotkey->id, &v) == CMFM_OK && v.i == 0x62,
+          "a Windows key code in hex without 0x (Fexty's Mod): \"62\" is Numpad 2");
+    check((hotkey->flags & CMFM_FLAG_RESTART) == 0, "one setting's own applies: live");
     check((heroics->flags & CMFM_FLAG_RESTART) != 0, "applies: restart marks the rows");
     char why_text[256] = {};
     check(p[0].locked(p[0].user, missing->id, why_text, sizeof why_text) != 0 &&
@@ -356,10 +359,10 @@ void shows_and_writes_a_config() {
               std::strcmp(why_text, "Needs Heroics mode: On.") == 0,
           "lock_unless follows the change, with its reason");
     cmfm_value_t f6 = {};
-    f6.i = 0x75;
+    f6.i = 0x63;
     check(p[1].validate(p[1].user, hotkey->id, &f6, why_text, sizeof why_text) == CMFM_OK &&
               p[1].set(p[1].user, hotkey->id, &f6) == CMFM_OK,
-          "the hotkey to F6");
+          "the hotkey to Numpad 3");
     cmfm_value_t ctrl_f6 = {};
     ctrl_f6.i = CMFM_KEY_CTRL | 0x75;
     check(p[1].validate(p[1].user, hotkey->id, &ctrl_f6, why_text, sizeof why_text) != CMFM_OK &&
@@ -368,7 +371,7 @@ void shows_and_writes_a_config() {
     check(files.writes == 0, "nothing written while the page is open");
     p[0].on_event(p[0].user, CMFM_EVENT_CLOSED);
     std::string want = replaced(kFexty, "\"HeroicsModeDefaultOn\": true", "\"HeroicsModeDefaultOn\": false");
-    want = replaced(want, "\"62\"", "\"64\"");
+    want = replaced(want, "\"62\"", "\"63\"");
     check(files.writes == 1 && files.files[path] == want, "closed: both changes written, nothing else");
     check(g_log.find("2 change(s) written") != std::string::npos, "and logged");
 
@@ -472,6 +475,48 @@ void checks_the_examples() {
                     std::strncmp(reason, "Needs ", 6) != 0) {
                     std::printf("  (%s, %s: %s)\n", name, s.label, reason);
                     check(false, "every example value reads from its config");
+                }
+            }
+        }
+    }
+    // The community page for Fexty's Mod against a config with its keys (the
+    // shape its file has; values made up).
+    {
+        FakeFiles fexty;
+        fexty.files["nativePC/plugins/FextyModConfig.json"] =
+            "{\n\t\"Defaults\": {\n\t\t\"RegularModeDefaultOn\": false,\n\t\t\"HeroicsModeDefaultOn\": true,\n"
+            "\t\t\"SpeedrunModeDefaultOn\": false,\n\t\t\"CatHelpersDefault\": \"gajalaka\",\n"
+            "\t\t\"DrunkBirdDefaultOn\": true,\n\t\t\"IngameMessageDefaultOn\": false\n\t},\n"
+            "\t\"Hotkeys\": {\n\t\t\"RegularModeHotkey\": \"60\",\n\t\t\"HeroicsModeHotkey\": \"62\",\n"
+            "\t\t\"SpeedrunModeHotkey\": \"68\",\n\t\t\"CatHelperGajiHotkey\": \"64\",\n\t\t\"CatHelperBoaHotkey\": \"65\",\n"
+            "\t\t\"DrunkBirdHotkey\": \"66\",\n\t\t\"IngameMessageHotkey\": \"67\"\n\t},\n"
+            "\t\"Cooldowns\": {\n\t\t\"RegularModeCooldown\": 0,\n\t\t\"HeroicsModeCooldown\": 0\n\t}\n}";
+        Description d;
+        std::string why;
+        const bool parsed = parse_description(read_file(root + "community/fexty_mod.json"), "fexty_mod.json", d, why);
+        if (!parsed) {
+            std::printf("  (fexty_mod.json: %s)\n", why.c_str());
+        }
+        check(parsed, "the Fexty's Mod page reads");
+        ConfigPages pages(std::move(d), fexty, &log_line);
+        check(pages.check(why) && pages.pages().size() == 3, "its config has what it expects; three pages");
+        pages.opened();
+        const cmfm_page_t& keys = pages.pages()[1];
+        cmfm_value_t v = {};
+        check(keys.get(keys.user, keys.settings[0].id, &v) == CMFM_OK && v.i == 0x60 &&
+                  keys.get(keys.user, keys.settings[2].id, &v) == CMFM_OK && v.i == 0x68,
+              "its hotkeys read as the mod's documented defaults (Numpad 0, Numpad 8)");
+        check((keys.flags & CMFM_PAGE_NO_RESET) == 0 && (pages.pages()[0].flags & CMFM_PAGE_NO_RESET) != 0,
+              "a reset row for the hotkeys only (their defaults are documented)");
+        for (const cmfm_page_t& page : pages.pages()) {
+            cmfm::menu::Page copy;
+            check(cmfm::menu::copy_page(&page, copy, why), "CMFM accepts its pages");
+            for (std::uint32_t i = 0; i < page.setting_count; ++i) {
+                char reason[256] = {};
+                if (page.settings[i].type != CMFM_TYPE_SECTION &&
+                    page.locked(page.user, page.settings[i].id, reason, sizeof reason) != 0) {
+                    std::printf("  (fexty_mod.json, %s: %s)\n", page.settings[i].label, reason);
+                    check(false, "every Fexty value reads");
                 }
             }
         }

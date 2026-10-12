@@ -143,7 +143,7 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
     s.line = position_of(c.text_, v.begin, "").line;
     // Unknown fields first: a typo ("lable") explains a field that seems missing.
     if (!c.only(v, {"id", "section", "type", "label", "help", "path", "default", "min", "max", "step", "decimals",
-                    "unit", "choices", "keys", "hide_unless", "lock_unless"},
+                    "unit", "choices", "keys", "applies", "hide_unless", "lock_unless"},
                 "a setting") ||
         !c.text(v, "id", kMaxLabel, false, s.id)) {
         return false;
@@ -154,6 +154,12 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
                c.text(v, "section", kMaxLabel, true, s.label) && condition(c, v, "hide_unless", s.hide_unless);
     }
     std::string type;
+    if (!c.text(v, "applies", 16, false, s.applies)) {
+        return false;
+    }
+    if (!s.applies.empty() && s.applies != "restart" && s.applies != "live") {
+        return c.fail(*c.member(v, "applies"), "\"applies\" is \"restart\" or \"live\"");
+    }
     if (!c.text(v, "type", 16, true, type) || !c.text(v, "label", kMaxLabel, true, s.label) ||
         !c.text(v, "help", kMaxHelp, false, s.help) || !c.path(v, s) ||
         !condition(c, v, "hide_unless", s.hide_unless) || !condition(c, v, "lock_unless", s.lock_unless)) {
@@ -163,7 +169,8 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
     const JsonValue& at = *c.member(v, "type");
     if (type == "bool") {
         s.type = SettingSpec::Type::Bool;
-        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "hide_unless", "lock_unless"}, "a bool")) {
+        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "applies", "hide_unless", "lock_unless"},
+                    "a bool")) {
             return false;
         }
         if (def != nullptr) {
@@ -179,7 +186,7 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
         const bool is_int = type == "int";
         s.type = is_int ? SettingSpec::Type::Int : SettingSpec::Type::Float;
         if (!c.only(v, {"id", "type", "label", "help", "path", "default", "min", "max", "step", "decimals", "unit",
-                        "hide_unless", "lock_unless"},
+                        "applies", "hide_unless", "lock_unless"},
                     is_int ? "an int" : "a float") ||
             !c.number(v, "min", true, s.min) || !c.number(v, "max", true, s.max) || !c.number(v, "step", false, s.step) ||
             !c.text(v, "unit", kMaxUnit, false, s.unit)) {
@@ -214,7 +221,8 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
     }
     if (type == "choice") {
         s.type = SettingSpec::Type::Choice;
-        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "choices", "hide_unless", "lock_unless"},
+        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "choices", "applies", "hide_unless",
+                        "lock_unless"},
                     "a choice")) {
             return false;
         }
@@ -264,13 +272,14 @@ bool setting(Checker& c, const JsonValue& v, SettingSpec& s) {
     }
     if (type == "key") {
         s.type = SettingSpec::Type::Key;
-        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "keys", "hide_unless", "lock_unless"},
+        if (!c.only(v, {"id", "type", "label", "help", "path", "default", "keys", "applies", "hide_unless",
+                        "lock_unless"},
                     "a key") ||
             !c.text(v, "keys", 8, true, s.keys)) {
             return false;
         }
-        if (s.keys != "vk" && s.keys != "dik" && s.keys != "names") {
-            return c.fail(*c.member(v, "keys"), "\"keys\" is \"vk\", \"dik\" or \"names\"");
+        if (s.keys != "vk" && s.keys != "vk-hex" && s.keys != "dik" && s.keys != "names") {
+            return c.fail(*c.member(v, "keys"), "\"keys\" is \"vk\", \"vk-hex\", \"dik\" or \"names\"");
         }
         if (def != nullptr) {
             if (def->kind != JsonValue::Kind::String) {

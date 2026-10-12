@@ -1054,7 +1054,7 @@ void names_keys() {
         check(parse_key_name(key_name(key), back) && back == key, "key_name and parse_key_name agree");
     }
     check(vk_from_dik(0x3C) == 0x71 && vk_from_dik(0x3E) == 0x73 && vk_from_dik(0x44) == 0x79,
-          "Fexty's Mod's hotkeys: DirectInput 60, 62, 68 are F2, F4, F10");
+          "DirectInput 0x3C, 0x3E, 0x44 are F2, F4, F10");
     check(dik_from_vk(0x75) == 0x40 && dik_from_vk('A') == 0x1E && dik_from_vk(0x11) == 0x1D && dik_from_vk(0x05) == 0,
           "back: F6 is 64; A; Ctrl; a mouse button has no scan code");
     check(vk_from_dik(0x9C) == 0x0D && dik_from_vk(0x0D) == 0x1C && vk_from_dik(0xFF) == 0, "Enter both ways; unknown");

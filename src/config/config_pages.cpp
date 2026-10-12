@@ -60,6 +60,25 @@ std::string number_like(long long v, const std::string& old) {
     return std::to_string(v);
 }
 
+// Hex digits without a prefix ("62").
+bool parse_hex(std::string_view s, long long& out) {
+    const auto [rest, ec] = std::from_chars(s.data(), s.data() + s.size(), out, 16);
+    return ec == std::errc() && rest == s.data() + s.size() && !s.empty();
+}
+
+// Hex digits without a prefix, in the old token's case and width (a leading
+// zero kept: "0A").
+std::string hex_like(long long v, const std::string& old) {
+    bool upper = true;
+    for (const char c : old) {
+        upper = upper && !(c >= 'a' && c <= 'f');
+    }
+    char b[32];
+    std::snprintf(b, sizeof b, upper ? "%0*llX" : "%0*llx", static_cast<int>(old.size() > 1 && old[0] == '0' ? old.size() : 1),
+                  static_cast<unsigned long long>(v));
+    return b;
+}
+
 void copy_text(char* out, std::uint32_t size, const std::string& text) {
     if (out != nullptr && size > 0) {
         std::snprintf(out, size, "%s", text.c_str());
@@ -99,7 +118,8 @@ void ConfigPages::build() {
             s.label = spec.label.c_str();
             s.help = spec.help.empty() ? nullptr : spec.help.c_str();
             const bool value = spec.type != SettingSpec::Type::Section && spec.type != SettingSpec::Type::Text;
-            if (value && !d_.live) {
+            const bool live = spec.applies.empty() ? d_.live : spec.applies == "live";
+            if (value && !live) {
                 s.flags |= CMFM_FLAG_RESTART;
             }
             if (!spec.hide_unless.empty()) {
@@ -310,7 +330,8 @@ bool ConfigPages::decode(const Row& r, const std::string& text, cmfm_value_t& ou
                 return true;
             }
             long long code = 0;
-            if (!parse_int(text, code) || code < 0 || code > 0xFF) {
+            const bool parsed = s.keys == "vk-hex" ? parse_hex(text, code) : parse_int(text, code);
+            if (!parsed || code < 0 || code > 0xFF) {
                 return false;
             }
             const std::uint32_t vk = s.keys == "dik" ? menu::vk_from_dik(static_cast<std::uint32_t>(code))
@@ -394,7 +415,7 @@ bool ConfigPages::encode(const Row& r, const cmfm_value_t& value, std::string& o
                     return false;
                 }
             }
-            out = number_like(code, old);
+            out = s.keys == "vk-hex" ? hex_like(code, old) : number_like(code, old);
             return true;
         }
         default:

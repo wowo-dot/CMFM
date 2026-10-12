@@ -32,8 +32,13 @@ struct SettingSpec {
     double step = 1;
     std::uint32_t decimals = 0;
     std::string unit;
-    // Key: how the file writes a key ("vk", "dik", "names").
+    // Key: how the file writes a key: "vk" (a Windows key code, decimal or
+    // 0x hex), "vk-hex" (the same in hex digits without 0x, as Fexty's Mod
+    // writes them: "62" is Numpad 2), "dik" (a DirectInput scan code),
+    // "names" ("Ctrl+H").
     std::string keys;
+    // "restart" / "live" for this setting; empty: the file's `applies`.
+    std::string applies;
     // What "Reset to defaults" writes, in the setting's terms (bool "true" or
     // "false", a number, a choice's stored value, a key's name).
     bool has_default = false;

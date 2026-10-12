@@ -20,7 +20,7 @@ both look like any other mod in the list.
 
 | Mod | File | Syntax | Notes |
 |---|---|---|---|
-| Fexty's Mod | `nativePC/plugins/FextyModConfig.json` | JSON, nested, tabs | `true`/`false`, choice strings, hotkeys as DirectInput codes in strings (`"62"` = F4) |
+| Fexty's Mod | `nativePC/plugins/FextyModConfig.json` | JSON, nested, tabs | `true`/`false`, choice strings, hotkeys as Windows key codes in hex without 0x, in strings (`"62"` = Numpad 2, from its Nexus description); hotkeys and cooldowns re-read live |
 | foodskill | `nativePC/plugins/foodskills.json` | JSON | numbers in strings (`"5"`), a list of names |
 | forcePlayerCountQuest | `nativePC/plugins/quest_post.ini` | INI | `[Post] Players=2`, switches as `1`/`0` |
 | Stracker's Loader | `loader-config.json` | JSON | plain switches |
@@ -68,7 +68,7 @@ both look like any other mod in the list.
       { "label": "Heroics cooldown", "type": "int", "path": "Cooldowns.HeroicsModeCooldown",
         "min": 0, "max": 600, "step": 10, "unit": " s", "lock_unless": { "heroics": true } },
       { "label": "Heroics hotkey", "type": "key", "path": "Hotkeys.HeroicsModeHotkey",
-        "keys": "dik", "default": "F4" },
+        "keys": "vk-hex", "default": "Num 2", "applies": "live" },
       { "label": "Config file", "type": "text", "path": "Defaults.CatHelpersDefault" }
     ]}
   ]
@@ -77,8 +77,10 @@ both look like any other mod in the list.
 
 - `type`: `bool`, `int`, `float` (`min`, `max`, `step`, `decimals`, `unit`,
   up to 101 values as in the C interface), `choice` (`choices`: stored value
-  -> label, in order), `key` (`keys`: `vk`, `dik` or `names`), `text` (the
+  -> label, in order), `key` (`keys`: `vk` decimal or 0x hex, `vk-hex` hex
+  digits without 0x, `dik` DirectInput scan codes, or `names`), `text` (the
   value shown read-only), `section`.
+- `applies` on a setting overrides the file's (`restart` / `live`).
 - `path`: JSON `a.b.c` (array items `a[0].b`); INI `Section.Key` (`Key` for
   keys before any section); TOML `table.key`. A key that holds a dot is
   written as a list: `["Section", "my.key"]`.
@@ -99,7 +101,7 @@ both look like any other mod in the list.
    its token kind (string with its quote, number with its decimals, bare
    literal with its case).
 2. **New token in the old token's style:** `true` -> `false`; `1` -> `0`;
-   `"5"` -> `"6"` (quotes kept); `"62"` -> `"64"` (DirectInput F4 -> F6);
+   `"5"` -> `"6"` (quotes kept); `"62"` -> `"63"` (hex key codes: Numpad 2 -> 3);
    `ON` -> `OFF`; `1.50` -> `2.00`. The mod's own parser read the old form,
    so it reads the new one the same way.
 3. **Splice:** bytes before the value + the new token + bytes after it.
