@@ -35,6 +35,8 @@ set(CMFM_WARNINGS /W4 /WX /permissive- /utf-8)
 # Pure logic, shared by the plugin and the unit tests. include/cmfm/cmfm.h is
 # the published plugin interface (cmfm.menu).
 add_library(cmfm_core STATIC
+    src/config/document.cpp
+    src/config/json.cpp
     src/menu/keys.cpp
     src/menu/menu.cpp
     src/native/mod_list.cpp
@@ -88,3 +90,7 @@ add_executable(test_mod_list tests/test_mod_list.cpp)
 target_link_libraries(test_mod_list PRIVATE cmfm_core)
 target_compile_options(test_mod_list PRIVATE ${CMFM_WARNINGS})
 add_test(NAME mod_list COMMAND test_mod_list)
+add_executable(test_config tests/test_config.cpp)
+target_link_libraries(test_config PRIVATE cmfm_core)
+target_compile_options(test_config PRIVATE ${CMFM_WARNINGS})
+add_test(NAME config COMMAND test_config)
