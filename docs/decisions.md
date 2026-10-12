@@ -63,6 +63,9 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
    tab's table pointers), is a small CMFM helper during the prototype: it
    checks the expected old bytes, logs the change and restores it on unload.
    When the menu works, what was actually used becomes the AL request.
+   Done 2026-10-12: `docs/al-requests.md` item 1 (two values in `.rdata`,
+   the Start menu's tab lists; the Options table swaps turned out to be in
+   writable `.data` and need no request).
 10. **CMFM may ship edited game files** (the user's call, 2026-10-11).
     Supersedes item 7's "never ships edited game files". The trigger: the
     title Options layout has exactly five panels with row lists, so a page
