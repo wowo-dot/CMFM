@@ -1,6 +1,5 @@
 #include "native/start_menu.hpp"
 
-#include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
 #include "native/measure.hpp"
 #include "native/options_view.hpp"
@@ -28,8 +27,9 @@ std::uintptr_t g_base = 0;
 std::atomic<std::uint32_t> g_mods_selected{0};
 
 alignas(16) StartMenuItem g_items[kItemsCapacity];
-QwordPatch g_patch_tabs;
-QwordPatch g_patch_tabs_in_quest;
+// al.patch handles of the two tab-list values (0: not changed).
+std::uint32_t g_patch_tabs = 0;
+std::uint32_t g_patch_tabs_in_quest = 0;
 
 void log(const Env& env, al_log_level_t level, const std::string& line) {
     env.api->log(env.self, level, line.c_str());
@@ -100,6 +100,21 @@ std::uintptr_t system_items_slot(std::uintptr_t list_rva) {
     return system_entry(list_rva) + game::kTabListItemsOffset;
 }
 
+// One tab list's System table pointer, from `from` to `to`, through al.patch
+// (it checks the old value, writes atomically and records CMFM as the
+// owner). 0 if refused; Astera Loader's line in CMFM's log says why.
+std::uint32_t change_items(const Env& env, const char* name, std::uintptr_t list_rva, std::uint64_t from,
+                           std::uint64_t to) {
+    al_patch_t change = {sizeof(al_patch_t)};
+    change.kind = AL_PATCH_DATA;
+    change.name = name;
+    change.address = reinterpret_cast<void*>(system_items_slot(list_rva));
+    change.length = sizeof(std::uint64_t);
+    change.expected = &from;  // al.patch copies both during apply
+    change.replacement = &to;
+    return env.patches->apply(env.self, &change);
+}
+
 }  // namespace
 
 bool start_menu_register(const Env& env, std::string& why) {
@@ -162,19 +177,24 @@ bool start_menu_activate(const Env& env, std::string& why) {
         ids += (i ? " " : "") + std::to_string(g_items[i].id);
     }
 
-    const std::uint64_t ours = reinterpret_cast<std::uint64_t>(&g_items[0]);
-    // The tab lists are constant tables (.rdata): the prototype helper until
-    // Astera Loader's service exists (docs/al-requests.md, item 1).
-    std::string fail;
-    if (!g_patch_tabs.apply_read_only("tab list", system_items_slot(game::kRvaTabList), system_items, ours, fail)) {
-        why = "tab list: " + fail;
+    // The tab lists are constant tables in the game's read-only data:
+    // changed through Astera Loader's al.patch (docs/al-requests.md, item 1).
+    if (env.patches == nullptr) {
+        why = "Astera Loader offers no al.patch (API 1.8 or newer needed), so the entry stays hidden";
         return false;
     }
-    if (!g_patch_tabs_in_quest.apply_read_only("tab list (quest)", system_items_slot(game::kRvaTabListInQuest),
-                                               system_items, ours, fail)) {
-        std::string ignored;
-        g_patch_tabs.restore(ignored);
-        why = "tab list (quest): " + fail;
+    const std::uint64_t ours = reinterpret_cast<std::uint64_t>(&g_items[0]);
+    g_patch_tabs = change_items(env, "Start menu: System tab items", game::kRvaTabList, system_items, ours);
+    if (g_patch_tabs == 0) {
+        why = "the Start menu's tab list was not changed (Astera Loader's reason above)";
+        return false;
+    }
+    g_patch_tabs_in_quest =
+        change_items(env, "Start menu in a quest: System tab items", game::kRvaTabListInQuest, system_items, ours);
+    if (g_patch_tabs_in_quest == 0) {
+        env.patches->set_enabled(env.self, g_patch_tabs, 0);
+        g_patch_tabs = 0;
+        why = "the quest Start menu's tab list was not changed (Astera Loader's reason above)";
         return false;
     }
     log(env, AL_LOG_INFO, "native: System tab now " + ids + " (Mods = " + std::to_string(game::kItemMods) +
@@ -189,11 +209,11 @@ const char* game_text(std::uintptr_t file_rva, std::uint32_t id) {
 }
 
 void start_menu_restore(const Env& env) {
-    for (QwordPatch* p : {&g_patch_tabs_in_quest, &g_patch_tabs}) {
-        std::string why;
-        if (p->applied() && !p->restore(why)) {
-            log(env, AL_LOG_WARNING, std::string("native: could not restore ") + p->name() + ": " + why);
+    for (std::uint32_t* handle : {&g_patch_tabs_in_quest, &g_patch_tabs}) {
+        if (*handle != 0 && env.patches->set_enabled(env.self, *handle, 0) != AL_OK) {
+            log(env, AL_LOG_WARNING, "native: a Start menu tab list was not put back (Astera Loader's reason above)");
         }
+        *handle = 0;
     }
     log(env, AL_LOG_INFO, "native: System tab restored; Mods selected " +
                               std::to_string(g_mods_selected.load(std::memory_order_relaxed)) + " time(s)");

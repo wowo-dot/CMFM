@@ -11,8 +11,10 @@ Not a date; the steps in order. Each ends with what it needs from others.
 1. **Tell Astera Loader what CMFM needs.** Written: `docs/al-requests.md`
    item 1 (checked writes to two values in the game's read-only data, the
    Start menu's tab lists; the Options table swaps turned out to be in
-   writable data and need nothing, commit 4fc3ba2). Next: the user takes it
-   to the AL session; CMFM switches to the service when AL ships it.
+   writable data and need nothing, commit 4fc3ba2). AL answered the same
+   day: `al.patch` in AL 0.2.0 (API 1.8). CMFM uses it and requires API
+   1.8; its own read-only helper is gone. Next: the in-game run with both
+   (run `check-1`), then AL tags `v0.2.0-dev.N`.
 2. **The DLSS mod adapts.** Written: `docs/handoff-dlss-mod-20261012.md`,
    updated for `cmfm.menu` 1.2 (suggested pages, what CMFM needs back).
    Next: the user takes it to the DLSS session; its feedback before 1.2

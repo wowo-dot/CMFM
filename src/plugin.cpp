@@ -148,6 +148,8 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
         static_cast<const al_scanner_t*>(api->get_interface(init->self, AL_SCANNER_INTERFACE, AL_SCANNER_VERSION));
     // Asked for here so AL installs its input layer (the title page's wheel).
     g_env.input = static_cast<const al_input_t*>(api->get_interface(init->self, AL_INPUT_INTERFACE, AL_INPUT_VERSION));
+    g_env.patches =
+        static_cast<const al_patches_t*>(api->get_interface(init->self, AL_PATCH_INTERFACE, AL_PATCH_VERSION));
     log(AL_LOG_INFO, "exe 421810 confirmed (" + std::string(game->exe_sha256).substr(0, 12) + "...)");
     // Config pages without code (1.3): the description files in CMFM's pages
     // folder, through the game's virtual folder.

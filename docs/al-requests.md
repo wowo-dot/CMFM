@@ -6,8 +6,12 @@ what, why, the smallest API that would do, and its state.
 
 ## 1. Checked writes to the game's read-only data
 
-**State:** requested 2026-10-12 (for CMFM's first release). AL 0.1.0, API
-1.7, has no such service.
+**State:** answered the same day: AL 0.2.0 (in progress), API 1.8,
+"al.patch" 1.0 (AL commits 87b010f code, aed4647 docs; AL's
+`docs/handoff-cmfm-patch-20261012.md`). The user chose AL's general
+version: one service for code, data and calls, one owner per byte shared
+with al.hooks. CMFM switched to it (see "CMFM's side" below); the in-game
+run with both is next, then AL tags `v0.2.0-dev.N`.
 
 **What:** a service that writes one 8-byte value in the game exe's
 read-only data, only if the expected old value is there, and puts the old
@@ -81,10 +85,15 @@ Not needed: lengths other than 8 bytes, patterns (CMFM checks the exe's
 hash and the table's contents before asking; the expected value is the
 final check), writes to `.data` or to code.
 
-**CMFM's side once AL ships it:** CMFM uses the service and drops its
-helper. On an older AL, the Start menu entry stays hidden and the Overview
-says why ("needs Astera Loader <version> or newer"); the title screen's
-Mods entry and everything else still work (they need no data writes).
+**CMFM's side (done, after `toml-page-1`):** the two values go through
+`al.patch` (`AL_PATCH_DATA`, 8 bytes, names "Start menu: System tab items"
+and "Start menu in a quest: System tab items", put back by CMFM at
+SHUTDOWN); CMFM's own read-only helper (`VirtualProtect`) is gone. CMFM is
+built against the 1.8 header and declares API 1.8, so an Astera Loader
+older than 0.2.0 does not load it and says "Update Astera Loader" (CMFM's
+first release follows AL 0.2.0). The `.data` swaps stay CMFM's own: their
+new value changes with each page fill, while an al.patch change has one
+fixed replacement.
 
 ## Candidates (not requested)
 
