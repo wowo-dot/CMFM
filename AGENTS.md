@@ -37,7 +37,8 @@ Start with `docs/handoff-20261011.md`, then `docs/decisions.md` and
 - Repository: `D:\mh world modding\CMFM`
 - Astera Loader (read-only reference from here; its own agent owns it):
   `D:\mh world modding\AsteraLoader`. Released 0.1.0 (tag `v0.1.0`,
-  commit ba04bd1), API 1.7.
+  commit ba04bd1), API 1.7; 0.2.0 in progress (API 1.8, `al.patch`), which
+  CMFM requires since 2026-10-12.
 - Sibling DLSS mod (read-only reference): `D:\mh world modding\dlssupdate`
 - Game directory: `D:\SteamLibrary\steamapps\common\Monster Hunter World`
 - Game executable: `D:\SteamLibrary\steamapps\common\Monster Hunter World\MonsterHunterWorld.exe`
@@ -85,11 +86,12 @@ binaries or assume other contributors use them.
   - game-thread work: `al.frame`;
   - any game-function hook (the game's own menus): `al.hooks`, at
     signature-verified sites only;
-  - writes to the game's read-only data (prototype only, decisions.md
-    item 9): a small CMFM helper that checks the expected old bytes first,
-    logs every change and restores it on unload. Once the menu is confirmed
-    in game, the helper becomes a request in `docs/al-requests.md` and CMFM
-    switches to AL's service.
+  - writes to the game's read-only data: `al.patch` (API 1.8) only,
+    checked by the expected old bytes and put back at shutdown. CMFM's own
+    prototype helper for this is gone (decisions.md item 9,
+    `docs/al-requests.md` item 1). Swaps in the game's writable data
+    (`src/native/data_patch.cpp`) check the old value and change no
+    protection.
 - `third_party/al/al_plugin.h` is AL's header, copied unchanged; its
   README records the AL commit. Update by copying a newer header and
   recording the commit.
