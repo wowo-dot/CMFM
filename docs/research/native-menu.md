@@ -1160,7 +1160,13 @@ each fill, on open and when a restart state changes.
   sUserData.
 - Fix: CMFM's showCategory hook makes CMFM's slider rows plain rows (all 24
   row objects of the split panel) before the game's function and redoes the
-  decoration after it, so the game never places a CMFM knob. Why the
+  decoration after it, so the game never places a CMFM knob. The first
+  version still crashed (`crash-20261012-034753-49328`, run
+  `slidercrash-1`, the page's second opening in game): the tab show sets the
+  panel list's cursor and runs the row looks before its knob loop, and
+  CMFM's row-looks hook marked the sliders again in between. CMFM now marks
+  no slider while showCategory runs (`show_slider` returns false) and
+  decorates once it returns. Why the
   category cursor had left the panel is not known (that session's log was
   overwritten; the in-game Options page may switch categories with LB/RB or
   Q/E); `keep_panel_cursor` logs it once per opening.

@@ -112,6 +112,7 @@ std::int32_t g_pick_filled = -1;  // the setting the pick list holds
 TabRefreshFn g_tab_refresh = nullptr;
 YesNoDialogFn g_yes_no_dialog = nullptr;
 std::int32_t g_pending_button = -1;  // the button whose question is open
+bool g_showing_category = false;      // inside the game's showCategory (show_category_detour)
 
 // A KEY row waiting for the player's key (begin_key_wait): the game sees idle
 // input meanwhile (al.input capture); CMFM reads the real keys every frame.
@@ -1379,7 +1380,10 @@ bool show_slider(char* row_object, const GameOptionRow& entry, std::uint32_t r, 
     const auto id = static_cast<std::uint32_t>(entry.setting_id);
     const std::uint32_t steps = menu::service_slider_steps(id);
     void* slider = field<void*>(row_object, game::kRowSlider);
-    if (steps == 0 || slider == nullptr || g_slider_from_setting == nullptr) {
+    // Not while the game's showCategory runs (show_category_detour: its tab
+    // show runs the row looks, then reads every slider row's value from save
+    // data by id).
+    if (steps == 0 || slider == nullptr || g_slider_from_setting == nullptr || g_showing_category) {
         return false;
     }
     if (field<std::uint8_t>(row_object, game::kRowIsSlider) == 0) {
@@ -1977,9 +1981,10 @@ std::uint64_t page_close(void* unit) {
 // row objects of the split panel), and sliders again after it.
 std::uint64_t show_category_detour(void* categories, std::int32_t category) {
     void* unit = field<void*>(categories, game::kCategoriesUnit);
-    const bool ours = g_view.load(std::memory_order_acquire) && unit != nullptr && unit == page_alive();
+    const bool our_page = unit != nullptr && unit == page_alive();
+    const bool ours = our_page && g_view.load(std::memory_order_acquire);
     const bool sliders = ours && split_view();
-    if (sliders) {
+    if (our_page && g_split.load(std::memory_order_relaxed)) {  // also while the page is being filled
         end_sliders(unit, true);
         char* tab = tab_object(unit, game::kSplitPanel);
         for (std::size_t r = 0; r < game::kTabRowObjects; ++r) {
@@ -1990,14 +1995,22 @@ std::uint64_t show_category_detour(void* categories, std::int32_t category) {
             }
         }
     }
+    // The tab show sets the panel list's cursor and runs the row looks before
+    // its knob loop (crash 20261012-034753: CMFM's row looks hook marked the
+    // sliders again in between): no slider marks until it returns.
+    const bool outer = !g_showing_category;
+    g_showing_category = true;
     const std::uint64_t result = g_show_category_next(categories, category);
+    if (outer) {
+        g_showing_category = false;
+    }
     if (ours) {
         void* vram = field<void*>(unit, game::kOptVramPanel);
         if (vram != nullptr) {
             gui_set_play(vram, false);
         }
     }
-    if (sliders) {
+    if (sliders && outer) {
         decorate_panel(unit);
     }
     return result;
