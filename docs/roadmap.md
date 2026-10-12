@@ -16,10 +16,11 @@ Not a date; the steps in order. Each ends with what it needs from others.
    1.8; its own read-only helper is gone. Done: confirmed in game (run
    `alpatch-1`: both values written by al.patch and put back by CMFM, owner
    cmfm in AL's log); AL released `v0.2.0`.
-2. **The DLSS mod adapts.** Written: `docs/handoff-dlss-mod-20261012.md`,
-   updated for `cmfm.menu` 1.2 (suggested pages, what CMFM needs back).
-   Next: the user takes it to the DLSS session; its feedback before 1.2
-   freezes.
+2. **The DLSS mod adapts.** Done: `mhw_dlss` 0.16.0 has a "DLSS" mod with
+   Settings and Status pages on `cmfm.menu` 1.2 (run game-56 in the DLSS
+   repository: 11 live multiplier changes, the ini saved in place); its
+   reply raised no blocker in 1.2 (answers at the end of
+   `docs/handoff-dlss-mod-20261012.md`).
 3. **Test** (AGENTS.md's in-game checklist, with run folders): keyboard,
    mouse and pad; capture and release; alt-tab; resize and full-screen
    toggles; loading screens; quests online; the DLSS mod with frame
@@ -28,7 +29,10 @@ Not a date; the steps in order. Each ends with what it needs from others.
    on the present thread; one long play session. Also the leftovers: a
    TOML write in game, Fexty's Mod using a rebound key in play.
 4. **Release:** freeze `cmfm.menu` 1.2 and description format 1; README,
-   a player's install guide, the author guide with description files;
+   a player's install guide (with troubleshooting: a crash at start in the
+   text lookup, `rGUIMessage::getMessage` with a null message file, is a
+   badly started Steam; restart Steam), the author guide with description
+   files;
    version 0.1.0; its own MO2 mod; VirusTotal; the user's OK before
    anything goes to a public remote (including the edited layout).
 

@@ -119,7 +119,11 @@ at run time goes through the callbacks (values, TEXT lines, locks).
   from the one the game started with, CMFM marks the row with a star, shows
   "Restart needed" in your page's header, counts it in the line above the
   mod list and on the Overview, until the game restarts or the value goes
-  back.
+  back. "The one the game started with" is the value CMFM reads first in
+  the session (the first time your page shows, or just before the first
+  change); later reads do not move it, so a `get` that reloads your file
+  at OPENED shows hand edits without hiding a pending restart. Only a hand
+  edit made before CMFM's first read counts as the start value.
 - `CMFM_FLAG_LIST`, `CMFM_FLAG_ARROWS`: CHOICE only, one or the other (see
   the table).
 - `CMFM_FLAG_LIVE` (since 1.2, TEXT only): CMFM asks `get_text` about four

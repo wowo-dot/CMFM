@@ -99,6 +99,16 @@ fixed replacement.
 
 ## Candidates (not requested)
 
+- **A hint in crash reports for a known game fault.** MHW crashes at start
+  in `rGUIMessage::getMessage` (exe+0x2244930, the first instruction,
+  `cmp [rcx+0xD8], edx` with rcx = 0) when Steam was started badly (MHW's
+  own relaunch through Steam after Steam was killed; the language text
+  table is never loaded). It happens without any mod (the DLSS session's
+  finding, 2026-10-06), but CMFM hooks that function, so AL's report names
+  CMFM as the first plugin on the stack. A line such as "known game fault:
+  restart Steam" for this signature would save players and authors a
+  wrong lead. CMFM's player guide will say it either way.
+
 - **Other plugins' versions.** CMFM's page header shows a mod's version
   when the mod gives one; for config pages of plugins that do not talk to
   CMFM there is none. A read-only list of AL's loaded plugins (name,

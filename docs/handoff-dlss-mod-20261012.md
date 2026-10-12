@@ -182,3 +182,31 @@ One mod, `page.mod = "DLSS"`, two pages sharing one `on_event` and `user`.
 2. Any warning the greyed rows, refusals and status lines do not cover.
 3. Which status values the mod can offer and how often they change.
 4. A build of the mod with the pages, for CMFM's release runs.
+
+## Answers to the DLSS session's reply (2026-10-12)
+
+The reply (`dlssupdate/docs/handoff-cmfm-20261012.md`, pages in v0.16.0,
+run game-56) was read; the differences from the suggestion are fine
+(no headings for two settings, Upscaling and Reflex on Status, the card's
+real limit in the refusal, Frame generation never locked).
+
+- **The restart baseline:** taken once, at CMFM's first read of the
+  setting in the session (the page's first showing, or just before the
+  first change), and kept until the game exits. Later reads, such as the
+  mod's reload at OPENED, do not move it. So "Restart needed" compares
+  against the start value, as the mod expects. One edge: a hand edit made
+  before the page first shows becomes the baseline (CMFM never saw the
+  older value). Now in the author guide (CMFM_FLAG_RESTART).
+- **`locked` and `validate` at open and after changes only:** agreed,
+  nothing needed now. If the late card limit ever matters, CMFM could
+  re-ask `locked` while a page with LIVE rows is shown; say so then.
+- **The boot crash at the text lookup:** noted for CMFM's player guide
+  (troubleshooting: a crash at start in `rGUIMessage::getMessage` with a
+  null message file means Steam was started badly; restart Steam), and as
+  a candidate for Astera Loader's crash report (`docs/al-requests.md`).
+  CMFM does not guard the null: the game crashes the same way without
+  CMFM, and hiding it would change the game's behaviour.
+- **Open items from game-56** (Frame generation Off with its restart mark
+  and the Multiplier lock, Reset to defaults, alt-tab with the page open,
+  the Status lines on screen) are in CMFM's run `check-1`, together with
+  CMFM's own checklist and frame generation on in a quest.
