@@ -119,13 +119,29 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    lists one line per mod. Interface: an optional mod name on the page
    (`cmfm_page_t.mod`, since 1.2; without it, the first page's title).
 
-## Then: config pages without code (1.3, its own design first)
+## 1.3: config pages without code (designed 2026-10-12, building)
 
-A mod ships a small description file next to its config; CMFM shows the
-page and edits the mod's own config file from it. No C interface needed,
-so Stracker and SharpPluginLoader plugins can join (MCM Helper's step,
-which made MCM support nearly free for authors). The config file stays the
-mod's; how CMFM tells a running mod about a change is part of the design.
+Plan: `docs/design/config-pages.md` (decisions.md item 13). A JSON
+description file in CMFM's folder (`AsteraLoader\plugins\cmfm\pages\`)
+maps menu rows to plain values in a mod's own config file; CMFM shows the
+page and edits that file surgically when the Mods page closes. No code, so
+Stracker and SharpPluginLoader plugins and abandoned mods can join, through
+their authors or the community (MCM Helper's step). Steps:
+
+1. JSON parser with positions and comments, surgical editor, tests.
+2. INI the same way.
+3. Description files: discovery, validation with line numbers, pages from
+   them, values read when the page opens; conditions.
+4. Writing at close: verify, atomic swap, backup, merge outside changes.
+5. Keys (`vk`, `dik`, `names`), `expect`, author-over-community precedence,
+   the Overview's community notes.
+6. A test mod with JSON and INI configs; then Fexty's Mod (with the user's
+   say-so before CMFM writes its file).
+7. TOML.
+
+Later for 1.3: adding missing values, lists of tables ("for each"; More
+Auto Shoutouts, its first case, is a rule engine and out of scope), reload
+notifications.
 
 ## Later
 

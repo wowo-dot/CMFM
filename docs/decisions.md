@@ -89,3 +89,13 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     follows a check made after `add_page`), a refused value with its reason
     (`validate`), and status lines. Popups come back only for a real need a
     client brings.
+13. **Config pages without code: description files in CMFM's folder**
+    (designed with the user, 2026-10-12; `docs/design/config-pages.md`). A
+    JSON description (comments allowed) in
+    `AsteraLoader\plugins\cmfm\pages\` maps menu rows to plain values in a
+    mod's own config file; anyone may write one (`source`: author or
+    community; the author's page wins). CMFM edits JSON and INI first, then
+    TOML, surgically (only the value's characters, the old token's style,
+    verified, swapped in atomically, a one-time backup), and writes when the
+    Mods page closes. Rule engines like More Auto Shoutouts' are not
+    configs and stay out (the user's call).
