@@ -39,9 +39,9 @@ both look like any other mod in the list.
   these by hand). Strict otherwise, so a mistake is reported with its line
   on the Overview.
 - **Writing:** once, when the Mods page closes.
-- **Syntaxes CMFM edits:** JSON and INI first, TOML after. Plain values
-  only (switches, numbers, choices, keys, read-only lines); lists and rule
-  tables are not menu material.
+- **Syntaxes CMFM edits:** JSON, INI and TOML (TOML since step 7). Plain
+  values only (switches, numbers, choices, keys, read-only lines); lists and
+  rule tables are not menu material.
 
 ## The description file
 
@@ -82,8 +82,10 @@ both look like any other mod in the list.
   value shown read-only), `section`.
 - `applies` on a setting overrides the file's (`restart` / `live`).
 - `path`: JSON `a.b.c` (array items `a[0].b`); INI `Section.Key` (`Key` for
-  keys before any section); TOML `table.key`. A key that holds a dot is
-  written as a list: `["Section", "my.key"]`.
+  keys before any section); TOML as JSON: `table.key`, whether the file
+  writes it as a `[table]`, a dotted key or an inline table; an array of
+  tables like a list (`trigger[0].name`, `trigger[1].check[0].value`). A key
+  that holds a dot is written as a list: `["Section", "my.key"]`.
 - `default`: what "Reset to defaults" writes, in the label's terms (a
   choice's stored value, a key's name).
 - `hide_unless` / `lock_unless`: `{ "<id>": <value> }`, all must hold; the
@@ -103,11 +105,15 @@ both look like any other mod in the list.
 2. **New token in the old token's style:** `true` -> `false`; `1` -> `0`;
    `"5"` -> `"6"` (quotes kept); `"62"` -> `"63"` (hex key codes: Numpad 2 -> 3);
    `ON` -> `OFF`; `1.50` -> `2.00`. The mod's own parser read the old form,
-   so it reads the new one the same way.
+   so it reads the new one the same way. TOML: a basic string (`"..."`) is
+   written with TOML's escapes, a literal string (`'...'`) keeps its quotes
+   (a value holding `'` or a line break is refused); a float stays a float
+   (`3` is written `3.0`), an integer an integer (`3.0` is written `3`, a
+   fraction is refused); hex stays hex (`0x75` -> `0x76`).
 3. **Splice:** bytes before the value + the new token + bytes after it.
    Comments, order, whitespace, line endings and unknown keys stay
-   byte-identical; for INI inline comments the spaces before `;` are padded
-   so the comment column stays.
+   byte-identical; for INI and TOML inline comments the spaces before `;`
+   or `#` are padded so the comment column stays.
 4. **Verify:** parse the result again; it must parse, the edited paths must
    hold the new values, every other value must be unchanged. Otherwise no
    write, the reason on the Overview.
@@ -121,7 +127,8 @@ both look like any other mod in the list.
 6. **Refused, read-only with the reason:** a value not in the file (adding
    lines is a structural edit, later), a key that appears twice, an encoding
    other than UTF-8 / ASCII, a token that does not fit its type, a file that
-   does not parse (the whole page read-only).
+   does not parse (the whole page read-only). TOML multi-line strings,
+   dates and times are shown (`text` rows) but never edited.
 
 ## Steps
 
@@ -136,7 +143,10 @@ both look like any other mod in the list.
    "Community page by ..." / "replaced".
 6. A test mod with its own JSON and INI configs; then Fexty's Mod as the
    real case (with the user's say-so before CMFM writes its file).
-7. TOML.
+7. TOML: a reader with positions (`src/config/toml.cpp`: tables, arrays of
+   tables, inline tables, dotted and quoted keys, every string kind,
+   integers in four bases, floats, dates and times), the editor's TOML
+   rules, a TOML test page.
 
 Later: adding a missing value (insert a line), lists of tables ("for each"),
 reload notifications for mods that re-read their file.

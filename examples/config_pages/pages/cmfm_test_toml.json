@@ -1,0 +1,44 @@
+{
+  // CMFM's test of config pages: a community page for a pretend shoutout
+  // mod's TOML config (nativePC/plugins/cmfm_test_config.toml). Values in an
+  // array of tables are reached like a list: trigger[0].enabled.
+  "cmfm": 1,
+  "mod": "Config test (TOML)",
+  "source": "community",
+  "made_by": "CMFM tests",
+  "config": { "file": "nativePC/plugins/cmfm_test_config.toml", "expect": ["trigger_cd", "hotkeys", "trigger[1].name"] },
+  "applies": "live",
+  "pages": [
+    {
+      "title": "General",
+      "settings": [
+        { "label": "Shoutouts", "type": "bool", "path": "enabled", "default": true },
+        { "label": "Wait between", "type": "int", "path": "trigger_cd", "min": 0, "max": 120, "step": 5,
+          "unit": " s", "default": 30, "help": "An integer with a comment after it in the file." },
+        { "label": "Volume", "type": "float", "path": "volume", "min": 0, "max": 1, "step": 0.05,
+          "decimals": 2, "default": 0.8, "help": "A TOML float: it stays one." },
+        { "label": "Toggle key", "type": "key", "path": "hotkeys.toggle", "keys": "vk", "default": "F6",
+          "help": "A Windows key code written in hex (0x75 is F6)." },
+        { "label": "Shown as", "type": "choice", "path": "hotkeys.mode",
+          "choices": { "chat": "Chat", "banner": "Banner" }, "default": "chat",
+          "help": "A literal string ('chat'): its quotes stay." }
+      ]
+    },
+    {
+      "title": "Triggers",
+      "help": "One entry per [[trigger]] table in the file.",
+      "settings": [
+        { "section": "First trigger" },
+        { "label": "Name", "type": "text", "path": "trigger[0].name" },
+        { "label": "On", "type": "bool", "path": "trigger[0].enabled" },
+        { "label": "Below", "type": "int", "path": "trigger[0].threshold.percent", "min": 0, "max": 100,
+          "unit": "%", "help": "A value inside an inline table." },
+        { "label": "Event id", "type": "text", "path": "trigger[0].trigger_on.fsm.new.id" },
+        { "section": "Second trigger" },
+        { "label": "Name", "type": "text", "path": "trigger[1].name" },
+        { "label": "On", "type": "bool", "path": "trigger[1].enabled" },
+        { "label": "Flash", "type": "bool", "path": "trigger[1].threshold.flash" }
+      ]
+    }
+  ]
+}

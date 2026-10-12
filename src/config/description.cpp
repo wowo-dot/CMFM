@@ -422,8 +422,9 @@ bool parse_description(std::string_view text, std::string_view file_name, Descri
         return false;
     }
     if (!syntax_from_name(syntax.empty() ? out.config_file : syntax, out.syntax)) {
-        return c.fail(*config, syntax.empty() ? "the config file's syntax is unknown: give \"syntax\": \"json\" or \"ini\""
-                                              : "\"syntax\" is \"json\" or \"ini\"");
+        return c.fail(*config, syntax.empty()
+                                   ? "the config file's syntax is unknown: give \"syntax\": \"json\", \"ini\" or \"toml\""
+                                   : "\"syntax\" is \"json\", \"ini\" or \"toml\"");
     }
     if (const JsonValue* expect = c.member(*config, "expect")) {
         if (expect->kind != JsonValue::Kind::Array) {

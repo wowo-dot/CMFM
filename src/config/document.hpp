@@ -1,11 +1,13 @@
 // A mod's config file as CMFM edits it (docs/design/config-pages.md, "Editing
 // a config file"): plain values found by path, each with its place and its
 // token's form, and surgical edits (only the value's characters change, in
-// the old token's style), verified by parsing the result again. JSON and INI
-// now, TOML later. Pure logic, tested in tests/test_config.cpp.
+// the old token's style), verified by parsing the result again. JSON, INI and
+// TOML. Pure logic, tested in tests/test_config.cpp.
 #pragma once
 
 #include "config/json.hpp"
+#include "config/scalar.hpp"
+#include "config/toml.hpp"
 
 #include <cstddef>
 #include <string>
@@ -15,20 +17,10 @@
 
 namespace cmfm::config {
 
-enum class Syntax { Json, Ini };
+enum class Syntax { Json, Ini, Toml };
 
-// "json" / "ini", or from a file name's extension; false if unknown.
+// "json" / "ini" / "toml", or from a file name's extension; false if unknown.
 bool syntax_from_name(std::string_view name, Syntax& out);
-
-// One plain value in a config file.
-struct Scalar {
-    enum class Kind { Text, Number, Bool, Null };
-    Kind kind = Kind::Text;  // JSON: from the token; INI: always Text
-    std::size_t begin = 0;   // the token in the text: [begin, end), quotes included
-    std::size_t end = 0;
-    std::string value;       // the value's text, without quotes or escapes
-    char quote = 0;          // '"' or '\'' for a quoted token, 0 for a bare one
-};
 
 class Document {
 public:
@@ -38,8 +30,9 @@ public:
     Syntax syntax() const { return syntax_; }
     const std::string& text() const { return text_; }
 
-    // The plain value at `path` (JSON: keys and indices; INI: [section, key]
-    // or [key] for keys before any section, matched without regard to case).
+    // The plain value at `path` (JSON and TOML: keys and indices, an array
+    // of tables like a list; INI: [section, key] or [key] for keys before any
+    // section, matched without regard to case).
     // False with the reason: not in the file, appears twice, not a plain
     // value.
     bool lookup(const Path& path, Scalar& out, std::string& why) const;
@@ -58,11 +51,12 @@ private:
     std::string text_;
     JsonValue json_;
     std::vector<IniEntry> ini_;
+    std::vector<TomlEntry> toml_;
 };
 
 // A new value for the value at `path`, in its meaning ("false", "64", "2x"):
-// the token keeps the old token's form (its quotes; a JSON number or literal
-// stays one).
+// the token keeps the old token's form (its quotes; a JSON or TOML number or
+// literal stays one, a TOML float stays a float).
 struct Edit {
     Path path;
     std::string value;

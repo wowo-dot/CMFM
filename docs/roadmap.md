@@ -126,8 +126,9 @@ Status: steps 1-6 done: the test pages (tag `config-pages-1`, run
 Fexty's Mod as the real case (tag `fexty-page-1`, runs `fexty-1`, `-2`: a
 community page; a hotkey rebound in the in-game menu was written exactly,
 the backup byte-identical; the mod using it live in play is not checked
-yet; its keys turned out to be hex Windows key codes, `vk-hex`). TOML is
-next. On the way, a crash fixed
+yet; its keys turned out to be hex Windows key codes, `vk-hex`). Step 7,
+TOML, is built and unit-tested (a test page, `cmfm_test_toml.json`); its
+in-game run is next. On the way, a crash fixed
 (tag `slider-crash-fix-1`): the game's tab show read CMFM's slider rows from
 save data when the page opened again in game.
 

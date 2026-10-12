@@ -1,0 +1,22 @@
+# A test config for CMFM's config pages (a pretend shoutout mod): tables,
+# arrays of tables, inline tables, both kinds of strings, a hex key code.
+trigger_cd = 30          # seconds between two shoutouts
+volume = 0.8
+enabled = true
+
+[hotkeys]
+toggle = 0x75            # F6, a Windows key code
+mode = 'chat'            # chat or banner
+
+[[trigger]]
+name = "Low health"
+enabled = true
+threshold = { percent = 25, flash = false }
+
+[trigger.trigger_on.fsm]
+new = { target = 3, id = 137 }
+
+[[trigger]]
+name = "Monster captured"
+enabled = false
+threshold = { percent = 0, flash = true }

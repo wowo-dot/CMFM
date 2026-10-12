@@ -39,6 +39,7 @@ add_library(cmfm_core STATIC
     src/config/description.cpp
     src/config/document.cpp
     src/config/json.cpp
+    src/config/toml.cpp
     src/menu/keys.cpp
     src/menu/menu.cpp
     src/native/mod_list.cpp

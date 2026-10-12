@@ -1,4 +1,4 @@
-// Unit tests for cmfm::config: JSON with positions, INI, surgical edits.
+// Unit tests for cmfm::config: JSON with positions, INI, TOML, surgical edits.
 #include "config/config_pages.hpp"
 #include "config/description.hpp"
 #include "config/document.hpp"
@@ -187,7 +187,141 @@ void knows_syntaxes() {
     Syntax s;
     check(syntax_from_name("nativePC/plugins/FextyModConfig.JSON", s) && s == Syntax::Json, ".json");
     check(syntax_from_name("quest_post.ini", s) && s == Syntax::Ini && syntax_from_name("ini", s), ".ini, by name");
-    check(!syntax_from_name("mas-config.toml", s), "TOML not yet");
+    check(syntax_from_name("mas-config.TOML", s) && s == Syntax::Toml && syntax_from_name("toml", s), ".toml, by name");
+    check(!syntax_from_name("config.yaml", s), "YAML is unknown");
+}
+
+// ---- TOML ----
+
+// Shaped like More Auto Shoutouts' config (values made up): arrays of tables
+// inside arrays of tables, sub-tables, inline tables, dotted keys, comments.
+const std::string kShout =
+    "# shoutouts\n"
+    "trigger_cd = 30 # seconds\n"
+    "\n"
+    "[[trigger]]\n"
+    "name = \"Low health\"\n"
+    "action_mode = 'random'\n"
+    "[trigger.trigger_on.fsm]\n"
+    "new = { target = 3, id = 137 }\n"
+    "[[trigger.check]]\n"
+    "weapon_type.value = 0\n"
+    "[[trigger.action]]\n"
+    "cmd = \"SendChatMessage\"\n"
+    "param = [\"Help!\", 1.5e3, true]\n"
+    "\n"
+    "[[trigger]]\n"
+    "name = \"Second\"\n"
+    "[[trigger.check]]\n"
+    "weapon_type.value = 13\n"
+    "[[trigger.check]]\n"
+    "hp.below = 0x1F\n";
+
+void reads_toml() {
+    Document d;
+    TextError e;
+    check(d.parse(Syntax::Toml, kShout, e), "parses");
+    Scalar s;
+    std::string why;
+    check(d.lookup(path("trigger_cd"), s, why) && s.kind == Scalar::Kind::Number && s.value == "30" &&
+              kShout.substr(s.begin, s.end - s.begin) == "30",
+          "a top-level integer and its place");
+    check(d.lookup(path("trigger[0].name"), s, why) && s.value == "Low health" && s.quote == '"',
+          "a value in the first [[trigger]]");
+    check(d.lookup(path("trigger[0].action_mode"), s, why) && s.value == "random" && s.quote == '\'' &&
+              kShout.substr(s.begin, s.end - s.begin) == "'random'",
+          "a literal string, its quotes in its place");
+    check(d.lookup(path("trigger[0].trigger_on.fsm.new.id"), s, why) && s.value == "137",
+          "a sub-table of an array's element; a value in an inline table");
+    check(d.lookup(path("trigger[0].check[0].weapon_type.value"), s, why) && s.value == "0",
+          "an array of tables inside one; a dotted key");
+    check(d.lookup(path("trigger[1].check[0].weapon_type.value"), s, why) && s.value == "13" &&
+              d.lookup(path("trigger[1].check[1].hp.below"), s, why) && s.value == "0x1F" &&
+              s.kind == Scalar::Kind::Number,
+          "the second element has its own nested array; a hex integer");
+    check(d.lookup(path("trigger[0].action[0].param[1]"), s, why) && s.value == "1.5e3" &&
+              d.lookup(path("trigger[0].action[0].param[2]"), s, why) && s.kind == Scalar::Kind::Bool,
+          "array items");
+    check(!d.lookup(path("trigger[0].trigger_on"), s, why) && why.find("not a plain value") != std::string::npos,
+          "a table is no plain value");
+    check(!d.lookup(path("trigger[2].name"), s, why) && why.find("not in the file") != std::string::npos, "missing");
+
+    const std::string kinds =
+        "a = \"tab\\there \\u00e9\"\n"
+        "b = '''\nline one\nline two'''\n"
+        "c = 1979-05-27 07:32:00Z\n"
+        "d = -inf\n"
+        "e = 1_000\n"
+        "\"quoted.key\" = 1\n"
+        "f = [\n  1, # one\n  2,\n]\n"
+        "g = \"\"\"\\\n   folded \\\n   text\"\"\"\r\n"
+        "h = {}\n";
+    check(d.parse(Syntax::Toml, kinds, e), "every kind of value");
+    check(d.lookup(path("a"), s, why) && s.value == "tab\there \xC3\xA9", "escapes decoded");
+    check(d.lookup(path("b"), s, why) && s.multiline && s.value == "line one\nline two", "a multi-line literal string");
+    check(d.lookup(path("c"), s, why) && s.kind == Scalar::Kind::Other && s.value == "1979-05-27 07:32:00Z",
+          "a date and a time with a space between");
+    check(d.lookup(path("d"), s, why) && s.kind == Scalar::Kind::Number && d.lookup(path("e"), s, why) &&
+              s.kind == Scalar::Kind::Number,
+          "inf; underscores");
+    check(d.lookup(path("f[1]"), s, why) && s.value == "2", "an array across lines, with comments and a trailing comma");
+    check(d.lookup(path("g"), s, why) && s.value == "folded text", "line-ending backslashes; CRLF");
+    bool quoted = false;
+    for (const auto& [at, value] : d.values()) {
+        quoted = quoted || (at == "\"quoted.key\"" && value == "n:1");
+    }
+    check(quoted, "a quoted key with a dot stays one key");
+
+    check(!d.parse(Syntax::Toml, "a = 1\nb = \n", e) && e.line == 2 && e.what == "a value is missing",
+          "a missing value, with its line");
+    check(!d.parse(Syntax::Toml, "a = 1 2\n", e), "two values on one line");
+    check(!d.parse(Syntax::Toml, "[table\n", e) && !d.parse(Syntax::Toml, "[[table]\n", e), "open headers");
+    check(!d.parse(Syntax::Toml, "a = \"open\n", e) && !d.parse(Syntax::Toml, "a = '''open", e), "open strings");
+    check(!d.parse(Syntax::Toml, "a = 01\n", e) && !d.parse(Syntax::Toml, "a = yes\n", e), "no TOML values");
+    check(d.parse(Syntax::Toml, "a = 1\na = 2\n", e) && !d.lookup(path("a"), s, why) &&
+              why.find("twice") != std::string::npos,
+          "a key that appears twice is not edited");
+}
+
+void edits_toml_surgically() {
+    std::string out;
+    std::string why;
+    std::string want = replaced(kShout, "trigger_cd = 30 # seconds", "trigger_cd = 120 # seconds");
+    want = replaced(want, "\"Low health\"", "\"Low \\\"HP\\\"\"");
+    want = replaced(want, "'random'", "'all'");
+    want = replaced(want, "0x1F", "0x28");
+    want = replaced(want, "1.5e3", "2.5");
+    check(apply_edits(Syntax::Toml, kShout,
+                      {{path("trigger_cd"), "120"},
+                       {path("trigger[0].name"), "Low \"HP\""},
+                       {path("trigger[0].action_mode"), "all"},
+                       {path("trigger[1].check[1].hp.below"), "0x28"},
+                       {path("trigger[0].action[0].param[1]"), "2.5"}},
+                      out, why) &&
+              out == want,
+          "values replaced in their form; comments and everything else kept");
+    if (out != want) {
+        std::printf("  (%s)\n%s\n", why.c_str(), out.c_str());
+    }
+    const std::string aligned = "a = 30          # seconds\nb = 0.8\nc = 2\n";
+    check(apply_edits(Syntax::Toml, aligned, {{path("a"), "120"}, {path("b"), "1"}, {path("c"), "3.0"}}, out, why) &&
+              out == "a = 120         # seconds\nb = 1.0\nc = 3\n",
+          "a comment keeps its column; a float stays a float, an integer an integer");
+    check(!apply_edits(Syntax::Toml, aligned, {{path("c"), "2.5"}}, out, why) &&
+              why.find("whole number") != std::string::npos,
+          "a fraction where the file holds an integer is refused");
+    const std::string kinds = "b = '''\ntwo\nlines'''\nc = 1979-05-27\nl = 'it'\nt = true\n";
+    check(!apply_edits(Syntax::Toml, kinds, {{path("b"), "x"}}, out, why) && why.find("multi-line") != std::string::npos,
+          "a multi-line string is not edited");
+    check(!apply_edits(Syntax::Toml, kinds, {{path("c"), "1980-01-01"}}, out, why) &&
+              why.find("date") != std::string::npos,
+          "a date is not edited");
+    check(!apply_edits(Syntax::Toml, kinds, {{path("l"), "it's"}}, out, why) &&
+              why.find("cannot be written") != std::string::npos,
+          "a literal string cannot hold its own quote");
+    check(!apply_edits(Syntax::Toml, kinds, {{path("t"), "yes"}}, out, why) && apply_edits(Syntax::Toml, kinds, {{path("t"), "false"}}, out, why) &&
+              out == replaced(kinds, "t = true", "t = false"),
+          "a TOML switch is true or false");
 }
 
 // ---- Descriptions ----
@@ -267,8 +401,13 @@ void reads_descriptions() {
             "format 1", "another format version");
     refused(R"({"cmfm": 1, "mod": "M", "source": "someone", "config": {"file": "a.ini"}, "pages": []})",
             "\"author\" or \"community\"", "an unknown source");
-    refused(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "a.toml"}, "pages": []})",
+    refused(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "a.yaml"}, "pages": []})",
             "syntax is unknown", "a config syntax CMFM does not edit");
+    check(parse_description(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "a.toml"},
+                                "pages": [{"title": "P", "settings": [{"label": "L", "type": "bool", "path": "a"}]}]})",
+                            "toml.json", d, why) &&
+              d.syntax == Syntax::Toml,
+          "a TOML config by its name");
     check(safe_relative_path("nativePC/plugins/x.json") && safe_relative_path("loader-config.json") &&
               !safe_relative_path("a/../b") && !safe_relative_path("/a") && !safe_relative_path("a//b"),
           "safe paths");
@@ -297,7 +436,7 @@ public:
 };
 
 std::string g_log;
-void log_line(int, const char* line) { g_log += std::string(line) + "\\n"; }
+void log_line(int, const char* line) { g_log += std::string(line) + "\n"; }
 
 const cmfm_setting_t* by_label(const cmfm_page_t& page, const char* label) {
     for (std::uint32_t i = 0; i < page.setting_count; ++i) {
@@ -432,6 +571,59 @@ void writes_ini_switches_in_their_form() {
           "1/0 stays 1/0, TRUE becomes FALSE");
 }
 
+std::string read_file(const std::string& path);
+
+void writes_toml_in_its_form() {
+    const std::string root = std::string(CMFM_SOURCE_DIR) + "/examples/config_pages/";
+    const std::string cfg = "nativePC/plugins/cmfm_test_config.toml";
+    FakeFiles files;
+    files.files[cfg] = read_file(root + "configs/cmfm_test_config.toml");
+    Description d;
+    std::string why;
+    check(parse_description(read_file(root + "pages/cmfm_test_toml.json"), "cmfm_test_toml.json", d, why),
+          "the TOML example page reads");
+    ConfigPages pages(std::move(d), files, &log_line);
+    check(pages.check(why) && pages.pages().size() == 2, "checked; two pages");
+    const cmfm_page_t& g = pages.pages()[0];
+    const cmfm_page_t& t = pages.pages()[1];
+    pages.opened();
+    cmfm_value_t v = {};
+    check(g.get(g.user, by_label(g, "Wait between")->id, &v) == CMFM_OK && v.i == 30, "an integer");
+    check(g.get(g.user, by_label(g, "Volume")->id, &v) == CMFM_OK && v.f > 0.79 && v.f < 0.81, "a float");
+    check(g.get(g.user, by_label(g, "Toggle key")->id, &v) == CMFM_OK && v.i == 0x75, "a key code written 0x75");
+    check(g.get(g.user, by_label(g, "Shown as")->id, &v) == CMFM_OK && v.i == 0, "a choice in a literal string");
+    char line[64] = {};
+    t.get_text(t.user, t.settings[1].id, line, sizeof line);
+    check(std::strcmp(line, "Low health") == 0, "a text line from the first [[trigger]]");
+    v.i = 120;
+    g.set(g.user, by_label(g, "Wait between")->id, &v);
+    v = {};
+    v.f = 1.0;
+    g.set(g.user, by_label(g, "Volume")->id, &v);
+    v = {};
+    v.i = 0x76;
+    g.set(g.user, by_label(g, "Toggle key")->id, &v);
+    v.i = 1;
+    g.set(g.user, by_label(g, "Shown as")->id, &v);
+    v.i = 30;
+    t.set(t.user, t.settings[3].id, &v);  // the first trigger's "Below"
+    v.i = 1;
+    t.set(t.user, t.settings[7].id, &v);  // the second trigger's "On"
+    pages.closed();
+    std::string want = read_file(root + "configs/cmfm_test_config.toml");
+    want = replaced(want, "trigger_cd = 30          #", "trigger_cd = 120         #");
+    want = replaced(want, "volume = 0.8", "volume = 1.00");
+    want = replaced(want, "toggle = 0x75", "toggle = 0x76");
+    want = replaced(want, "mode = 'chat'            #", "mode = 'banner'          #");
+    want = replaced(want, "percent = 25", "percent = 30");
+    want = replaced(want, "enabled = false", "enabled = true");
+    check(files.writes == 1 && files.files[cfg] == want,
+          "closed: the six changes written in the file's own forms, comments and columns kept");
+    if (files.files[cfg] != want) {
+        std::printf("%s\n", files.files[cfg].c_str());
+    }
+}
+
 std::string read_file(const std::string& path) {
     std::string text;
     if (FILE* f = std::fopen(path.c_str(), "rb")) {
@@ -451,8 +643,9 @@ void checks_the_examples() {
     FakeFiles files;
     files.files["nativePC/plugins/cmfm_test_config.json"] = read_file(root + "configs/cmfm_test_config.json");
     files.files["nativePC/plugins/cmfm_test_config.ini"] = read_file(root + "configs/cmfm_test_config.ini");
+    files.files["nativePC/plugins/cmfm_test_config.toml"] = read_file(root + "configs/cmfm_test_config.toml");
     check(!files.files["nativePC/plugins/cmfm_test_config.json"].empty(), "the example configs are found");
-    for (const char* name : {"cmfm_test_json.json", "cmfm_test_ini.json", "cmfm_test_replaced.json"}) {
+    for (const char* name : {"cmfm_test_json.json", "cmfm_test_ini.json", "cmfm_test_toml.json", "cmfm_test_replaced.json"}) {
         Description d;
         std::string why;
         const bool parsed = parse_description(read_file(root + "pages/" + name), name, d, why);
@@ -537,9 +730,12 @@ int main() {
     reads_ini();
     edits_ini_surgically();
     knows_syntaxes();
+    reads_toml();
+    edits_toml_surgically();
     reads_descriptions();
     shows_and_writes_a_config();
     writes_ini_switches_in_their_form();
+    writes_toml_in_its_form();
     checks_the_examples();
     if (g_failures == 0) {
         std::printf("test_config: all passed\n");
