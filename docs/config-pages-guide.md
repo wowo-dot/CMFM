@@ -76,7 +76,7 @@ line.
 
 | Field | Required | What |
 |---|---|---|
-| `cmfm` | yes | `1`, the description format |
+| `cmfm` | yes | `1`, the description format (frozen: later CMFMs keep reading format 1 files) |
 | `mod` | yes | the mod list entry, 1 to 24 bytes |
 | `version` | no | shown in the page header, 1 to 24 bytes |
 | `source` | yes | `"author"` or `"community"` |

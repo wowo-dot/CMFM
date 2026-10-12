@@ -103,3 +103,16 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     verified, swapped in atomically, a one-time backup), and writes when the
     Mods page closes. Rule engines like More Auto Shoutouts' are not
     configs and stay out (the user's call).
+14. **`cmfm.menu` 1.2 and description format 1 are frozen** (the user's
+    call, 2026-10-12, before CMFM 0.1.0). The header
+    `include/cmfm/cmfm.h` (its declarations unchanged since commit
+    95a0ffa; the DLSS mod builds against it) and the description format
+    (`docs/config-pages-guide.md`) no longer change in meaning. Anything
+    new to the C interface goes into 1.3, additive as the header's rules
+    say; comments may still be corrected. Description files are read
+    strictly (an unknown field refuses the file, so a typo is caught), so
+    new fields go into description format 2, which a newer CMFM reads
+    beside format 1; an older CMFM refuses a format 2 file with a clear
+    reason ("this CMFM reads description format 1"). Community pages
+    such as Fexty's Mod's stay out of the release package for now (kept
+    in `examples/config_pages/community/` and the user's own install).

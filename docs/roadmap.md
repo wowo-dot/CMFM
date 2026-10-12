@@ -36,12 +36,14 @@ Not a date; the steps in order. Each ends with what it needs from others.
 4. **Release:** written 2026-10-12: README, `docs/player-guide.md`
    (install, use, troubleshooting: the Steam start crash, SPL), and
    `docs/config-pages-guide.md` (description files; linked from the author
-   guide). Left: freeze `cmfm.menu` 1.2 and description format 1 (the
-   user's go); release notes with known issues; version 0.1.0; the
-   package (its own MO2 mod: `AsteraLoader\plugins\cmfm\cmfm.dll`,
-   `nativePC\ui\cmfm\mods.gui`; whether community pages such as Fexty's
-   ship with it is the user's call); VirusTotal; the user's OK before
-   anything goes to a public remote (including the edited layout).
+   guide). Frozen (the user's call): `cmfm.menu` 1.2 and description
+   format 1 (decisions item 14, tag `cmfm-menu-1.2`). Community pages stay
+   out of the package (Fexty's stays local). The repository is on GitHub,
+   private, for now. Left: release notes with known issues; version
+   0.1.0; the package (its own MO2 mod:
+   `AsteraLoader\plugins\cmfm\cmfm.dll`, `nativePC\ui\cmfm\mods.gui`);
+   VirusTotal; the user's OK before anything goes public (including the
+   edited layout).
 
 ## Done (tested in game)
 

@@ -44,9 +44,10 @@ if (menu == NULL) {
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
   header (rows that hide, live lines, key bindings, CMFM's reset row,
   pages of up to 1024 settings, no shared limits between mods, several
-  pages as one mod). Within a major
-  version CMFM only adds: later CMFMs keep accepting your pages, and an
-  older CMFM returns NULL when you ask for more than it has.
+  pages as one mod). 1.1 and 1.2 are frozen (they will not change).
+  Within a major version CMFM only adds: later CMFMs keep accepting your
+  pages, and an older CMFM returns NULL when you ask for more than it
+  has.
 
 ## 2. Describing your page
 
