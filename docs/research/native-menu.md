@@ -1142,6 +1142,29 @@ each fill, on open and when a restart state changes.
   answered with the row's current help line, since the help bar redraws only
   when its id changes (as for the mod list's 9996 / 9997).
 
+## A crash: the game's tab show and CMFM's slider rows (2026-10-12)
+
+- Crash `crash-20261012-030509-37104` (build 3e7cd3f, CMFM's page opened from
+  the in-game Start menu): access violation at `sub_141E8C6E0+0x186`, called
+  from showCategory (`sub_141E8C8F0`), called from the category list's cursor
+  callback (`sub_141E89C70`, through `sub_140B76190` / `sub_140B75D20`), called
+  from CMFM's page update (`keep_panel_cursor` putting the category cursor
+  back on the panel).
+- `sub_141E8C6E0(tab, show)` is the tab show, called only by showCategory:
+  when the tab's window was hidden it sets the list cursor to 0, plays the
+  window, runs the row looks, and for each of the 24 row objects marked as a
+  slider (+84) places the knob from the setting's value read directly: kind 2
+  types 3 and 14 through their getters, otherwise the byte at
+  `sUserData + 0x100 + id` for kind-1 ids below 32 and **index 0xFFFFFFFF**
+  for anything else, CMFM's ids from 100 included: a read 4 GB past
+  sUserData.
+- Fix: CMFM's showCategory hook makes CMFM's slider rows plain rows (all 24
+  row objects of the split panel) before the game's function and redoes the
+  decoration after it, so the game never places a CMFM knob. Why the
+  category cursor had left the panel is not known (that session's log was
+  overwritten; the in-game Options page may switch categories with LB/RB or
+  Q/E); `keep_panel_cursor` logs it once per opening.
+
 ## The mod list as mods and pages (roadmap 1.2 item 7; run `modlist-1`)
 
 - The select philosophy needs the category list's Confirm (the keys) to go

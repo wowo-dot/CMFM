@@ -1968,14 +1968,37 @@ std::uint64_t page_close(void* unit) {
 
 // The game shows its VRAM panel with the Display category (category 1); the
 // Mods page has no use for it.
+//
+// The game's tab show (sub_141E8C6E0, only ever called by showCategory, when a
+// panel that was hidden shows) places the knob of every row object marked
+// as a slider from the save data by setting id (sUserData + 0x100 + id, any
+// id from 32 reading 4 GB past it): crash 20261012-030509, CMFM's page
+// opened in game. So CMFM's slider rows are plain rows while it runs (all 24
+// row objects of the split panel), and sliders again after it.
 std::uint64_t show_category_detour(void* categories, std::int32_t category) {
-    const std::uint64_t result = g_show_category_next(categories, category);
     void* unit = field<void*>(categories, game::kCategoriesUnit);
-    if (g_view.load(std::memory_order_acquire) && unit != nullptr && unit == page_alive()) {
+    const bool ours = g_view.load(std::memory_order_acquire) && unit != nullptr && unit == page_alive();
+    const bool sliders = ours && split_view();
+    if (sliders) {
+        end_sliders(unit, true);
+        char* tab = tab_object(unit, game::kSplitPanel);
+        for (std::size_t r = 0; r < game::kTabRowObjects; ++r) {
+            char* row_object = tab + (r + 1) * game::kRowObjectSize;
+            const auto* entry = field<const GameOptionRow*>(row_object, game::kRowDef);
+            if (entry != nullptr && is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id))) {
+                field<std::uint8_t>(row_object, game::kRowIsSlider) = 0;
+            }
+        }
+    }
+    const std::uint64_t result = g_show_category_next(categories, category);
+    if (ours) {
         void* vram = field<void*>(unit, game::kOptVramPanel);
         if (vram != nullptr) {
             gui_set_play(vram, false);
         }
+    }
+    if (sliders) {
+        decorate_panel(unit);
     }
     return result;
 }
