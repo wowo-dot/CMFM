@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace cmfm::menu {
 
@@ -29,5 +30,15 @@ void set_key_chars(KeyCharFn fn);
 
 // "Ctrl+Shift+F5", "Mouse 4", "None"; "Key 0x92" for keys without a name.
 std::string key_name(std::int32_t key);
+
+// A name as key_name writes it (any case; "Control" for Ctrl too), back to
+// its key value; false if not a key's name. Layout characters read as a US
+// layout writes them.
+bool parse_key_name(std::string_view name, std::int32_t& key);
+
+// DirectInput scan codes (the DIK_ constants) and virtual-key codes; 0 if
+// there is none (mouse buttons have no scan code).
+std::uint32_t vk_from_dik(std::uint32_t dik);
+std::uint32_t dik_from_vk(std::uint32_t vk);
 
 }  // namespace cmfm::menu

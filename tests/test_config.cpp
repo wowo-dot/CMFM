@@ -1,8 +1,13 @@
 // Unit tests for cmfm::config: JSON with positions, INI, surgical edits.
+#include "config/config_pages.hpp"
+#include "config/description.hpp"
 #include "config/document.hpp"
 #include "config/json.hpp"
+#include "menu/menu.hpp"
 
 #include <cstdio>
+#include <cstring>
+#include <map>
 #include <string>
 
 using namespace cmfm::config;
@@ -185,6 +190,245 @@ void knows_syntaxes() {
     check(!syntax_from_name("mas-config.toml", s), "TOML not yet");
 }
 
+// ---- Descriptions ----
+
+const char* const kFextyPage = R"({
+  // A community page for Fexty's Mod (comments are allowed).
+  "cmfm": 1,
+  "mod": "Fexty's Mod",
+  "source": "community",
+  "made_by": "akif",
+  "config": {
+    "file": "nativePC/plugins/FextyModConfig.json",
+    "expect": ["Defaults.HeroicsModeDefaultOn", "Hotkeys"]
+  },
+  "pages": [
+    { "title": "Modes", "settings": [
+      { "section": "At start" },
+      { "id": "heroics", "label": "Heroics mode", "type": "bool",
+        "path": "Defaults.HeroicsModeDefaultOn", "default": true },
+      { "label": "Cat helpers", "type": "choice", "path": "Defaults.CatHelpersDefault",
+        "choices": { "gajalaka": "Gajalaka", "boaboa": "Boaboa" }, "default": "gajalaka" },
+      { "label": "Heroics cooldown", "type": "int", "path": "Cooldowns.HeroicsModeCooldown",
+        "min": 0, "max": 600, "step": 10, "unit": " s", "default": 0, "lock_unless": { "heroics": true } },
+      { "label": "Missing value", "type": "bool", "path": "Defaults.NoSuchKey" }
+    ]},
+    { "title": "Hotkeys", "settings": [
+      { "label": "Heroics hotkey", "type": "key", "path": "Hotkeys.HeroicsModeHotkey", "keys": "dik", "default": "F4" },
+      { "label": "Cat helper", "type": "text", "path": "Defaults.CatHelpersDefault" }
+    ]}
+  ]
+})";
+
+void reads_descriptions() {
+    Description d;
+    std::string why;
+    check(parse_description(kFextyPage, "fexty_mod.json", d, why), "a good description reads");
+    check(d.mod == "Fexty's Mod" && !d.author && d.made_by == "akif" && d.syntax == Syntax::Json && !d.live &&
+              d.expect.size() == 2 && d.pages.size() == 2 && d.pages[0].settings.size() == 5,
+          "its fields");
+    const SettingSpec& cat = d.pages[0].settings[2];
+    check(cat.type == SettingSpec::Type::Choice && cat.choices.size() == 2 && cat.choices[1].second == "Boaboa" &&
+              cat.default_value == "gajalaka",
+          "a choice: stored values and labels in order");
+    check(d.pages[0].settings[3].lock_unless.size() == 1 && d.pages[0].settings[3].lock_unless[0].first == "heroics",
+          "a condition");
+
+    const auto refused = [&](const std::string& text, const char* part, const char* what) {
+        Description x;
+        std::string w;
+        const bool bad = !parse_description(text, "x.json", x, w) && w.find(part) != std::string::npos;
+        if (!bad) {
+            std::printf("  (%s: got \"%s\")\n", what, w.c_str());
+        }
+        check(bad, what);
+    };
+    const std::string base = R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "a.ini"},
+  "pages": [{"title": "P", "settings": [)";
+    refused(base + R"({"lable": "x", "type": "bool", "path": "a"}]}]})", "line 2: unknown field \"lable\" in a setting",
+            "a typo names the field and its line");
+    refused(base + R"({"label": "x", "type": "bool"}]}]})", "\"path\" is missing", "a missing path");
+    refused(base + R"({"label": "x", "type": "slider", "path": "a"}]}]})", "\"type\" is bool", "an unknown type");
+    refused(base + R"({"label": "x", "type": "choice", "path": "a", "choices": ["A"], "default": "B"}]}]})",
+            "stored values", "a choice's default must be a choice");
+    refused(base + R"({"label": "x", "type": "int", "path": "a", "min": 0, "max": 1000}]}]})", "101 values",
+            "too many slider values");
+    refused(base + R"({"label": "x", "type": "bool", "path": "a", "hide_unless": {"nope": true}}]}]})",
+            "no setting has as its id", "a condition naming nothing");
+    refused(base + R"({"id": "a", "label": "x", "type": "bool", "path": "a"}, {"id": "a", "label": "y", "type": "bool", "path": "b"}]}]})",
+            "used twice", "an id used twice");
+    refused(base + R"({"section": "Only a heading"}]}]})", "besides its sections", "a page of headings only");
+    refused(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "../../Windows/x.ini"}, "pages": []})",
+            "inside the game folder", "a path out of the game folder");
+    refused(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "C:/x.ini"}, "pages": []})",
+            "inside the game folder", "an absolute path");
+    refused(R"({"cmfm": 2, "mod": "M", "source": "author", "config": {"file": "a.ini"}, "pages": []})",
+            "format 1", "another format version");
+    refused(R"({"cmfm": 1, "mod": "M", "source": "someone", "config": {"file": "a.ini"}, "pages": []})",
+            "\"author\" or \"community\"", "an unknown source");
+    refused(R"({"cmfm": 1, "mod": "M", "source": "author", "config": {"file": "a.toml"}, "pages": []})",
+            "syntax is unknown", "a config syntax CMFM does not edit");
+    check(safe_relative_path("nativePC/plugins/x.json") && safe_relative_path("loader-config.json") &&
+              !safe_relative_path("a/../b") && !safe_relative_path("/a") && !safe_relative_path("a//b"),
+          "safe paths");
+}
+
+// ---- A description's pages ----
+
+class FakeFiles : public Files {
+public:
+    std::map<std::string, std::string> files;
+    int writes = 0;
+    bool read(const std::string& relative, std::string& out, std::string& why) override {
+        const auto f = files.find(relative);
+        if (f == files.end()) {
+            why = "not there";
+            return false;
+        }
+        out = f->second;
+        return true;
+    }
+    bool write(const std::string& relative, const std::string& text, std::string&) override {
+        files[relative] = text;
+        ++writes;
+        return true;
+    }
+};
+
+std::string g_log;
+void log_line(int, const char* line) { g_log += std::string(line) + "\\n"; }
+
+const cmfm_setting_t* by_label(const cmfm_page_t& page, const char* label) {
+    for (std::uint32_t i = 0; i < page.setting_count; ++i) {
+        if (std::strcmp(page.settings[i].label, label) == 0) {
+            return &page.settings[i];
+        }
+    }
+    return nullptr;
+}
+
+void shows_and_writes_a_config() {
+    Description d;
+    std::string why;
+    parse_description(kFextyPage, "fexty_mod.json", d, why);
+    FakeFiles files;
+    const std::string path = "nativePC/plugins/FextyModConfig.json";
+    files.files[path] = kFexty;
+    ConfigPages pages(std::move(d), files, &log_line);
+    check(pages.check(why), "the config is there and has what the page expects");
+    const auto& p = pages.pages();
+    check(p.size() == 2 && std::strcmp(p[0].mod, "Fexty's Mod") == 0 && p[0].user == &pages, "two pages, one mod");
+    check(std::strstr(p[0].plugin, "community page by akif") != nullptr, "the Overview names a community page");
+    for (const cmfm_page_t& page : p) {
+        cmfm::menu::Page copy;
+        std::string w;
+        check(cmfm::menu::copy_page(&page, copy, w), "CMFM accepts the built page as it accepts a plugin's");
+    }
+    check((p[0].flags & CMFM_PAGE_NO_RESET) != 0 && (p[1].flags & CMFM_PAGE_NO_RESET) == 0,
+          "a reset row only where every value has a default");
+
+    p[0].on_event(p[0].user, CMFM_EVENT_OPENED);
+    const cmfm_setting_t* heroics = by_label(p[0], "Heroics mode");
+    const cmfm_setting_t* cat = by_label(p[0], "Cat helpers");
+    const cmfm_setting_t* cooldown = by_label(p[0], "Heroics cooldown");
+    const cmfm_setting_t* missing = by_label(p[0], "Missing value");
+    const cmfm_setting_t* hotkey = by_label(p[1], "Heroics hotkey");
+    cmfm_value_t v = {};
+    check(p[0].get(p[0].user, heroics->id, &v) == CMFM_OK && v.i == 1, "a bool from the file");
+    check(p[0].get(p[0].user, cat->id, &v) == CMFM_OK && v.i == 0, "a choice from the file");
+    check(p[1].get(p[1].user, hotkey->id, &v) == CMFM_OK && v.i == 0x73, "a DirectInput hotkey: \"62\" is F4");
+    check((heroics->flags & CMFM_FLAG_RESTART) != 0, "applies: restart marks the rows");
+    char why_text[256] = {};
+    check(p[0].locked(p[0].user, missing->id, why_text, sizeof why_text) != 0 &&
+              std::strstr(why_text, "not in the file") != nullptr,
+          "a value not in the file is read-only, with the reason");
+    check(p[0].locked(p[0].user, cooldown->id, why_text, sizeof why_text) == 0, "the condition holds");
+    char line[64] = {};
+    p[1].get_text(p[1].user, by_label(p[1], "Cat helper")->id, line, sizeof line);
+    check(std::strcmp(line, "gajalaka") == 0, "a text line shows the value");
+
+    cmfm_value_t off = {};
+    check(p[0].validate(p[0].user, heroics->id, &off, why_text, sizeof why_text) == CMFM_OK &&
+              p[0].set(p[0].user, heroics->id, &off) == CMFM_OK,
+          "Heroics off");
+    check(p[0].get(p[0].user, heroics->id, &v) == CMFM_OK && v.i == 0, "the change reads back before the write");
+    check(p[0].locked(p[0].user, cooldown->id, why_text, sizeof why_text) != 0 &&
+              std::strcmp(why_text, "Needs Heroics mode: On.") == 0,
+          "lock_unless follows the change, with its reason");
+    cmfm_value_t f6 = {};
+    f6.i = 0x75;
+    check(p[1].validate(p[1].user, hotkey->id, &f6, why_text, sizeof why_text) == CMFM_OK &&
+              p[1].set(p[1].user, hotkey->id, &f6) == CMFM_OK,
+          "the hotkey to F6");
+    cmfm_value_t ctrl_f6 = {};
+    ctrl_f6.i = CMFM_KEY_CTRL | 0x75;
+    check(p[1].validate(p[1].user, hotkey->id, &ctrl_f6, why_text, sizeof why_text) != CMFM_OK &&
+              std::strstr(why_text, "without Ctrl") != nullptr,
+          "a key the file cannot hold is refused, with the reason");
+    check(files.writes == 0, "nothing written while the page is open");
+    p[0].on_event(p[0].user, CMFM_EVENT_CLOSED);
+    std::string want = replaced(kFexty, "\"HeroicsModeDefaultOn\": true", "\"HeroicsModeDefaultOn\": false");
+    want = replaced(want, "\"62\"", "\"64\"");
+    check(files.writes == 1 && files.files[path] == want, "closed: both changes written, nothing else");
+    check(g_log.find("2 change(s) written") != std::string::npos, "and logged");
+
+    // A change made outside while the page is open keeps the file's value.
+    p[0].on_event(p[0].user, CMFM_EVENT_OPENED);
+    cmfm_value_t on = {};
+    on.i = 1;
+    p[0].set(p[0].user, heroics->id, &on);
+    cmfm_value_t boa = {};
+    boa.i = 1;
+    p[0].set(p[0].user, cat->id, &boa);
+    files.files[path] = replaced(files.files[path], "\"gajalaka\"", "\"other\"");
+    p[0].on_event(p[0].user, CMFM_EVENT_CLOSED);
+    check(files.files[path].find("\"other\"") != std::string::npos &&
+              files.files[path].find("\"HeroicsModeDefaultOn\": true") != std::string::npos,
+          "the cat helper changed outside: kept; the other change written");
+
+    // Expect: another version of the mod.
+    Description d2;
+    parse_description(kFextyPage, "fexty_mod.json", d2, why);
+    FakeFiles other;
+    other.files[path] = "{\"Defaults\": {}}";
+    ConfigPages old(std::move(d2), other, &log_line);
+    check(!old.check(why) && why.find("another version") != std::string::npos, "expect catches another version");
+    FakeFiles none;
+    Description d3;
+    parse_description(kFextyPage, "fexty_mod.json", d3, why);
+    ConfigPages absent(std::move(d3), none, &log_line);
+    check(!absent.check(why) && why.find("cannot be read") != std::string::npos, "no config file: not shown");
+}
+
+void writes_ini_switches_in_their_form() {
+    const char* page = R"({"cmfm": 1, "mod": "Quest post", "source": "community", "config": {"file": "nativePC/plugins/quest_post.ini"},
+      "applies": "live",
+      "pages": [{"title": "Post", "settings": [
+        {"label": "Players", "type": "int", "path": "Post.Players", "min": 1, "max": 4, "default": 4},
+        {"label": "Passcode on", "type": "bool", "path": "Post.PassEnabled", "default": false},
+        {"label": "Verbose", "type": "bool", "path": "Debug.Verbose", "default": false}]}]})";
+    Description d;
+    std::string why;
+    check(parse_description(page, "quest_post.json", d, why), "an INI page reads");
+    FakeFiles files;
+    const std::string path = "nativePC/plugins/quest_post.ini";
+    files.files[path] = "[Post]\nPlayers=2\nPassEnabled=1\n[Debug]\nVerbose=TRUE\n";
+    ConfigPages pages(std::move(d), files, &log_line);
+    check(pages.check(why), "checked");
+    const cmfm_page_t& p = pages.pages()[0];
+    check((p.settings[0].flags & CMFM_FLAG_RESTART) == 0, "applies: live: no restart marks");
+    p.on_event(p.user, CMFM_EVENT_OPENED);
+    cmfm_value_t v = {};
+    v.i = 3;
+    p.set(p.user, p.settings[0].id, &v);
+    v.i = 0;
+    p.set(p.user, p.settings[1].id, &v);
+    p.set(p.user, p.settings[2].id, &v);
+    p.on_event(p.user, CMFM_EVENT_CLOSED);
+    check(files.files[path] == "[Post]\nPlayers=3\nPassEnabled=0\n[Debug]\nVerbose=FALSE\n",
+          "1/0 stays 1/0, TRUE becomes FALSE");
+}
+
 }  // namespace
 
 int main() {
@@ -194,6 +438,9 @@ int main() {
     reads_ini();
     edits_ini_surgically();
     knows_syntaxes();
+    reads_descriptions();
+    shows_and_writes_a_config();
+    writes_ini_switches_in_their_form();
     if (g_failures == 0) {
         std::printf("test_config: all passed\n");
     }

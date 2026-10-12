@@ -35,6 +35,8 @@ set(CMFM_WARNINGS /W4 /WX /permissive- /utf-8)
 # Pure logic, shared by the plugin and the unit tests. include/cmfm/cmfm.h is
 # the published plugin interface (cmfm.menu).
 add_library(cmfm_core STATIC
+    src/config/config_pages.cpp
+    src/config/description.cpp
     src/config/document.cpp
     src/config/json.cpp
     src/menu/keys.cpp

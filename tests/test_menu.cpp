@@ -1039,6 +1039,25 @@ void names_keys() {
     check(keys_overlap(CMFM_KEY_CTRL | 0x74, CMFM_KEY_CTRL | 0x74), "the same key");
     check(!keys_overlap(CMFM_KEY_CTRL | 0x74, CMFM_KEY_SHIFT | 0x74), "Ctrl+F5 and Shift+F5 do not");
     check(!keys_overlap(0x74, 0x75) && !keys_overlap(0, 0), "different keys; no key");
+
+    std::int32_t k = -1;
+    check(parse_key_name("Ctrl+Shift+F5", k) && k == (CMFM_KEY_CTRL | CMFM_KEY_SHIFT | 0x74), "a name back to its key");
+    check(parse_key_name("control+h", k) && k == (CMFM_KEY_CTRL | 'H') && parse_key_name("Mouse 4", k) && k == 0x05 &&
+              parse_key_name("num 3", k) && k == 0x63 && parse_key_name("None", k) && k == 0 &&
+              parse_key_name(";", k) && k == 0xBA,
+          "any case, Control, mouse, keypad, none, a layout character");
+    check(!parse_key_name("Hyper+K", k) && !parse_key_name("Ctrl+Shift", k) && !parse_key_name("Bogus", k) &&
+              !parse_key_name("Shift", k) && !parse_key_name("", k),
+          "not key names");
+    for (std::int32_t key : {static_cast<std::int32_t>(CMFM_KEY_ALT | 'X'), 0x2E, 0x6B, 0x87, 0x13}) {
+        std::int32_t back = -1;
+        check(parse_key_name(key_name(key), back) && back == key, "key_name and parse_key_name agree");
+    }
+    check(vk_from_dik(0x3C) == 0x71 && vk_from_dik(0x3E) == 0x73 && vk_from_dik(0x44) == 0x79,
+          "Fexty's Mod's hotkeys: DirectInput 60, 62, 68 are F2, F4, F10");
+    check(dik_from_vk(0x75) == 0x40 && dik_from_vk('A') == 0x1E && dik_from_vk(0x11) == 0x1D && dik_from_vk(0x05) == 0,
+          "back: F6 is 64; A; Ctrl; a mouse button has no scan code");
+    check(vk_from_dik(0x9C) == 0x0D && dik_from_vk(0x0D) == 0x1C && vk_from_dik(0xFF) == 0, "Enter both ways; unknown");
 }
 
 void binds_keys() {
