@@ -214,6 +214,10 @@ private:
     };
 
     void logf(int level, const char* format, ...) const;
+    // A setting set again and again (a slider dragged): its first value is
+    // logged at once, the last one when anything else happens.
+    void log_set(std::uint32_t setting_id, const std::string& line);
+    void flush_set_log();
     static void set_help(Row& row, const char* text);
     void group_mods(std::size_t shown);  // mods_ and tab_mod_ from the shown pages
     bool mod_restart_pending(std::size_t mod) const;
@@ -260,6 +264,9 @@ private:
     std::string header_;  // the last tab_header
     std::string value_text_;  // the last value_text
     std::uint32_t key_waiting_ = 0;  // the KEY row waiting for a key (0: none)
+    std::uint32_t log_setting_ = 0;  // the setting whose sets are being coalesced (0: none)
+    std::string log_pending_;        // its last value's line, not logged yet
+    std::uint32_t log_steps_ = 0;
 };
 
 }  // namespace cmfm::menu

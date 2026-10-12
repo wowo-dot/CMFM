@@ -980,6 +980,35 @@ void groups_pages_into_mods() {
     check(f.opened == opened + 1, "five pages sharing on_event and user hear an event once");
 }
 
+std::string g_menu_log;
+void capture_log(int, const char* line) { g_menu_log += std::string(line) + "\n"; }
+
+void coalesces_dragged_values() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    Menu m("", &capture_log);
+    add(m, page_of(d));
+    std::string why;
+    m.build(model, why);
+    g_menu_log.clear();
+    const native::GameOptionRow* percent = find(model, 1, "Percent");
+    const native::GameOptionRow* toggle = find(model, 1, "Toggle");
+    for (int v : {1, 2, 3, 4, 5}) {
+        m.set(id(percent), v);
+    }
+    check(g_menu_log == "fake: \"Percent\" = 10%\n", "a drag: its first value at once");
+    m.set(id(toggle), 1);
+    check(g_menu_log == "fake: \"Percent\" = 10%\nfake: \"Percent\" = 50% (after 4 more steps)\nfake: \"Toggle\" = On\n",
+          "then its last value, before the next setting's");
+    m.send(CMFM_EVENT_CLOSED);
+    check(g_menu_log.find("Toggle\" = On (after") == std::string::npos, "a single change: logged once");
+    m.set(id(percent), 2);
+    m.set(id(percent), 3);
+    m.send(CMFM_EVENT_CLOSED);
+    check(g_menu_log.find("\"Percent\" = 30% (after 1 more step)") != std::string::npos, "the page closing flushes it");
+}
+
 void holds_long_pages() {
     static OptionsModel model;
     static Fake f;
@@ -1181,6 +1210,7 @@ int main() {
     binds_keys();
     groups_pages_into_mods();
     holds_long_pages();
+    coalesces_dragged_values();
     rereads_live_lines();
     if (g_failures == 0) {
         std::printf("test_menu: all passed\n");

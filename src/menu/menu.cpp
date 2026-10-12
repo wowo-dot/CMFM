@@ -355,6 +355,26 @@ void Menu::logf(int level, const char* format, ...) const {
     log_(level, line);
 }
 
+void Menu::log_set(std::uint32_t setting_id, const std::string& line) {
+    if (setting_id == log_setting_) {
+        log_pending_ = line;
+        ++log_steps_;
+        return;
+    }
+    flush_set_log();
+    logf(0, "%s", line.c_str());
+    log_setting_ = setting_id;
+}
+
+void Menu::flush_set_log() {
+    if (!log_pending_.empty()) {
+        logf(0, "%s (after %u more step%s)", log_pending_.c_str(), log_steps_, log_steps_ == 1 ? "" : "s");
+    }
+    log_pending_.clear();
+    log_steps_ = 0;
+    log_setting_ = 0;
+}
+
 void Menu::set_help(Row& row, const char* text) {
     std::snprintf(row.help, sizeof row.help, "%s", text);
 }
@@ -603,6 +623,7 @@ const char* Menu::button_question(std::uint32_t setting_id) const {
 }
 
 bool Menu::press(std::uint32_t setting_id) {
+    flush_set_log();
     const Row* r = any_setting_row(setting_id);
     if (r == nullptr) {
         return false;
@@ -860,6 +881,7 @@ std::size_t Menu::restart_count() const {
 }
 
 void Menu::refresh() {
+    flush_set_log();
     key_waiting_ = 0;
     for (Row& r : rows_) {
         r.get_failed = false;
@@ -983,6 +1005,7 @@ void Menu::cancel_key(std::uint32_t setting_id) {
 }
 
 bool Menu::set_key(std::uint32_t setting_id, std::int32_t key) {
+    flush_set_log();
     const std::size_t i = row_index(setting_id);
     if (i >= rows_.size() || !is_key(setting_id)) {
         return false;
@@ -1040,6 +1063,7 @@ const char* Menu::row_help(std::uint32_t setting_id) const {
 }
 
 void Menu::send(cmfm_event_t event) {
+    flush_set_log();
     // Once per on_event and user pair: the pages of one mod that share them
     // hear an event once.
     for (std::size_t p = 0; p < shown_; ++p) {
@@ -1136,7 +1160,7 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
         return false;
     }
     set_help(*r, r->base_help.c_str());
-    logf(0, "%s: \"%s\" = %s", p.plugin.c_str(), s.label.c_str(), name);
+    log_set(setting_id, p.plugin + ": \"" + s.label + "\" = " + name);
     if (r->shared) {
         std::snprintf(r->text, sizeof r->text, "%s", name);
     }
@@ -1147,6 +1171,7 @@ bool Menu::set(std::uint32_t setting_id, std::int32_t index) {
 }
 
 void Menu::reset_defaults() {
+    flush_set_log();
     std::size_t done = 0;
     std::size_t refused = 0;
     for (Row& r : rows_) {
@@ -1205,6 +1230,7 @@ bool Menu::reset_setting(Row& r, bool even_locked) {
 }
 
 void Menu::reset_page(std::size_t page) {
+    flush_set_log();
     std::size_t done = 0;
     std::size_t kept = 0;
     // Every setting, locked and hidden ones too (the player asked for the
