@@ -104,6 +104,9 @@ public:
     // In the order plugins called add_page.
     void add(Page page);
     void add_refused(std::string plugin, std::string why);
+    // CMFM's own problems, said on the Overview's CMFM row ("" for none),
+    // e.g. "The Start menu entry is off: ...".
+    void set_problems(std::string text);
     bool dirty() const { return dirty_; }
 
     // Lays the pages out into `model` (status page, then up to 24 plugin
@@ -242,6 +245,7 @@ private:
     void reset_page(std::size_t page);  // CMFM's "Reset to defaults" row
 
     std::string version_;
+    std::string problems_;
     LogFn log_;
     std::vector<Page> pages_;
     std::vector<std::pair<std::string, std::string>> refused_;  // plugin, why

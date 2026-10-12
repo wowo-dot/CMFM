@@ -28,6 +28,8 @@ const native::OptionsModel* service_prepare();
 // Overview.
 std::uint32_t service_add_page(const cmfm_page_t* page, std::string& why);
 void service_add_refused(const std::string& plugin, const std::string& why);
+// Any thread: CMFM's own problems for the Overview's CMFM row ("" for none).
+void service_set_problems(const std::string& text);
 
 // The page closed: texts off, CMFM_EVENT_CLOSED.
 void service_closed();

@@ -144,12 +144,16 @@ bool start_menu_register(const Env& env, std::string& why) {
     return true;
 }
 
-bool start_menu_activate(const Env& env, std::string& why) {
+bool start_menu_hooks_active(const Env& env, std::string& why) {
     if (env.hooks->state(env.self, g_get_message_hook) != AL_HOOK_ACTIVE ||
         env.hooks->state(env.self, g_item_action_hook) != AL_HOOK_ACTIVE) {
-        why = "the hooks are not active, so the entry stays hidden";
+        why = "the text and Start menu hooks are not active";
         return false;
     }
+    return true;
+}
+
+bool start_menu_add_entry(const Env& env, std::string& why) {
 
     // The tab lists must name the System tab and point at the expected table.
     const std::uintptr_t system_items = env.base + game::kRvaSystemItems;
@@ -180,13 +184,13 @@ bool start_menu_activate(const Env& env, std::string& why) {
     // The tab lists are constant tables in the game's read-only data:
     // changed through Astera Loader's al.patch (docs/al-requests.md, item 1).
     if (env.patches == nullptr) {
-        why = "Astera Loader offers no al.patch (API 1.8 or newer needed), so the entry stays hidden";
+        why = "Astera Loader offers no al.patch (API 1.8 or newer needed)";
         return false;
     }
     const std::uint64_t ours = reinterpret_cast<std::uint64_t>(&g_items[0]);
     g_patch_tabs = change_items(env, "Start menu: System tab items", game::kRvaTabList, system_items, ours);
     if (g_patch_tabs == 0) {
-        why = "the Start menu's tab list was not changed (Astera Loader's reason above)";
+        why = "Astera Loader refused to change the Start menu's tab list (its reason is in cmfm.log)";
         return false;
     }
     g_patch_tabs_in_quest =
@@ -194,7 +198,7 @@ bool start_menu_activate(const Env& env, std::string& why) {
     if (g_patch_tabs_in_quest == 0) {
         env.patches->set_enabled(env.self, g_patch_tabs, 0);
         g_patch_tabs = 0;
-        why = "the quest Start menu's tab list was not changed (Astera Loader's reason above)";
+        why = "Astera Loader refused to change the quest Start menu's tab list (its reason is in cmfm.log)";
         return false;
     }
     log(env, AL_LOG_INFO, "native: System tab now " + ids + " (Mods = " + std::to_string(game::kItemMods) +

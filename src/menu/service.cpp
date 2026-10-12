@@ -29,6 +29,7 @@ struct Pending {
 };
 SRWLOCK g_lock = SRWLOCK_INIT;
 std::vector<Pending> g_pending;
+std::string g_problems;  // CMFM's own, for the Overview; under g_lock
 std::uint32_t g_next_handle = 0;
 
 class Lock {
@@ -150,6 +151,11 @@ void service_add_refused(const std::string& plugin, const std::string& why) {
     g_pending.push_back(std::move(p));
 }
 
+void service_set_problems(const std::string& text) {
+    Lock lock;
+    g_problems = text;
+}
+
 const native::OptionsModel* service_prepare() {
     if (!g_menu) {
         return nullptr;
@@ -159,11 +165,14 @@ const native::OptionsModel* service_prepare() {
         return g_model_ok ? &g_model : nullptr;
     }
     std::vector<Pending> taken;
+    std::string problems;
     {
         Lock lock;
         taken.swap(g_pending);
+        problems = g_problems;
     }
     try {
+        g_menu->set_problems(std::move(problems));
         for (Pending& p : taken) {
             if (p.ok) {
                 g_menu->add(std::move(p.page));

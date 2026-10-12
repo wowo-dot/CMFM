@@ -27,11 +27,16 @@ inline constexpr char kModsLabel[] = "Mods";
 // al_plugin_init: registers the two hooks. False (with `why`) if either
 // cannot be registered; the entry is then never shown.
 bool start_menu_register(const Env& env, std::string& why);
-// WIN_MAIN: once both hooks are active, points the two tab lists (constant
-// tables in the game's read-only data) at a copy of the System tab's table
-// with our entry, through Astera Loader's al.patch. False (with `why`) if
-// anything differs from what is expected; nothing is changed then.
-bool start_menu_activate(const Env& env, std::string& why);
+// WIN_MAIN: both hooks active (the text hook serves every Mods entry and
+// page). False (with `why`): no native menu this session.
+bool start_menu_hooks_active(const Env& env, std::string& why);
+// WIN_MAIN, after start_menu_hooks_active: points the two tab lists
+// (constant tables in the game's read-only data) at a copy of the System
+// tab's table with our entry, through Astera Loader's al.patch. False (with
+// `why`) if anything differs from what is expected (another tool changed
+// the table first, say); nothing is changed then and only the Start menu
+// entry is missing.
+bool start_menu_add_entry(const Env& env, std::string& why);
 // SHUTDOWN: puts the original System table back (al.patch would too, after
 // every plugin's SHUTDOWN).
 void start_menu_restore(const Env& env);

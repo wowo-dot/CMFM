@@ -298,6 +298,13 @@ void lays_out_the_status_page() {
     const native::GameOptionRow* r = find(model, 0, "CMFM");
     check(r != nullptr && same(value_text(model, r, 0), "0.1.0-dev"), "CMFM's version row");
     check(find(model, 0, "No mod pages yet") != nullptr, "says there are no pages");
+    check(std::strstr(help_text(model, r), "Each mod") != nullptr, "CMFM's row: what CMFM is");
+    m.set_problems("The Start menu entry is off: a test.");
+    check(m.dirty() && m.build(model, why), "a problem: laid out again");
+    r = find(model, 0, "CMFM");
+    check(r != nullptr && std::strstr(help_text(model, r), "The Start menu entry is off: a test.") != nullptr &&
+              same(value_text(model, r, 0), "0.1.0-dev"),
+          "CMFM's own problem on its Overview row");
     check(find(model, 1, "Empty") != nullptr, "empty tabs get a row");
     check(m.get(id(r)) == 0 && !m.set(id(r), 0), "status rows have no value");
 }

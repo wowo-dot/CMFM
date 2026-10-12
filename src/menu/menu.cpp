@@ -407,6 +407,13 @@ void Menu::add_refused(std::string plugin, std::string why) {
     dirty_ = true;
 }
 
+void Menu::set_problems(std::string text) {
+    if (text != problems_) {
+        problems_ = std::move(text);
+        dirty_ = true;
+    }
+}
+
 void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     // Status rows: CMFM itself, one per add_page call (at most 23 rows).
     constexpr std::size_t kStatusRows = native::kMaxRowsPerTab;
@@ -433,7 +440,8 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
         set_help(r, help.c_str());
     };
     status("CMFM", version_.empty() ? "-" : version_.c_str(),
-           "Configuration Menu For Mods. Each mod that supports it has an entry in this list.");
+           problems_.empty() ? "Configuration Menu For Mods. Each mod that supports it has an entry in this list."
+                             : "Configuration Menu For Mods. " + problems_);
     if (entries_.empty()) {
         status("No mod pages yet", "-", "Mods that support CMFM add their settings here.");
     }

@@ -63,16 +63,22 @@ void degrade(const std::string& why) {
 void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
     if (phase == AL_PHASE_WIN_MAIN && g_native) {
         std::string why;
-        if (!cmfm::native::start_menu_activate(g_env, why)) {
+        if (!cmfm::native::start_menu_hooks_active(g_env, why)) {
             g_native = false;
             degrade(why);
             return;
         }
         std::string problems;
+        // Only the Start menu entry depends on the tab lists: the title
+        // screen's entry and the page work without it.
+        if (!cmfm::native::start_menu_add_entry(g_env, why)) {
+            log(AL_LOG_WARNING, "Start menu Mods off (the title screen's stays): " + why);
+            problems = "Start menu Mods off: " + why;
+        }
         if (g_view && !cmfm::native::options_view_check(g_env, why)) {
             g_view = false;
             log(AL_LOG_WARNING, "Mods page off, Mods opens the plain Options page: " + why);
-            problems = "Mods page off: " + why;
+            problems += (problems.empty() ? "" : "; ") + std::string("Mods page off: ") + why;
         }
         if (g_page && !cmfm::native::mods_page_check(g_env, why)) {
             g_page = false;
@@ -88,6 +94,7 @@ void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
             g_api->set_status(g_env.self, AL_STATUS_ACTIVE, nullptr);
         } else {
             g_api->set_status(g_env.self, AL_STATUS_DEGRADED, problems.c_str());
+            cmfm::menu::service_set_problems("Partly off: " + problems + ".");
         }
     } else if (phase == AL_PHASE_SHUTDOWN && g_native) {
         cmfm::native::title_menu_restore(g_env);
