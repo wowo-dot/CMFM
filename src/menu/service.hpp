@@ -23,6 +23,12 @@ bool service_publish(const al_api_t* api, al_plugin_t* self, const char* version
 // asks TEXT rows for their texts and turns CMFM's row texts on. nullptr
 // (logged) if no usable model.
 const native::OptionsModel* service_prepare();
+// Pages CMFM adds itself (config pages, native/config_loader): as a plugin's
+// add_page (the handle, or 0 with the reason), and a refusal listed on the
+// Overview.
+std::uint32_t service_add_page(const cmfm_page_t* page, std::string& why);
+void service_add_refused(const std::string& plugin, const std::string& why);
+
 // The page closed: texts off, CMFM_EVENT_CLOSED.
 void service_closed();
 // Opening failed after service_prepare: the same (the plugins heard OPENED).

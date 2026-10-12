@@ -1,0 +1,9 @@
+{
+  // CMFM's test of config pages: a page with a typo. CMFM refuses it and the
+  // Overview says why, with the line.
+  "cmfm": 1, "mod": "Config test (broken)", "source": "community",
+  "config": { "file": "nativePC/plugins/cmfm_test_config.ini" },
+  "pages": [ { "title": "Broken", "settings": [
+    { "lable": "Players", "type": "int", "path": "Post.Players", "min": 1, "max": 4 }
+  ]}]
+}

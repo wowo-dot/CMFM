@@ -1,0 +1,23 @@
+{
+  // CMFM's test of config pages: a community page for a pretend quest mod's
+  // INI config (nativePC/plugins/cmfm_test_config.ini).
+  "cmfm": 1,
+  "mod": "Config test (INI)",
+  "source": "community",
+  "made_by": "CMFM tests",
+  "config": { "file": "nativePC/plugins/cmfm_test_config.ini", "expect": ["Post.QuestId"] },
+  "applies": "live",
+  "pages": [
+    {
+      "title": "Quest post",
+      "settings": [
+        { "label": "Quest id", "type": "text", "path": "Post.QuestId" },
+        { "label": "Players", "type": "int", "path": "Post.Players", "min": 1, "max": 4, "default": 4 },
+        { "id": "pass", "label": "Passcode", "type": "bool", "path": "Post.PassEnabled", "default": false,
+          "help": "A switch written as 1 / 0 (with a comment after it in the file)." },
+        { "label": "Verbose log", "type": "bool", "path": "Debug.Verbose", "default": false,
+          "help": "A switch written as TRUE / FALSE." }
+      ]
+    }
+  ]
+}

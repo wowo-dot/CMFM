@@ -1,0 +1,44 @@
+{
+  // CMFM's test of config pages: an author's page for a pretend HUD mod's
+  // JSON config (nativePC/plugins/cmfm_test_config.json).
+  "cmfm": 1,
+  "mod": "Config test (JSON)",
+  "version": "1.0",
+  "source": "author",
+  "config": {
+    "file": "nativePC/plugins/cmfm_test_config.json",
+    "expect": ["Display.ShowMinimap", "Hotkeys"]
+  },
+  "applies": "restart",
+  "pages": [
+    {
+      "title": "Display",
+      "help": "A pretend HUD mod's display settings, from its JSON config.",
+      "settings": [
+        { "section": "Minimap" },
+        { "id": "minimap", "label": "Show minimap", "type": "bool", "path": "Display.ShowMinimap",
+          "default": true, "help": "A switch written as true / false." },
+        { "label": "Minimap size", "type": "int", "path": "Display.MinimapSize", "min": 50, "max": 150,
+          "step": 5, "unit": "%", "default": 100, "hide_unless": { "minimap": true },
+          "help": "Hidden while the minimap is off." },
+        { "section": "Other" },
+        { "label": "Opacity", "type": "float", "path": "Display.Opacity", "min": 0.1, "max": 1.0,
+          "step": 0.1, "decimals": 1, "default": 0.8 },
+        { "label": "Timer style", "type": "choice", "path": "Display.TimerStyle",
+          "choices": { "off": "Off", "compact": "Compact", "full": "Full" }, "default": "compact",
+          "help": "Written as the mod's own words: off, compact, full." }
+      ]
+    },
+    {
+      "title": "Keys",
+      "help": "Two ways a config writes a key.",
+      "settings": [
+        { "label": "Toggle HUD", "type": "key", "path": "Hotkeys.ToggleHud", "keys": "names",
+          "default": "Ctrl+H", "help": "Written as a name, like Ctrl+H." },
+        { "label": "Screenshot", "type": "key", "path": "Hotkeys.Screenshot", "keys": "vk",
+          "default": "X", "help": "Written as a Windows key code (88 is X)." },
+        { "label": "As written", "type": "text", "path": "Hotkeys.ToggleHud" }
+      ]
+    }
+  ]
+}

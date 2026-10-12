@@ -8,6 +8,7 @@
 // the reason (cmfm.menu stays available; pages are then not shown).
 #include "al/al_plugin.h"
 #include "menu/service.hpp"
+#include "native/config_loader.hpp"
 #include "native/game_421810.hpp"
 #include "native/mods_page.hpp"
 #include "native/options_view.hpp"
@@ -140,6 +141,11 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
     // Asked for here so AL installs its input layer (the title page's wheel).
     g_env.input = static_cast<const al_input_t*>(api->get_interface(init->self, AL_INPUT_INTERFACE, AL_INPUT_VERSION));
     log(AL_LOG_INFO, "exe 421810 confirmed (" + std::string(game->exe_sha256).substr(0, 12) + "...)");
+    // Config pages without code (1.3): the description files in CMFM's pages
+    // folder, through the game's virtual folder.
+    const wchar_t* game_folder =
+        game->size >= offsetof(al_game_t, game_folder) + sizeof(game->game_folder) ? game->game_folder : nullptr;
+    cmfm::native::config_pages_load(api, init->self, init->folder, game_folder);
 
     if (!cmfm::native::start_menu_register(g_env, why)) {
         degrade(why);

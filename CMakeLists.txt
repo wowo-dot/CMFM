@@ -51,6 +51,7 @@ target_compile_options(cmfm_core PRIVATE ${CMFM_WARNINGS})
 add_library(cmfm SHARED
     src/plugin.cpp
     src/menu/service.cpp
+    src/native/config_loader.cpp
     src/native/data_patch.cpp
     src/native/gui.cpp
     src/native/mods_page.cpp
@@ -95,4 +96,5 @@ add_test(NAME mod_list COMMAND test_mod_list)
 add_executable(test_config tests/test_config.cpp)
 target_link_libraries(test_config PRIVATE cmfm_core)
 target_compile_options(test_config PRIVATE ${CMFM_WARNINGS})
+target_compile_definitions(test_config PRIVATE CMFM_SOURCE_DIR="${CMAKE_SOURCE_DIR}" _CRT_SECURE_NO_WARNINGS)
 add_test(NAME config COMMAND test_config)

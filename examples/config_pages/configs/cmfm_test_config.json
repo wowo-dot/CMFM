@@ -1,0 +1,16 @@
+{
+	"Display": {
+		"ShowMinimap": true,
+		"MinimapSize": 100,
+		"Opacity": 0.8,
+		"TimerStyle": "compact"
+	},
+	"Hotkeys": {
+		"ToggleHud": "Ctrl+H",
+		"Screenshot": 88
+	},
+	"Internal": {
+		"Layout": [1, 2, 3],
+		"Note": "Values CMFM's page does not name stay as they are."
+	}
+}

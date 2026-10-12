@@ -429,6 +429,60 @@ void writes_ini_switches_in_their_form() {
           "1/0 stays 1/0, TRUE becomes FALSE");
 }
 
+std::string read_file(const std::string& path) {
+    std::string text;
+    if (FILE* f = std::fopen(path.c_str(), "rb")) {
+        char b[4096];
+        std::size_t n = 0;
+        while ((n = std::fread(b, 1, sizeof b, f)) > 0) {
+            text.append(b, n);
+        }
+        std::fclose(f);
+    }
+    return text;
+}
+
+// The example pages in examples/config_pages, as the game reads them.
+void checks_the_examples() {
+    const std::string root = std::string(CMFM_SOURCE_DIR) + "/examples/config_pages/";
+    FakeFiles files;
+    files.files["nativePC/plugins/cmfm_test_config.json"] = read_file(root + "configs/cmfm_test_config.json");
+    files.files["nativePC/plugins/cmfm_test_config.ini"] = read_file(root + "configs/cmfm_test_config.ini");
+    check(!files.files["nativePC/plugins/cmfm_test_config.json"].empty(), "the example configs are found");
+    for (const char* name : {"cmfm_test_json.json", "cmfm_test_ini.json", "cmfm_test_replaced.json"}) {
+        Description d;
+        std::string why;
+        const bool parsed = parse_description(read_file(root + "pages/" + name), name, d, why);
+        if (!parsed) {
+            std::printf("  (%s: %s)\n", name, why.c_str());
+        }
+        check(parsed, "an example page reads");
+        ConfigPages pages(std::move(d), files, &log_line);
+        check(pages.check(why), "its config has what it expects");
+        for (const cmfm_page_t& page : pages.pages()) {
+            cmfm::menu::Page copy;
+            check(cmfm::menu::copy_page(&page, copy, why), "CMFM accepts its pages");
+        }
+        pages.opened();
+        for (const cmfm_page_t& page : pages.pages()) {
+            for (std::uint32_t i = 0; i < page.setting_count; ++i) {
+                const cmfm_setting_t& s = page.settings[i];
+                char reason[256] = {};
+                if (s.type != CMFM_TYPE_SECTION && page.locked(page.user, s.id, reason, sizeof reason) != 0 &&
+                    std::strncmp(reason, "Needs ", 6) != 0) {
+                    std::printf("  (%s, %s: %s)\n", name, s.label, reason);
+                    check(false, "every example value reads from its config");
+                }
+            }
+        }
+    }
+    Description broken;
+    std::string why;
+    check(!parse_description(read_file(root + "pages/cmfm_test_broken.json"), "cmfm_test_broken.json", broken, why) &&
+              why == "line 7: unknown field \"lable\" in a setting",
+          "the broken example is refused with its line");
+}
+
 }  // namespace
 
 int main() {
@@ -441,6 +495,7 @@ int main() {
     reads_descriptions();
     shows_and_writes_a_config();
     writes_ini_switches_in_their_form();
+    checks_the_examples();
     if (g_failures == 0) {
         std::printf("test_config: all passed\n");
     }

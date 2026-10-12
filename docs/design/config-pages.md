@@ -34,8 +34,7 @@ both look like any other mod in the list.
   to it). Under MO2 any mod can add a file there (an author's mod, a
   community page pack); CMFM reads the folder through the game's virtual
   folder (`al_init_t.folder`, never `folder_real`), so it sees every MO2
-  mod's files. CMFM's own working files (backups) go to its data folder,
-  `AsteraLoader\data\cmfm\`.
+  mod's files.
 - **Format:** JSON, with `//` and `/* */` comments allowed (people write
   these by hand). Strict otherwise, so a mistake is reported with its line
   on the Overview.
@@ -110,9 +109,11 @@ both look like any other mod in the list.
 4. **Verify:** parse the result again; it must parse, the edited paths must
    hold the new values, every other value must be unchanged. Otherwise no
    write, the reason on the Overview.
-5. **Save safely:** write a temporary file next to the config, swap it in
-   with `ReplaceFileW`; the first time CMFM ever writes a file, the original
-   stays as `<file>.cmfm-backup`. At write time the file is read again: if
+5. **Save safely:** in the file's real place (under MO2 the mod folder it
+   comes from, found through a handle: `GetFinalPathNameByHandleW`), write
+   `<file>.cmfm-new`, keep the original as `<file>.cmfm-backup` the first
+   time CMFM ever writes it, then swap the new file in (`MoveFileExW`, replace
+   and write through). At write time the file is read again: if
    it changed while the page was open, CMFM's edits are applied to the fresh
    text (they are by path); a value changed in both places keeps the file's.
 6. **Refused, read-only with the reason:** a value not in the file (adding

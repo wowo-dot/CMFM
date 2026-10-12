@@ -1,0 +1,14 @@
+{
+  // CMFM's test of config pages: a community page for the same config as the
+  // author's page cmfm_test_json.json. The author's page wins; this one is
+  // listed on the Overview as replaced.
+  "cmfm": 1,
+  "mod": "Config test (old)",
+  "source": "community",
+  "config": { "file": "nativePC/plugins/cmfm_test_config.json" },
+  "pages": [
+    { "title": "Old page", "settings": [
+      { "label": "Show minimap", "type": "bool", "path": "Display.ShowMinimap" }
+    ]}
+  ]
+}

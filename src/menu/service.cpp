@@ -134,6 +134,22 @@ bool service_publish(const al_api_t* api, al_plugin_t* self, const char* version
     return true;
 }
 
+std::uint32_t service_add_page(const cmfm_page_t* page, std::string& why) {
+    char reason[300] = {};
+    const std::uint32_t handle = add_page(page, reason, sizeof reason);
+    why = reason;
+    return handle;
+}
+
+void service_add_refused(const std::string& plugin, const std::string& why) {
+    Pending p;
+    p.ok = false;
+    p.plugin = plugin;
+    p.why = why;
+    Lock lock;
+    g_pending.push_back(std::move(p));
+}
+
 const native::OptionsModel* service_prepare() {
     if (!g_menu) {
         return nullptr;
