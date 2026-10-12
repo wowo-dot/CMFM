@@ -6,6 +6,7 @@
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
 #include "native/gui.hpp"
+#include "native/measure.hpp"
 #include "native/mod_list.hpp"
 #include "native/options_model.hpp"
 #include "native/options_view.hpp"
@@ -1900,6 +1901,7 @@ bool enter_view(void* unit) {
     }
     set_header(unit, model->header());
     logf(AL_LOG_INFO, "Mods page: on (%zu categories, %zu rows)", entries, model->row_count());
+    measure::page_shown(true);
     return true;
 }
 
@@ -1957,6 +1959,10 @@ std::uint64_t page_close(void* unit) {
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();
         logf(AL_LOG_INFO, "Mods page: closed");
+        measure::page_shown(false);
+        if (const std::string m = measure::report(); !m.empty()) {
+            logf(AL_LOG_INFO, "%s", m.c_str());
+        }
     }
     // Back to the Start menu, as the game's return stack does on the same
     // frame after its own Options; only while the menu still counts a page of

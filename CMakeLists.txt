@@ -55,6 +55,7 @@ add_library(cmfm SHARED
     src/native/config_loader.cpp
     src/native/data_patch.cpp
     src/native/gui.cpp
+    src/native/measure.cpp
     src/native/mods_page.cpp
     src/native/options_view.cpp
     src/native/page_class.cpp
@@ -66,6 +67,11 @@ target_link_libraries(cmfm PRIVATE cmfm_core)
 target_compile_definitions(cmfm PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE
                            CMFM_COMMIT="${CMFM_COMMIT}")
 target_compile_options(cmfm PRIVATE ${CMFM_WARNINGS})
+# A measurement build: CMFM's always-on hooks counted and timed (src/native/measure.hpp).
+option(CMFM_MEASURE "Count and time CMFM's always-on hooks (a measurement build, not for release)" OFF)
+if(CMFM_MEASURE)
+    target_compile_definitions(cmfm PRIVATE CMFM_MEASURE)
+endif()
 
 # The example client: a plugin page with one setting of each type, in C.
 add_library(cmfm_demo SHARED examples/cmfm_demo/cmfm_demo.c)

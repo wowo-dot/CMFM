@@ -2,6 +2,7 @@
 
 #include "native/data_patch.hpp"
 #include "native/game_421810.hpp"
+#include "native/measure.hpp"
 #include "native/options_view.hpp"
 #include "native/system_items.hpp"
 #include "native/mods_page.hpp"
@@ -46,7 +47,7 @@ void* message_file(std::uintptr_t rva) {
 
 // Detours run on the game's threads: no allocation, no logging in the text
 // lookup (it runs for every text the game shows).
-const char* get_message_detour(void* self, std::uint32_t id) {
+const char* cmfm_text(void* self, std::uint32_t id) {
     // Fast path: CMFM's ids are 9000 and up, plus the Options header and tab
     // names (0-5) while the CMFM view is on.
     if (id >= game::kModsLabelId || id <= 5) {
@@ -61,10 +62,14 @@ const char* get_message_detour(void* self, std::uint32_t id) {
         }
     }
     // The category labels while CMFM's page shows CMFM's menu.
-    if (const char* text = mods_page_text(self, id)) {
-        return text;
-    }
-    return g_get_message_next(self, id);
+    return mods_page_text(self, id);
+}
+
+const char* get_message_detour(void* self, std::uint32_t id) {
+    const std::uint64_t t0 = measure::start();
+    const char* text = cmfm_text(self, id);
+    measure::stop(measure::Hook::Text, t0);
+    return text != nullptr ? text : g_get_message_next(self, id);
 }
 
 std::uint64_t item_action_detour(void* menu, std::uint32_t id, void* arg) {

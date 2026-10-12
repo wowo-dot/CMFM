@@ -10,6 +10,7 @@
 #include "menu/service.hpp"
 #include "native/config_loader.hpp"
 #include "native/game_421810.hpp"
+#include "native/measure.hpp"
 #include "native/mods_page.hpp"
 #include "native/options_view.hpp"
 #include "native/start_menu.hpp"
@@ -93,6 +94,9 @@ void AL_CALL on_phase(al_plugin_t*, al_phase_t phase, const void*) {
         cmfm::native::mods_page_restore(g_env);
         cmfm::native::options_view_restore(g_env);
         cmfm::native::start_menu_restore(g_env);
+        if (const std::string m = cmfm::native::measure::report(); !m.empty()) {
+            log(AL_LOG_INFO, m);
+        }
     }
 }
 
@@ -106,6 +110,10 @@ extern "C" AL_PLUGIN_EXPORT al_result_t AL_CALL al_plugin_init(const al_api_t* a
     g_api = api;
     g_env.api = api;
     g_env.self = init->self;
+    cmfm::native::measure::begin();
+#if defined(CMFM_MEASURE)
+    log(AL_LOG_INFO, "measurement build: CMFM's always-on hooks are counted and timed (not for release)");
+#endif
     log(AL_LOG_INFO, std::string(kInfo.name) + " " + kInfo.version + " (" CMFM_COMMIT ") on Astera Loader API " +
                          std::to_string(AL_VERSION_MAJOR(api->version)) + "." +
                          std::to_string(AL_VERSION_MINOR(api->version)));

@@ -2,6 +2,7 @@
 
 #include "native/game_421810.hpp"
 #include "native/gui.hpp"
+#include "native/measure.hpp"
 #include "native/mods_page.hpp"
 
 #include <atomic>
@@ -142,7 +143,9 @@ void decided_detour(void* title, std::int32_t row) {
 // the game's own code opens it, waits for it to close and checks it, and the
 // game's Options page is never touched.
 std::uint64_t scene_flows_detour(void* scene, void* a2, void* a3, void* a4) {
+    std::uint64_t t0 = measure::start();
     if (!g_ready.load(std::memory_order_acquire)) {
+        measure::stop(measure::Hook::TitleScene, t0);
         return g_scene_flows_next(scene, a2, a3, a4);
     }
     void* page = mods_page_ensure();
@@ -154,19 +157,23 @@ std::uint64_t scene_flows_detour(void* scene, void* a2, void* a3, void* a4) {
                                       : "title: CMFM's page is missing; the Options flow opens the Options page");
     }
     if (!g_flow_ours || page == nullptr) {
+        measure::stop(measure::Hook::TitleScene, t0);
         return g_scene_flows_next(scene, a2, a3, a4);
     }
     // Only the pointer in the scene's tracked reference; its links stay the game's.
     void*& slot = field<void*>(scene, game::kSceneOptionsPage);
     void* game_page = slot;
     slot = page;
+    measure::stop(measure::Hook::TitleScene, t0);
     const std::uint64_t result = g_scene_flows_next(scene, a2, a3, a4);
+    t0 = measure::start();
     if (slot == page) {
         slot = game_page;
     }
     if (field<std::int32_t>(scene, game::kSceneFlow) != game::kSceneFlowOptions) {
         g_flow_ours = false;
     }
+    measure::stop(measure::Hook::TitleScene, t0, false);
     return result;
 }
 
