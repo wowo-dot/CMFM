@@ -119,7 +119,7 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    lists one line per mod. Interface: an optional mod name on the page
    (`cmfm_page_t.mod`, since 1.2; without it, the first page's title).
 
-## 1.3: config pages without code (designed 2026-10-12, building)
+## 1.3: config pages without code (designed 2026-10-12; steps 1-7 done)
 
 Status: steps 1-6 done: the test pages (tag `config-pages-1`, run
 `cfgpages-1`: only the edited values changed, backups byte-identical) and
@@ -127,8 +127,9 @@ Fexty's Mod as the real case (tag `fexty-page-1`, runs `fexty-1`, `-2`: a
 community page; a hotkey rebound in the in-game menu was written exactly,
 the backup byte-identical; the mod using it live in play is not checked
 yet; its keys turned out to be hex Windows key codes, `vk-hex`). Step 7,
-TOML, is built and unit-tested (a test page, `cmfm_test_toml.json`); its
-in-game run is next. On the way, a crash fixed
+TOML, done (tag `toml-page-1`, run `toml-1`: the test page
+`cmfm_test_toml.json` shows its values in game; its write is unit-tested,
+not yet exercised in game). On the way, a crash fixed
 (tag `slider-crash-fix-1`): the game's tab show read CMFM's slider rows from
 save data when the page opened again in game.
 
