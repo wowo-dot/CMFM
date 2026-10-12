@@ -4,6 +4,31 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
+## Release 0.1.0 (the order agreed with the user, 2026-10-12)
+
+Not a date; the steps in order. Each ends with what it needs from others.
+
+1. **Tell Astera Loader what CMFM needs.** Written: `docs/al-requests.md`
+   item 1 (checked writes to two values in the game's read-only data, the
+   Start menu's tab lists; the Options table swaps turned out to be in
+   writable data and need nothing, commit 4fc3ba2). Next: the user takes it
+   to the AL session; CMFM switches to the service when AL ships it.
+2. **The DLSS mod adapts.** Written: `docs/handoff-dlss-mod-20261012.md`,
+   updated for `cmfm.menu` 1.2 (suggested pages, what CMFM needs back).
+   Next: the user takes it to the DLSS session; its feedback before 1.2
+   freezes.
+3. **Test** (AGENTS.md's in-game checklist, with run folders): keyboard,
+   mouse and pad; capture and release; alt-tab; resize and full-screen
+   toggles; loading screens; quests online; the DLSS mod with frame
+   generation on and its pages; SharpPluginLoader loaded (it swaps the same
+   Start menu entries); the cost per frame with the menu closed, measured
+   on the present thread; one long play session. Also the leftovers: a
+   TOML write in game, Fexty's Mod using a rebound key in play.
+4. **Release:** freeze `cmfm.menu` 1.2 and description format 1; README,
+   a player's install guide, the author guide with description files;
+   version 0.1.0; its own MO2 mod; VirusTotal; the user's OK before
+   anything goes to a public remote (including the edited layout).
+
 ## Done (tested in game)
 
 - Native menu inside the game's own UI: a "Mods" entry below Options on the
@@ -161,16 +186,17 @@ notifications.
   input, a per-row Default key.
 - Choice lists longer than 14 entries: a scrolling pick list (arrows today).
 - The author guide and the handoff to the DLSS mod: written 2026-10-12
-  (`docs/author-guide.md`, `docs/handoff-dlss-mod-20261012.md`); `cmfm.menu`
-  1.1 frozen (decisions item 11). Waiting for the DLSS session's feedback.
+  (`docs/author-guide.md`, `docs/handoff-dlss-mod-20261012.md`, the handoff
+  updated for 1.2 the same day); `cmfm.menu` 1.1 frozen (decisions item
+  11). Release step 2.
 - ~~Popups and notifications~~: not for now (decisions item 12): greyed
   rows, refusals and status lines cover the known cases. The sketch
   (`cmfm_popups_design_v1`: the game's message window, its message log, a
   Messages list on the Overview) stays on file in case a real need appears.
-- A long play session; then drop the old options view fallback and turn the
-  data-patch helper into an AL request (decision 9).
-- SharpPluginLoader compatibility (it swaps the same Start menu entries).
+- A long play session (release step 3); then drop the old options view
+  fallback. The data-patch helper's AL request: written (release step 1).
+- SharpPluginLoader compatibility (it swaps the same Start menu entries):
+  release step 3.
 - Languages for CMFM's own texts.
 - Greying out the game's own AA/DLSS options while the DLSS mod owns AA.
-- Release 0.1.0: its own MO2 mod, VirusTotal; ask before anything goes to a
-  public remote (including the edited layout).
+- Release 0.1.0: see the top of this file.
