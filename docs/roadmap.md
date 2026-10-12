@@ -21,19 +21,26 @@ Not a date; the steps in order. Each ends with what it needs from others.
    repository: 11 live multiplier changes, the ini saved in place); its
    reply raised no blocker in 1.2 (answers at the end of
    `docs/handoff-dlss-mod-20261012.md`).
-3. **Test** (AGENTS.md's in-game checklist, with run folders): keyboard,
-   mouse and pad; capture and release; alt-tab; resize and full-screen
-   toggles; loading screens; quests online; the DLSS mod with frame
-   generation on and its pages; SharpPluginLoader loaded (it swaps the same
-   Start menu entries); the cost per frame with the menu closed, measured
-   on the present thread; one long play session. Also the leftovers: a
-   TOML write in game, Fexty's Mod using a rebound key in play.
-4. **Release:** freeze `cmfm.menu` 1.2 and description format 1; README,
-   a player's install guide (with troubleshooting: a crash at start in the
-   text lookup, `rGUIMessage::getMessage` with a null message file, is a
-   badly started Steam; restart Steam), the author guide with description
-   files;
-   version 0.1.0; its own MO2 mod; VirusTotal; the user's OK before
+3. **Test.** The user's call (2026-10-12): no scripted checklist run;
+   the features were each tested in game when built, and the DLSS mod's
+   pages in its own run (game-56). Done: SharpPluginLoader (run spl-1:
+   SPL's own crashes with the Stracker plugins, CMFM not involved; a
+   refused Start menu entry now costs only that entry, commit 3221211);
+   cost with the menu closed on the title screen (about 27 ns per text
+   lookup, 6 us/s; the title scene hook about 0.3 us per frame). Left to
+   ordinary play with the measurement build installed (cmfm.log logs it):
+   the cost in play, a long session. Never tried, low risk (the page is
+   the game's own menu): pad (LB / RB), alt-tab and screen-mode changes
+   with the page open; a TOML write in game; Fexty's Mod using a rebound
+   key in play.
+4. **Release:** written 2026-10-12: README, `docs/player-guide.md`
+   (install, use, troubleshooting: the Steam start crash, SPL), and
+   `docs/config-pages-guide.md` (description files; linked from the author
+   guide). Left: freeze `cmfm.menu` 1.2 and description format 1 (the
+   user's go); release notes with known issues; version 0.1.0; the
+   package (its own MO2 mod: `AsteraLoader\plugins\cmfm\cmfm.dll`,
+   `nativePC\ui\cmfm\mods.gui`; whether community pages such as Fexty's
+   ship with it is the user's call); VirusTotal; the user's OK before
    anything goes to a public remote (including the edited layout).
 
 ## Done (tested in game)

@@ -14,7 +14,12 @@ keep editing your ini by hand.
 
 The interface is `include/cmfm/cmfm.h` (`cmfm.menu` 1.2, plain C). Its
 comments are the reference; this guide is the walk-through. The example
-plugin `examples/cmfm_demo/cmfm_demo.c` uses every feature.
+plugin `examples/cmfm_demo/cmfm_demo.c` uses every feature. CMFM runs on
+Astera Loader 0.2.0 or newer.
+
+Not an Astera Loader plugin (a Stracker or SharpPluginLoader plugin, say),
+or only plain values in a config file? A description file puts them in the
+menu without code: `docs/config-pages-guide.md`.
 
 ## 1. Getting the interface
 
