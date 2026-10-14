@@ -250,3 +250,14 @@ real limit in the refusal, Frame generation never locked).
   next to it: cmfm.dll `f50d26ad...9a8e`, mods.gui unchanged
   (`5792b008...857c`).
 
+## CMFM 0.1.0 for the release bundle (2026-10-14)
+
+CMFM 0.1.0 is released (tag `v0.1.0`; the code of beta.3 plus the version
+string). For the DLSS mod's release bundle take
+`D:\mh world modding\CMFM\local\release\cmfm-0.1.0\` (the `AsteraLoader`
+and `nativePC` folders; the plugin folder also holds CMFM's player guide,
+its description-file guide, release notes and licence), or the archive
+`CMFM-0.1.0.zip` beside it. SHA-256 in `CMFM-0.1.0.sha256`: cmfm.dll
+`82f679e5...32c2c`, mods.gui unchanged (`5792b008...857c`). The repository
+is public from this release on: https://github.com/wowo-dot/CMFM
+
