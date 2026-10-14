@@ -50,6 +50,11 @@ Not a date; the steps in order. Each ends with what it needs from others.
    description-file guide and the licence; `nativePC\ui\cmfm\mods.gui`), the
    repository public with it (the edited layout included). No VirusTotal
    for CMFM (the user: Astera Loader needs it, CMFM does not).
+   **On Nexus Mods since 2026-10-15** (mod 8856, the same archive as the
+   GitHub release). Astera Loader's Nexus page waits for Nexus's review of
+   its file, so CMFM's page requires Astera Loader through its GitHub
+   releases for now and says it will switch (the user's call). The page
+   material is kept out of git (`local/nexus/`, the user's rule).
 
 ## Done (tested in game)
 
