@@ -221,7 +221,7 @@ real limit in the refusal, Frame generation never locked).
   five places named in the handoff); the "no mod list" check stays on the
   live field. In-game check: CMFM's run `20261014-listwindow-1`.
 - **For the next bundle, take the release build:**
-  `D:\mh world modding\CMFM\localelease\cmfm-0.1.0-beta.2\` (the
+  `D:\mh world modding\CMFM\local\release\cmfm-0.1.0-beta.2\` (the
   `AsteraLoader` and `nativePC` folders as they go into the bundle;
   SHA-256 in `cmfm-0.1.0-beta.2.sha256` next to it: cmfm.dll
   `8fb5d064...f34e`, mods.gui `5792b008...857c`, unchanged). The 0.28.4
