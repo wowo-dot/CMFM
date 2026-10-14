@@ -62,11 +62,10 @@ the prototype helper `QwordPatch`, decision 9) and `OptionTabTables[0..4]`
    the user), then turn the data-patch helper into an AL request
    (`docs/al-requests.md`, decision 9).
 
-## Notes about the user and these sessions
+## Notes for these sessions
 
-- Fun project, no deadline; broad autonomy; plain reports. They play late
-  and sometimes stop around 5 AM.
+- Fun project, no deadline; broad autonomy; plain reports.
 - Exit crash reports from Stracker plugins (FextyMod, more_auto_shoutouts,
   auto_food_skill) are known noise; check owners, don't raise them.
-- NekotagaYuhatora (a friend of the user) pointed out SPL's Start menu API
-  (2026-09-20); useful input.
+- SPL's Start menu API (2026-09-20) was pointed out from outside the
+  project; useful input.

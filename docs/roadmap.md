@@ -4,7 +4,7 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
-## Release 0.1.0 (the order agreed with the user, 2026-10-12)
+## Release 0.1.0 (released 2026-10-14; the order agreed with the user, 2026-10-12)
 
 Not a date; the steps in order. Each ends with what it needs from others.
 
@@ -41,11 +41,16 @@ Not a date; the steps in order. Each ends with what it needs from others.
    out of the package (Fexty's stays local). The repository is on GitHub,
    private, for now. The plan (the user, 2026-10-12): the DLSS mod gets
    ready to ship first; then the CMFM repository goes public and CMFM and
-   the DLSS mod ship on Nexus together, one after the other. Left: release notes with known issues; version
-   0.1.0; the package (its own MO2 mod:
-   `AsteraLoader\plugins\cmfm\cmfm.dll`, `nativePC\ui\cmfm\mods.gui`);
-   VirusTotal; the user's OK before anything goes public (including the
-   edited layout).
+   the DLSS mod ship on Nexus together, one after the other.
+   Closed beta 2026-10-14 (with the DLSS mod's beta bundles): two list bugs
+   found and fixed (beta.2: the mod list's window; beta.3: Up/Down
+   direction with few pages). **Released 2026-10-14** on the user's go:
+   0.1.0 (`docs/release-notes-0.1.0.md`, tag `v0.1.0`), the package
+   (`AsteraLoader\plugins\cmfm\` with cmfm.dll, the player guide, the
+   description-file guide and the licence; `nativePC\ui\cmfm\mods.gui`), the
+   repository public with it (the edited layout included). VirusTotal for
+   the release files: with the user's reCAPTCHA, results into the release
+   notes afterwards.
 
 ## Done (tested in game)
 
