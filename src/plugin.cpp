@@ -34,7 +34,7 @@ const al_plugin_info_t kInfo = {
     AL_API_VERSION,
     "cmfm",       // name: also the folder and DLL name
     "CMFM",       // display name
-    "0.1.0-beta.1",  // this plugin's version
+    "0.1.0-beta.2",  // this plugin's version
     AL_PHASE_BIT(AL_PHASE_WIN_MAIN) | AL_PHASE_BIT(AL_PHASE_SHUTDOWN),
     -100,         // order: early, so clients find cmfm.menu in their al_plugin_init
     nullptr,      // load_after
