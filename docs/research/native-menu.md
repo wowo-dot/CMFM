@@ -130,7 +130,12 @@ Layout elements can also be found by name: `uGUI::getInstanceFromName(gui,
   scroll bar `ScrollType`, `MaxFixFrame`, `BarMinPos`, `BarMaxPos`.
 - **Rows can be added at runtime.** The layout defines a template row;
   `cGUIInstButtonList::rebuildRows` (0x140B7FEF0) removes the old copies and
-  makes `count` new ones. `setRowCount` (0x140B7FED0) calls it and
+  makes `count` new ones, and **stores `count` into the list's
+  `DuplicateNum`** (`+0x298`; `mov [r14+0x298], ebx` at +0x1F8), so after a
+  resize that field no longer holds the layout's window size. CMFM reads the
+  mod list's window once, before its first resize (found in the closed beta
+  with 2 mods: the list stayed 2 rows high; the DLSS session's
+  `handoff-cmfm-20261014`). `setRowCount` (0x140B7FED0) calls it and
   refreshes the list. The game calls `setRowCount` from 48 places, with fixed
   and runtime counts (the language list sizes itself to the number of
   languages).

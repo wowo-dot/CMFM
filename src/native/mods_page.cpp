@@ -238,6 +238,13 @@ bool g_page_keys[2] = {};    // Q / LB, E / RB held in the last update
 // keeps its cursor on the audio panel, which shows the highlighted tab.
 std::atomic<bool> g_split{false};
 std::atomic<void*> g_mod_list{nullptr};  // while the page shows CMFM's menu
+// The mod list's window: how many rows its layout shows. Read from the list's
+// DuplicateNum once per list, before CMFM first sets its row count: setRowCount
+// stores the count into that field (rebuildRows, RVA 0xB7FEF0 + 0x1F8), so after
+// a fill with 2 rows it would say 2 for good (found in the closed beta, with 2
+// mods; the DLSS session's handoff-cmfm-20261014).
+std::atomic<std::uint32_t> g_list_window{0};
+void* g_list_window_of = nullptr;  // the list it was read from (game thread)
 std::atomic<std::size_t> g_selected{0};  // the highlighted menu tab
 std::size_t g_mod_top = 0;               // the first tab in the mod list's window
 std::uint32_t g_restart_seen = 0;        // the menu's restart revision the page shows
@@ -770,7 +777,7 @@ void show_mod_list() {
     const std::vector<menu::Mod>& mods = menu::service_mods();
     const OptionsModel& model = menu::service_model();
     const std::vector<ListRow>& rows = g_list.rows();
-    std::size_t visible = field<std::uint32_t>(list, game::kListDuplicateNum);
+    std::size_t visible = g_list_window.load(std::memory_order_relaxed);
     visible = visible < kMaxListRows ? visible : kMaxListRows;
     const std::size_t count = rows.size() < visible ? rows.size() : visible;
     if (g_mod_top + count > rows.size()) {
@@ -822,7 +829,7 @@ void show_mod_list() {
 
 std::size_t list_visible() {
     void* list = g_mod_list.load(std::memory_order_acquire);
-    return list != nullptr ? field<std::uint32_t>(list, game::kListDuplicateNum) : 0;
+    return list != nullptr ? g_list_window.load(std::memory_order_relaxed) : 0;
 }
 
 // The window follows the highlight (and never runs past the last row).
@@ -1176,7 +1183,7 @@ void drag_scrollbars(void* unit) {
         return;
     }
     const std::size_t entries = g_list.rows().size();
-    const std::size_t list_rows = field<std::uint32_t>(list, game::kListDuplicateNum);
+    const std::size_t list_rows = g_list_window.load(std::memory_order_relaxed);
     if (g_list_bar.shown) {
         if (g_scroll_mouse(g_list_bar.bar) != 0) {
             const std::size_t top = scroll_top(g_list_bar, entries, list_rows);
@@ -1267,7 +1274,7 @@ void update_scrollbars() {
                  "without them", list_ok ? "ok" : "none", panel_ok ? "ok" : "none");
         }
     }
-    show_scroll(g_list_bar, g_list.rows().size(), field<std::uint32_t>(list, game::kListDuplicateNum), g_mod_top);
+    show_scroll(g_list_bar, g_list.rows().size(), g_list_window.load(std::memory_order_relaxed), g_mod_top);
     show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
 }
 
@@ -1817,6 +1824,11 @@ bool enter_view(void* unit) {
             menu::service_abort();
             return false;
         }
+        if (mod_list != g_list_window_of) {
+            // A list CMFM has not filled yet: its DuplicateNum is still the layout's.
+            g_list_window_of = mod_list;
+            g_list_window.store(field<std::uint32_t>(mod_list, game::kListDuplicateNum), std::memory_order_relaxed);
+        }
         // One entry per mod; the last selection again, if it still exists.
         const std::vector<menu::Mod>& mods = menu::service_mods();
         std::vector<std::size_t> pages;
@@ -1890,7 +1902,7 @@ bool enter_view(void* unit) {
         options_view_sliders(g_slider_from_setting != nullptr);  // number rows as sliders
         g_pick_count = 0;
         g_pick_filled = -1;
-        const std::size_t visible = field<std::uint32_t>(mod_list, game::kListDuplicateNum);
+        const std::size_t visible = g_list_window.load(std::memory_order_relaxed);
         keep_highlight_in_view();
         show_mod_list();
         logf(AL_LOG_INFO, "Mods page: mod list on (%zu mods, %zu pages, %zu rows visible; %s)",
