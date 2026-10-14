@@ -232,3 +232,21 @@ real limit in the refusal, Frame generation never locked).
   the game exits): known since Astera Loader 0.1.0 (its release notes);
   not CMFM.
 
+## Answer to the DLSS session's handoff-cmfm-20261014-dpad (D-pad Down moved up)
+
+- **Confirmed and fixed** (commit f7bb928, CMFM 0.1.0-beta.3). The cause
+  was as described: the hidden category list holds min(pages, 5) rows with
+  its cursor parked on row 2, the last row with three pages, so Down
+  wrapped to row 0 and the row comparison read it as Up. The fix is the
+  first suggestion: the game's step functions (next, previous), which keys,
+  D-pad and stick go through, now move the mod list's highlight for that
+  list in the pressed direction and keep the parked cursor (moveCursor
+  ignores an unchanged row), so short lists and the missing row 2 (two
+  pages or fewer) no longer matter. The moveCursor hook still catches any
+  other move, a wrap counted the right way. In-game check: CMFM's run
+  `20261014-beta3-1` (three entries, then two).
+- **For the next bundle:** `D:\mh world modding\CMFM\local\release\cmfm-0.1.0-beta.3\`
+  (supersedes beta.2; both fixes), SHA-256 in `cmfm-0.1.0-beta.3.sha256`
+  next to it: cmfm.dll `f50d26ad...9a8e`, mods.gui unchanged
+  (`5792b008...857c`).
+
