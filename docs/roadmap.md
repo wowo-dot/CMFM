@@ -48,9 +48,8 @@ Not a date; the steps in order. Each ends with what it needs from others.
    0.1.0 (`docs/release-notes-0.1.0.md`, tag `v0.1.0`), the package
    (`AsteraLoader\plugins\cmfm\` with cmfm.dll, the player guide, the
    description-file guide and the licence; `nativePC\ui\cmfm\mods.gui`), the
-   repository public with it (the edited layout included). VirusTotal for
-   the release files: with the user's reCAPTCHA, results into the release
-   notes afterwards.
+   repository public with it (the edited layout included). No VirusTotal
+   for CMFM (the user: Astera Loader needs it, CMFM does not).
 
 ## Done (tested in game)
 

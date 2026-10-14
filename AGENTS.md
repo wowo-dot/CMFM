@@ -222,7 +222,8 @@ with `-Opdb:off`, so it does not ask Microsoft's symbol server.
   `origin`, the GitHub repository `wowo-dot/CMFM`, public since the 0.1.0
   release (2026-10-14, the user's go, the edited `assets/` layout
   included). Publishing a release needs the user's OK; each release gets
-  release notes in `docs/`, an annotated tag and VirusTotal results.
+  release notes in `docs/` and an annotated tag. VirusTotal is not needed
+  for CMFM (the user, 2026-10-14: Astera Loader needs it, CMFM does not).
 - Keep build trees, logs, runs, dumps, game files and third-party binaries
   untracked (`local/`).
 - Do not rewrite or discard user changes without explicit approval.
