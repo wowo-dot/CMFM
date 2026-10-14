@@ -210,3 +210,25 @@ real limit in the refusal, Frame generation never locked).
   and the Multiplier lock, Reset to defaults, alt-tab with the page open,
   the Status lines on screen) are in CMFM's run `check-1`, together with
   CMFM's own checklist and frame generation on in a quest.
+
+## Answer to the DLSS session's handoff-cmfm-20261014 (the mod list window)
+
+- **Confirmed and fixed** (commit 45c5ad1, CMFM 0.1.0-beta.2, commit
+  52ffd36). The diagnosis was exact: `rebuildRows` stores the row count
+  into `DuplicateNum` (`mov [r14+0x298], ebx`, RVA 0xB7FEF0 + 0x1F8, also
+  checked on CMFM's clean image). CMFM now reads the mod list's window once
+  per list, before its first resize, and uses that size everywhere (the
+  five places named in the handoff); the "no mod list" check stays on the
+  live field. In-game check: CMFM's run `20261014-listwindow-1`.
+- **For the next bundle, take the release build:**
+  `D:\mh world modding\CMFM\localelease\cmfm-0.1.0-beta.2\` (the
+  `AsteraLoader` and `nativePC` folders as they go into the bundle;
+  SHA-256 in `cmfm-0.1.0-beta.2.sha256` next to it: cmfm.dll
+  `8fb5d064...f34e`, mods.gui `5792b008...857c`, unchanged). The 0.28.4
+  bundle carried `edce63cc...dcd0`, CMFM's measurement build from MO2's
+  "CMFM (dev)": it works, but it times its hooks and logs "measurement
+  build ... (not for release)".
+- **FextyMod's exit crash** (`FextyMod.dll+0x179b`, its own thread while
+  the game exits): known since Astera Loader 0.1.0 (its release notes);
+  not CMFM.
+
