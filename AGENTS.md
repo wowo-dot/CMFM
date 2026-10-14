@@ -219,9 +219,10 @@ with `-Opdb:off`, so it does not ask Microsoft's symbol server.
 - Git is the source of truth: focused commits, and an annotated tag for
   each version the user has tested in game.
 - Commit locally; do not push without the user saying so. Remote:
-  `origin`, the private GitHub repository `wowo-dot/CMFM` (since
-  2026-10-12). Making it public, or publishing a release, needs the
-  user's OK (the edited `assets/` layout included).
+  `origin`, the GitHub repository `wowo-dot/CMFM`, public since the 0.1.0
+  release (2026-10-14, the user's go, the edited `assets/` layout
+  included). Publishing a release needs the user's OK; each release gets
+  release notes in `docs/`, an annotated tag and VirusTotal results.
 - Keep build trees, logs, runs, dumps, game files and third-party binaries
   untracked (`local/`).
 - Do not rewrite or discard user changes without explicit approval.
