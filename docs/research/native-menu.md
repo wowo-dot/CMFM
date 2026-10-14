@@ -837,7 +837,13 @@ study afterwards):**
   shows every menu entry on the left (CMFM fills and moves it); the game's
   category list sits off screen with its cursor kept on the audio panel
   (2), which shows the highlighted entry. Up/Down on the category list are
-  turned into mod list moves (moveCursor hook).
+  turned into mod list moves: since 0.1.0-beta.3 in the step hooks
+  (`0xB75BD0` next, `0xB75C80` previous), which know the direction and keep
+  the category cursor. Before, the moveCursor hook compared rows; the
+  category list holds min(pages, 5) rows, so with three pages the parked
+  row 2 was the last one and Down wrapped to row 0, reading as Up (closed
+  beta; the DLSS session's `handoff-cmfm-20261014-dpad`). The moveCursor
+  hook still catches other moves, a wrap counted the right way.
 - **Why Confirm got stuck (split-2, -3):** a list's update
   (`sub_140B755C0`) in state 1 puts the cursor on the first enabled row from
   its start row (+560) when its opening animation ends. That came one frame

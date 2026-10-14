@@ -26,7 +26,7 @@ switches, sliders, pick lists, Yes/No questions and help line.
 Each mod's own config file stays the source of truth: CMFM stores none of
 their settings.
 
-**Status:** 0.1.0-beta.2, a closed beta (2026-10-14). Tested with MHW 421810 (the
+**Status:** 0.1.0-beta.3, a closed beta (2026-10-14). Tested with MHW 421810 (the
 final version) under Mod Organizer 2. Needs **Astera Loader 0.2.0 or
 newer**; nothing else to install (no Visual C++ runtime, no .NET).
 

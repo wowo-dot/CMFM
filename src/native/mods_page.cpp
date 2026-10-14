@@ -434,22 +434,42 @@ void scroll_to(void* unit, std::size_t top) {
     refill_window(unit);
 }
 
+// Split mode: the mod list's highlight moves `steps` rows down or up
+// (wrapping at both ends). It selects only without CMFM's Confirm
+// (g_select_mode off).
+void step_highlight(bool down, std::int32_t steps) {
+    const std::size_t rows = g_list.rows().size();
+    if (rows <= 1) {
+        return;
+    }
+    void* unit = g_view_unit.load(std::memory_order_acquire);
+    const std::size_t n = static_cast<std::size_t>(steps > 0 ? steps : 1) % rows;
+    set_highlight(unit, down ? (g_highlight + n) % rows : (g_highlight + rows - n) % rows);
+    if (!g_select_mode) {
+        select_highlight(unit);
+    }
+}
+
+// Split mode: the hidden category list stands in for the mod list (its
+// cursor stays on the audio panel), so its moves go to the mod list.
+bool split_categories(void* list) {
+    return list == g_window_list.load(std::memory_order_acquire) && split_view() &&
+           g_mod_list.load(std::memory_order_acquire) != nullptr;
+}
+
 // Directional moves on the category list: past the bottom or top row the
 // window moves instead of the cursor; at the very end and start it wraps.
 std::uint64_t list_move_detour(void* list, std::int32_t row) {
-    if (list == g_window_list.load(std::memory_order_acquire) && split_view() &&
-        g_mod_list.load(std::memory_order_acquire) != nullptr) {
-        // Split mode: the category cursor stays on the audio panel; the move
-        // goes to the mod list's highlight (wrapping at both ends). It selects
-        // only without CMFM's Confirm (g_select_mode off).
+    if (split_categories(list)) {
+        // Keys, D-pad and stick reach the mod list through the step hooks
+        // (panel_step), which keep this cursor, so a move that gets here came
+        // from elsewhere. Its direction: a wrap from the last row to row 0 is
+        // Down, the reverse Up (the list may hold only two or three rows).
         const std::int32_t old = field<std::int32_t>(list, game::kListCursor);
-        const std::size_t rows = g_list.rows().size();
-        if (row != old && rows > 1) {
-            void* unit = g_view_unit.load(std::memory_order_acquire);
-            set_highlight(unit, row > old ? (g_highlight + 1) % rows : (g_highlight + rows - 1) % rows);
-            if (!g_select_mode) {
-                select_highlight(unit);
-            }
+        const std::int32_t last = static_cast<std::int32_t>(field<std::uint32_t>(list, game::kListRowCount)) - 1;
+        if (row != old) {
+            const bool down = (old >= last && row == 0) ? true : (old == 0 && row >= last) ? false : row > old;
+            step_highlight(down, 1);
         }
         return 0;
     }
@@ -1013,6 +1033,15 @@ void scroll_panel(void* unit, std::size_t top, bool refresh) {
 // the row looks, the arrows and the help line for the new setting.
 std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cursor, std::int32_t steps,
                          std::uint8_t wrap, std::uint8_t* wrapped) {
+    if (split_categories(list)) {
+        // The mod list moves the way the key or stick points; the category
+        // cursor keeps its row (moveCursor ignores an unchanged row). Its own
+        // step would wrap on a short list and read the other way: with three
+        // pages the parked row 2 is the last one, and Down came out as Up
+        // (closed beta; the DLSS session's handoff-cmfm-20261014-dpad).
+        step_highlight(down, steps);
+        return static_cast<std::uint32_t>(cursor);
+    }
     void* unit = g_view_unit.load(std::memory_order_acquire);
     const std::size_t visible = panel_visible();
     if (!split_view() || unit == nullptr || list != panel_list(unit) || g_panel_count <= visible || cursor < 0 ||
