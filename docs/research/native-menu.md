@@ -1243,6 +1243,45 @@ pages, 2^20 rows in all), and two per-setting limits of the game's parts:
 CHOICE names (32; the pick list shows 14 rows) and number values (101, the
 slider's 0-100 positions).
 
+## The game's GUI unit list (static, 2026-10-15; a player's report)
+
+A player's speedrun tool (IN-Q, a Cheat Engine table) crashed with our mods:
+it takes the GUI unit in **slot 46** of `sMhGUI`'s unit list as the item
+box's Item Loadouts (`uGUIBoxItemMySet`), and with CMFM it is the Sell
+screen. The DLSS session measured it in the user's game (read only, Frida
+`evaluate`): CMFM's page sits in slot 18, every later unit one slot on
+(`dlssupdate/docs/handoff-cmfm-20261015-unit-list.md`).
+
+How the list works (decompiler, CMFM's database, names written back):
+- `sMhGUI::Instance` (RVA 0x51C4640) + 0x260 is an `MtArray` of GUI units
+  (`MtArray::vft`; length +0x268, capacity +0x26C, auto-delete +0x270,
+  data +0x278); the constructor reserves 256.
+- **Joining:** uMhGUI vtable slot 5 (`sub_141FB7ED0`) calls
+  `sMhGUI::registerUnit` (`sub_141AD5F40`), which **appends** the unit at
+  the end, under sMhGUI's lock (+8). So a unit takes the next free slot when
+  it starts; CMFM's page, made at the first title frame, took slot 18 and
+  every unit started later (HUD, item box) sits one slot on.
+- **Leaving:** uMhGUI vtable slot 25 (`sub_141FB59C0`) calls
+  `sMhGUI::unregisterUnit` (`sub_141AE2C70`), and a scene reset
+  (`sub_141ADE330`) drops every unit at once, **both only for units without
+  the keep bit** (`+0x14` bit 8, the bit CMFM sets on its page so that no
+  scene change kills it). Removal is `MtArray::erase`, which **closes the
+  gap**: every later unit moves back one slot.
+
+What follows for the request (make the page when Mods opens, release it
+when Mods closes): a page made on open is appended behind every unit that
+exists and shifts none; released (keep bit cleared, then killed) it leaves
+through `unregisterUnit` and the list is as the game made it. Not done yet
+(the user: test first). To check: the page's start-up needs a frame or two
+before it can open (the title flow and the Start menu wait for it today
+only once); its layout stays loaded (kept already); opening Mods at the
+title, then entering the game, must leave no trace.
+
+Measuring: `tools/re/gui_units.py` (read only: PROCESS_QUERY_LIMITED_INFORMATION
+| PROCESS_VM_READ, as AL's modwatch.py) lists the units by slot and class
+(vtable names from CMFM's database, `local/ida/vft_names.json`) and diffs
+two snapshots.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
