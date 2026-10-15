@@ -274,8 +274,7 @@ void* page_create(std::string& why) {
         return nullptr;
     }
     g_add_bottom(units, game::kGuiMoveLine, unit, game::kGuiGroupBits, 0);
-    // Like the game's common pages (group 0): no scene change kills it.
-    *reinterpret_cast<std::uint32_t*>(static_cast<char*>(unit) + game::kUnitFlags) |= game::kUnitFlagKeep;
+    // Not kept: it dies with its scene (page_class.hpp).
     g_set_ref(g_ref_lock(), unit, &g_ref);
     if (g_ref.unit != unit) {
         // setRef does nothing while the game has references switched off; the
@@ -284,6 +283,14 @@ void* page_create(std::string& why) {
         return nullptr;
     }
     return unit;
+}
+
+void page_keep(void* unit, bool keep) {
+    if (unit == nullptr) {
+        return;
+    }
+    std::uint32_t& flags = *reinterpret_cast<std::uint32_t*>(static_cast<char*>(unit) + game::kUnitFlags);
+    flags = keep ? (flags | game::kUnitFlagKeep) : (flags & ~game::kUnitFlagKeep);
 }
 
 UnitFn page_next(std::size_t slot) {

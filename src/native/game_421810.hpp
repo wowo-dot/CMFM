@@ -281,6 +281,9 @@ inline constexpr char kRequestClosePattern[] =
 // uMhGUI state (+8856): any of these bits while open or opening.
 inline constexpr std::size_t kGuiState = 0x2298;
 inline constexpr std::uint32_t kGuiStateOpen = 0x80000011;
+// Released when closed: uMhGUI slot 87 (closed, RVA 0x1FB89B0) kills the unit
+// when this bit is set (cUnit slot 18 -> sUnit::kill, which refuses a kept unit).
+inline constexpr std::uint32_t kGuiStateKillOnClose = 0x4;
 
 // cUnit fields.
 inline constexpr std::size_t kUnitState = 12;  // byte: & 0xE while alive (2 new, 8 running; 16 killed)

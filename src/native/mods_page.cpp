@@ -192,6 +192,9 @@ bool g_create_failed = false;  // logged once; no page this session then
 std::atomic<bool> g_view{false};
 // The Start menu that opened the page: it opens again when the page closes.
 GameRef g_return_menu = {};
+// Mods was chosen in that menu: the page's open handler closes the menu (a
+// page made on the spot opens a frame later, after its setup).
+bool g_leave_menu = false;
 // The page is open from the Start menu: it holds the hunter as the game's
 // Options page does.
 std::atomic<bool> g_hold_player{false};
@@ -1946,8 +1949,27 @@ bool enter_view(void* unit) {
     return true;
 }
 
+// The page opened from the Start menu: the menu closes, the game stays in
+// menu mode (a child page open) and the page holds the hunter.
+void leave_start_menu() {
+    void* menu = game_ref_alive(g_return_menu);
+    if (menu == nullptr) {
+        return;
+    }
+    g_hold_player.store(true, std::memory_order_relaxed);
+    field<std::uint8_t>(menu, game::kStartMenuChildOpen) = 1;
+    gui_request_close(menu);
+}
+
 // CMFM's page, vtable slot 90: the open handler.
 std::uint64_t page_open(void* unit) {
+    // Kept while open: a scene change then closes it the game's way (message
+    // 75, slot 72: the close handler runs) instead of killing it.
+    page_keep(unit, true);
+    if (g_leave_menu) {
+        g_leave_menu = false;
+        leave_start_menu();
+    }
     if (g_view.exchange(false, std::memory_order_acq_rel)) {
         menu::service_closed();  // the close handler did not run
     }
@@ -1978,6 +2000,10 @@ std::uint64_t page_open(void* unit) {
 // closing (also when the game forces pages shut at a scene change). The rows
 // stay on screen while the page closes; the next open fills it again.
 std::uint64_t page_close(void* unit) {
+    // Not kept once closing: a page opened from the Start menu is then killed
+    // by the game when it has closed (kGuiStateKillOnClose) and leaves sMhGUI's
+    // unit list; the title's page dies with the title scene.
+    page_keep(unit, false);
     const std::uint64_t result = page_next(game::kSlotClose)(unit);
     g_hold_player.store(false, std::memory_order_relaxed);  // slot 81 stops running here too
     g_mod_list.store(nullptr, std::memory_order_release);
@@ -2717,35 +2743,40 @@ void* mods_page_ensure() {
         return nullptr;
     }
     ++g_pages_created;
-    logf(AL_LOG_INFO, "Mods page: CMFM's page made (unit %p, page %u, kept for the session)", page, g_pages_created);
+    logf(AL_LOG_INFO, "Mods page: CMFM's page made (unit %p, page %u)", page, g_pages_created);
     return page;
 }
 
 bool mods_page_open_from_start_menu(void* menu) {
-    if (!g_ready.load(std::memory_order_acquire)) {
-        return false;
-    }
-    void* page = page_alive();
-    if (page == nullptr || !unit_running(page) || menu == nullptr ||
+    if (!g_ready.load(std::memory_order_acquire) || menu == nullptr ||
         field<std::uintptr_t>(menu, 0) != g_env.base + game::kRvaStartMenuVtable) {
         return false;
     }
+    // In game the page lives only while it is open: made now (it opens after
+    // its setup, on a later frame) and killed by the game when it has closed,
+    // so it never sits in sMhGUI's unit list while Mods is closed.
+    const bool made = page_alive() == nullptr;
+    void* page = mods_page_ensure();
+    if (page == nullptr || !unit_alive(page)) {
+        return false;
+    }
+    field<std::uint32_t>(page, game::kGuiState) |= game::kGuiStateKillOnClose;
     // What the Start menu's own Options action (onItemAction case 71) does,
     // with CMFM's page for the game's Options page: open the page, mark a page
     // of the menu's own as open (the game stays in menu mode, so the hunter
-    // does not move; sMhGUI+83664) and close the menu. The page's close
-    // handler opens the menu again.
+    // does not move; sMhGUI+83664) and close the menu, the last two when the
+    // page opens (leave_start_menu). The page's close handler opens the menu
+    // again.
     field<std::int32_t>(menu, game::kStartMenuDialog) = game::kStartMenuNoDialog;
-    g_hold_player.store(true, std::memory_order_relaxed);
-    gui_request_open(page, nullptr);
-    game_ref_set(g_return_menu, menu);
-    field<std::uint8_t>(menu, game::kStartMenuChildOpen) = 1;
-    gui_request_close(menu);
     field<std::int32_t>(menu, game::kStartMenuAction) = -1;
+    game_ref_set(g_return_menu, menu);
+    g_leave_menu = true;
+    gui_request_open(page, nullptr);
     ++g_opened_in_game;
-    logf(AL_LOG_INFO, "Start menu: Mods opens CMFM's page");
+    logf(AL_LOG_INFO, "Start menu: Mods opens CMFM's page%s", made ? " (made now, released when it closes)" : "");
     return true;
 }
+
 
 const char* mods_page_text(void* message_file_ptr, std::uint32_t id) {
     if (!g_view.load(std::memory_order_relaxed)) {
@@ -2783,6 +2814,7 @@ void mods_page_restore(const Env&) {
     }
     restore_tables();
     game_ref_set(g_return_menu, nullptr);
+    g_leave_menu = false;
     release_categories();
     page_release();
     logf(AL_LOG_INFO, "Mods page: done; %u page(s) made, opened from the Start menu %u time(s)", g_pages_created,
