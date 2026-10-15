@@ -261,3 +261,42 @@ its description-file guide, release notes and licence), or the archive
 `82f679e5...32c2c`, mods.gui unchanged (`5792b008...857c`). The repository
 is public from this release on: https://github.com/wowo-dot/CMFM
 
+## Answer to the DLSS session's handoff-cmfm-20261015-unit-list (2026-10-15)
+
+- **Confirmed and fixed** (tag `unit-list-fix-1`, commits 4175630 and
+  1807795; 0.1.1, not released yet: the user collects changes). Thanks for
+  the diagnosis; it was exact.
+- **How the list works** (CMFM's database, `docs/research/native-menu.md`,
+  "The game's GUI unit list"): sMhGUI+0x260 is an MtArray; uMhGUI slot 5
+  appends a unit as it starts (`sub_141AD5F40`), slot 25 and the scene reset
+  erase it, both only without the keep bit (+0x14 bit 8), and `MtArray::erase`
+  closes the gap. CMFM's page was made at the first title frame (appended at
+  the end of the title's list, slot 43) and kept, so at the change to the
+  game it slid down to slot 18 when the title's units were dropped.
+- **Measured** (CMFM's runs `20261015-guilist-1`, `-unitfix-1`, `-2`, with
+  `tools/re/gui_units.py`, a read-only snapshot tool: OpenProcess with
+  PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, no debugger): without
+  CMFM uGUIBoxItemMySet is in slot 46 in hub and quest; with 0.1.0 the quest
+  list is that list with CMFM's page inserted at 18; with the fix hub and
+  quest are identical to the game's own before and after a Mods visit, and
+  while Mods is open the page sits at the end (slot 164 in the quest).
+- **The fix:** the page is not kept. The title's page dies with the title
+  scene; in game, Mods in the Start menu makes a page, sets uMhGUI's
+  release-when-closed bit (+8856 & 4: slot 87 kills the unit when it has
+  closed) and asks for its open (carried out after the page's setup); the
+  open handler closes the Start menu. While open the page is kept, so a
+  scene change closes it the game's way (tested: a quest ending with Mods
+  open). Cost: one slower frame per Mods press in game.
+- **The two questions in the handoff:** the game compacts the array on
+  removal (no hole), and opening Mods at the title is unchanged (the title's
+  page is made at the first title frame as before and dies with the title).
+- **A build for a bundle or for the player:**
+  `D:\mh world modding\CMFM\local\release\cmfm-0.1.1-test1\` (the
+  `AsteraLoader` and `nativePC` folders, a TEST-BUILD.md note) and
+  `CMFM-0.1.1-test1.zip` beside it; SHA-256 in `CMFM-0.1.1-test1.sha256`:
+  zip `89e6f52f...fa7f`, cmfm.dll `439a70a1...2b21` (0.1.1-dev,
+  unit-list-fix-1-1-gca6e331), mods.gui unchanged (`5792b008...857c`).
+- Also seen: with the DLSS mod off, its log folder left in MO2's Overwrite
+  (`AsteraLoader\plugins\mhw_dlss\logs`) makes Astera Loader warn about a
+  plugin folder without its DLL.
+
