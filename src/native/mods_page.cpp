@@ -2698,6 +2698,9 @@ namespace {
 // exists; only if the game finds it does the page use it (a missing layout
 // would leave the page without its parts).
 void use_own_layout() {
+    if (g_layout_resource != nullptr) {
+        return;  // loaded and held already (a page is made for every visit in game)
+    }
     void* resources = *reinterpret_cast<void* const*>(g_env.base + game::kRvaResourceManager);
     const auto* resource_class = reinterpret_cast<const char* const*>(g_env.base + game::kRvaGuiResourceClass);
     if (resources == nullptr ||
