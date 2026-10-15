@@ -1282,6 +1282,19 @@ Measuring: `tools/re/gui_units.py` (read only: PROCESS_QUERY_LIMITED_INFORMATION
 (vtable names from CMFM's database, `local/ida/vft_names.json`) and diffs
 two snapshots.
 
+Measured (run `20261015-guilist-1`, CMFM 0.1.0):
+- without CMFM: title 43 units; hub 190 and quest 164, **uGUIBoxItemMySet
+  in slot 46** in both (slots 0-142 shared by hub and quest);
+- with CMFM: at the title the page is **appended at the end** (slot 43),
+  nothing shifted; in the quest the list is the baseline with the page
+  **inserted at slot 18**, exactly (the title's own units are dropped at
+  the scene change and the kept page slides down into their place); slot
+  46 is uGUIBoxItemSell, IN-Q's crash. Opening and closing Mods changes
+  nothing. The DLSS mod adds no GUI unit.
+
+So only the page's surviving the change from title to game shifts the list;
+made on open and released on close it would not.
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
