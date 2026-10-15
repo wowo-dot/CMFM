@@ -1295,6 +1295,19 @@ Measured (run `20261015-guilist-1`, CMFM 0.1.0):
 So only the page's surviving the change from title to game shifts the list;
 made on open and released on close it would not.
 
+**Fixed in 0.1.1** (commits 4175630, 1807795; run `20261015-unitfix-1`): the
+page is not kept. The title's page dies with the title scene; in game, Mods
+in the Start menu makes a page, sets uMhGUI's release-when-closed bit
+(`+8856 & 4`: slot 87, `sub_141FB89B0`, kills the unit when it has closed,
+through cUnit slot 18 / `sUnit::kill`, which refuses kept units) and asks
+for its open, which the game carries out after the page's setup (6-8 ms
+later in the run); the open handler closes the Start menu. While open the
+page is kept (a scene change then closes it through message 75), and the
+close handler clears that. Measured: hub and quest identical to the
+baseline before and after a Mods visit; while Mods is open the page sits
+at the end of the list (slot 164 in the quest) and slot 46 is unchanged.
+The cost: in game the page is built on each Mods press (one slower frame).
+
 ## Answers so far
 
 1. **Can CMFM add a row or a page?** A row in Options: yes in principle,
