@@ -4,6 +4,19 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
+## 0.1.1 (collecting; no release date, the user: "keep it coming")
+
+- **The Mods page no longer shifts the game's GUI unit list** (a player's
+  report: a speedrun tool indexing slot 46 crashed). Not kept: the title's
+  page dies with the title scene; in game made on Mods and released when it
+  closes. Tested (tag `unit-list-fix-1`, runs `20261015-guilist-1`,
+  `20261015-unitfix-1`, `-2`): hub and quest lists identical to the game's
+  own before and after a visit, the page at the end while open, a quest
+  ending with Mods open leaves nothing behind. Cost: one slower frame per
+  Mods press in game. The layout is requested once (no reference per visit).
+- To do: the "category cursor moved to row 0" warning with a single page
+  (the parked row 2 does not exist; cosmetic, also in 0.1.0).
+
 ## Release 0.1.0 (released 2026-10-14; the order agreed with the user, 2026-10-12)
 
 Not a date; the steps in order. Each ends with what it needs from others.
