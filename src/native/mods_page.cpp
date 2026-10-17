@@ -1906,11 +1906,21 @@ bool enter_view(void* unit) {
         menu::service_abort();
         return false;
     }
-    gui_set_row_count(categories, used);
+    // Split mode: the category list is off screen and its cursor stays on the
+    // panel's row (kSplitPanel), the row the game enters the panel from; every
+    // tab object holds the highlighted tab. That row must exist also with fewer
+    // pages: with the Overview and one mod's page (two rows) the game would not
+    // put the cursor there, and the panel never took the focus (no click, no
+    // key; a client mod's report, 2026-10-17).
+    std::uint32_t rows = used;
+    if (mod_list != nullptr && rows < game::kSplitPanel + 1) {
+        rows = static_cast<std::uint32_t>(game::kSplitPanel + 1);
+    }
+    gui_set_row_count(categories, rows);
     for (std::uint32_t t = 0; t < used; ++t) {
         set_row_text(list_row(categories, t), "msg_1", nullptr, model->tab_name(t));
     }
-    if (field<std::uint32_t>(categories, game::kListRowCount) != used) {
+    if (field<std::uint32_t>(categories, game::kListRowCount) != rows) {
         logf(AL_LOG_WARNING, "Mods page: the category list did not shrink");
         g_view.store(false, std::memory_order_release);
         menu::service_abort();
