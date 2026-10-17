@@ -20,13 +20,14 @@
 namespace cmfm::menu {
 
 inline constexpr std::size_t kMaxPages = native::kMaxTabs - 1;  // tab 0 is the status page
-inline constexpr std::uint32_t kMaxTitle = 24;   // bytes; the tab name's space
-inline constexpr std::uint32_t kMaxLabel = 64;
-inline constexpr std::uint32_t kMaxHelp = 200;   // the help line's space
-inline constexpr std::uint32_t kMaxChoice = 32;
-inline constexpr std::uint32_t kMaxUnit = 8;
-inline constexpr std::uint32_t kMaxPlugin = 64;
-inline constexpr std::uint32_t kMaxVersion = 24;  // the page's version in its header
+// Text limits (bytes): cmfm.h's, which cmfm_check.h applies.
+inline constexpr std::uint32_t kMaxTitle = CMFM_MAX_TITLE;  // the tab name's space
+inline constexpr std::uint32_t kMaxLabel = CMFM_MAX_LABEL;
+inline constexpr std::uint32_t kMaxHelp = CMFM_MAX_HELP;  // the help line's space
+inline constexpr std::uint32_t kMaxChoice = CMFM_MAX_CHOICE_NAME;
+inline constexpr std::uint32_t kMaxUnit = CMFM_MAX_UNIT;
+inline constexpr std::uint32_t kMaxPlugin = CMFM_MAX_PLUGIN;
+inline constexpr std::uint32_t kMaxVersion = CMFM_MAX_VERSION;  // the page's version in its header
 inline constexpr std::uint32_t kArrowChoices = 5;     // more open the pick list
 inline constexpr std::uint32_t kMaxListChoices = 14;  // the pick list's rows (btnlist_select)
 
@@ -75,6 +76,7 @@ struct Page {
     cmfm_locked_fn locked = nullptr;  // since 1.1
     std::uint32_t flags = 0;          // since 1.2: CMFM_PAGE_...
     std::string mod;                  // since 1.2; may be empty
+    cmfm_question_fn question = nullptr;  // since 1.3
 };
 
 // A mod in the mod list (since 1.2): the shown pages of one plugin with the
@@ -152,7 +154,8 @@ public:
     // A BUTTON drawn as its label alone, centred and coloured, without a value
     // box (like the game's "Advanced Graphics Settings" row): CMFM's reset row.
     bool is_plain_button(std::uint32_t setting_id) const;
-    const char* button_question(std::uint32_t setting_id) const;  // nullptr: none
+    // nullptr: none; since 1.3 worded by the page's question callback, if any
+    const char* button_question(std::uint32_t setting_id);
     bool press(std::uint32_t setting_id);
     // Locks (the pages' `locked`), read when a page opens and after every
     // change CMFM makes; a locked row refuses changes.
@@ -270,6 +273,7 @@ private:
     std::uint32_t key_waiting_ = 0;  // the KEY row waiting for a key (0: none)
     std::uint32_t log_setting_ = 0;  // the setting whose sets are being coalesced (0: none)
     std::string log_pending_;        // its last value's line, not logged yet
+    std::string question_;           // a BUTTON question the page worded (1.3)
     std::uint32_t log_steps_ = 0;
 };
 

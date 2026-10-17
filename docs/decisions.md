@@ -116,3 +116,18 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     reason ("this CMFM reads description format 1"). Community pages
     such as Fexty's Mod's stay out of the release package for now (kept
     in `examples/config_pages/community/` and the user's own install).
+15. **`cmfm.menu` 1.3: what a client mod asked for** (2026-10-17, from a
+    client mod's feedback; the user: "let's add these too"). Additive, 1.2
+    stays frozen: the header promises that callbacks never overlap and
+    arrive in order (`press` returns before CLOSED; true of CMFM since 1.0);
+    the text limits are defines (`CMFM_MAX_LABEL` and the rest, 1.0's
+    values); `include/cmfm/cmfm_check.h`, header-only C, applies add_page's
+    rules outside the game, and CMFM's own add_page calls it so the two
+    cannot drift; a BUTTON's question can be worded when pressed (an
+    optional page callback `question`, read when `size` covers it; an older
+    CMFM ignores it and asks `confirm`). Plugins should ask for the lowest
+    version they need (1.2 unless they rely on 1.3). Not taken: an event or
+    query for "a game menu is open" (CMFM's hooks do not follow the game's
+    own menus; a candidate signal, the menu bytes every game menu sets each
+    frame, would need its own study).
+

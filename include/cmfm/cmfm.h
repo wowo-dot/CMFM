@@ -1,4 +1,4 @@
-/* CMFM menu interface "cmfm.menu", version 1.2. C ABI, 64-bit Windows.
+/* CMFM menu interface "cmfm.menu", version 1.3. C ABI, 64-bit Windows.
  *
  * CMFM (Configuration Menu For Mods) is an Astera Loader plugin that shows
  * other plugins' settings inside Monster Hunter: World's own menus: "Mods"
@@ -22,7 +22,16 @@
  * only when `size` covers it. Check the table's `size` before calling a
  * function added after the version you built for. A plugin that uses a
  * feature marked "since 1.1" asks for CMFM_MAKE_VERSION(1, 1) (or checks the
- * table's `version`); a CMFM 1.0 refuses pages that use one.
+ * table's `version`); a CMFM 1.0 refuses pages that use one. Ask for the
+ * lowest version whose features you use rather than CMFM_MENU_VERSION: a
+ * plugin built with this header that uses nothing marked "since 1.3" asks
+ * for CMFM_MAKE_VERSION(1, 2), and a CMFM 0.1.0 (1.2) still accepts it. 1.3's
+ * `question` callback may be set in such a page too: an older CMFM does not
+ * read it and shows the setting's `confirm`.
+ * 1.1 and 1.2 are frozen; later versions only add.
+ *
+ * Checking a page outside the game: cmfm_check.h (header-only C) applies the
+ * rules add_page applies.
  *
  * Threads:
  *   - add_page may be called from any thread at any time. A page added while
@@ -30,6 +39,10 @@
  *   - Callbacks run on the game's menu thread while a Mods page is opening,
  *     open or closing. They must return quickly, must not block, must not
  *     throw and must not call add_page. `get` runs every time a row is drawn.
+ *   - Callbacks never run at the same time: CMFM calls them one after another
+ *     on that one thread, never one inside another, in the order the
+ *     player's actions happen. A BUTTON's `press` (after its Yes/No question,
+ *     if any) returns before CMFM sends that page CMFM_EVENT_CLOSED.
  *
  * Memory: strings are UTF-8 and NUL-terminated. CMFM copies the page, its
  * settings and their strings during add_page; free them afterwards if you
@@ -65,7 +78,7 @@ extern "C" {
 #define CMFM_VERSION_MINOR(version) ((uint32_t)(version) & 0xffffu)
 
 #define CMFM_MENU_INTERFACE "cmfm.menu"
-#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 2)
+#define CMFM_MENU_VERSION CMFM_MAKE_VERSION(1, 3)
 
 /* x64 Windows has one calling convention; this names it for readers. */
 #define CMFM_CALL __cdecl
@@ -147,6 +160,19 @@ typedef uint32_t cmfm_flags_t;
 #define CMFM_MAX_CHOICES 32u  /* CHOICE names (and INT/FLOAT values in 1.0) */
 #define CMFM_MAX_STEPS 101u   /* since 1.1: INT/FLOAT values from min to max (the slider's 0-100) */
 #define CMFM_MAX_TEXT 128u    /* bytes CMFM offers get_text, including the NUL */
+/* Text limits in bytes (UTF-8), without the NUL; a text beyond its limit is
+ * refused. As defines since 1.3; the limits are 1.0's (`version`: 1.1, `mod`:
+ * 1.2), so a page built against them suits any CMFM since then. */
+#define CMFM_MAX_PLUGIN 64u       /* cmfm_page_t.plugin */
+#define CMFM_MAX_TITLE 24u        /* cmfm_page_t.title */
+#define CMFM_MAX_MOD 24u          /* cmfm_page_t.mod */
+#define CMFM_MAX_VERSION 24u      /* cmfm_page_t.version */
+#define CMFM_MAX_LABEL 64u        /* cmfm_setting_t.label */
+#define CMFM_MAX_HELP 200u        /* cmfm_page_t.help and cmfm_setting_t.help */
+#define CMFM_MAX_CHOICE_NAME 32u  /* each of cmfm_setting_t.choices */
+#define CMFM_MAX_UNIT 8u          /* cmfm_setting_t.unit */
+#define CMFM_MAX_BUTTON 32u       /* cmfm_setting_t.button */
+#define CMFM_MAX_QUESTION 200u    /* cmfm_setting_t.confirm, and a question from cmfm_question_fn */
 
 typedef struct cmfm_value_t {
     int32_t i;         /* BOOL, CHOICE, INT, KEY */
@@ -174,7 +200,8 @@ typedef struct cmfm_setting_t {
     cmfm_value_t default_value;
     /* Since 1.1 (read when `size` covers them). BUTTON: the text in its value
      * box, e.g. "Reset" (NULL: "Run"), and a question for the game's Yes/No
-     * dialog before pressing, e.g. "Reset every DLSS setting?" (NULL: none). */
+     * dialog before pressing, e.g. "Reset every DLSS setting?" (NULL: none;
+     * since 1.3 the page's `question` callback may word it when pressed). */
     const char* button;
     const char* confirm;
 } cmfm_setting_t;
@@ -227,6 +254,14 @@ typedef uint32_t cmfm_event_t;
  * pages of one mod that share them hear it once (before 1.2, once per page). */
 typedef void(CMFM_CALL* cmfm_event_fn)(void* user, cmfm_event_t event);
 
+/* Since 1.3. A BUTTON that has a `confirm` question was pressed: write the
+ * question as it should read now into `text` (`text_size` bytes including the
+ * NUL; CMFM shows at most CMFM_MAX_QUESTION bytes) and return CMFM_OK, e.g.
+ * a duration worked out from the plugin's current settings. Anything else,
+ * or an empty text, shows the setting's `confirm`. A button without a
+ * `confirm` asks nothing and is not passed here. */
+typedef cmfm_result_t(CMFM_CALL* cmfm_question_fn)(void* user, uint32_t id, char* text, uint32_t text_size);
+
 typedef struct cmfm_page_t {
     uint32_t size;      /* sizeof(cmfm_page_t) */
     uint32_t reserved;  /* 0 */
@@ -257,6 +292,8 @@ typedef struct cmfm_page_t {
      * page. Pages of one plugin with the same name (or all without one) form
      * one mod; a plugin may make several mods with different names. */
     const char* mod;
+    /* Since 1.3. */
+    cmfm_question_fn question; /* may be NULL: every question is its `confirm` */
 } cmfm_page_t;
 
 typedef struct cmfm_menu_t {

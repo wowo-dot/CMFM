@@ -1,6 +1,7 @@
 #include "menu/keys.hpp"
 
 #include "cmfm/cmfm.h"
+#include "cmfm/cmfm_check.h"
 
 #include <cctype>
 #include <cstdio>
@@ -10,7 +11,6 @@ namespace cmfm::menu {
 
 namespace {
 
-constexpr std::uint32_t kKeyBits = 0xFFu | CMFM_KEY_CTRL | CMFM_KEY_SHIFT | CMFM_KEY_ALT;
 
 KeyCharFn g_key_chars = nullptr;
 
@@ -181,25 +181,13 @@ std::uint32_t dik_from_vk(std::uint32_t vk) {
     return 0;
 }
 
+// The rules are cmfm_check.h's (plugins check their defaults with them).
 bool key_bindable(std::uint32_t vk) {
-    switch (vk) {
-        case 0x00:
-        case 0x01:  // left mouse button
-        case 0x02:  // right mouse button
-        case 0x10:  // Shift, Ctrl, Alt
-        case 0x11:
-        case 0x12:
-        case 0x5B:  // Windows keys
-        case 0x5C:
-            return false;
-        default:
-            return vk <= 0xFE && !(vk >= 0xA0 && vk <= 0xA5);  // left and right Shift, Ctrl, Alt
-    }
+    return cmfm_check_key_code(vk) != 0;
 }
 
 bool key_valid(std::int32_t key) {
-    const auto k = static_cast<std::uint32_t>(key);
-    return key == 0 || ((k & ~kKeyBits) == 0 && key_bindable(CMFM_KEY_VK(k)));
+    return cmfm_check_key(key) != 0;
 }
 
 bool keys_overlap(std::int32_t a, std::int32_t b) {

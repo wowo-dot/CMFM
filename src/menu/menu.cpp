@@ -1,5 +1,6 @@
 #include "menu/menu.hpp"
 
+#include "cmfm/cmfm_check.h"
 #include "menu/keys.hpp"
 
 #include <cmath>
@@ -20,8 +21,6 @@ constexpr char kRestartNote[] = "Takes effect after restarting the game.";
 constexpr char kButtonText[] = "Run";
 // The structs as cmfm.menu 1.0 defined them: anything a plugin passes must be
 // at least this big; later fields are read only when `size` covers them.
-constexpr std::size_t kPageSize10 = offsetof(cmfm_page_t, press);
-constexpr std::size_t kSettingSize10 = offsetof(cmfm_setting_t, button);
 // Section headings in the game's own text colour tags (as its message files
 // write them).
 constexpr char kSectionStart[] = "<STYL MOJI_YELLOW_DEFAULT>";
@@ -41,24 +40,6 @@ const char* const kDash[] = {"-"};
 const char* const kNoValue[] = {""};
 const native::RowSpec kEmptyRow = {"Empty", "No mod uses this tab.", kDash, 1, 0};
 
-// A string of 1..limit bytes (or 0..limit when empty is allowed).
-bool text_ok(const char* s, std::uint32_t limit, bool may_be_empty, std::string& out) {
-    if (s == nullptr) {
-        if (!may_be_empty) {
-            return false;
-        }
-        out.clear();
-        return true;
-    }
-    const std::size_t n = strnlen(s, limit + 1);
-    if (n > limit || (n == 0 && !may_be_empty)) {
-        return false;
-    }
-    out.assign(s, n);
-    return true;
-}
-
-bool whole(double v) { return std::isfinite(v) && v == std::floor(v) && std::fabs(v) <= 2147483647.0; }
 
 // Values from min to max in steps of step.
 std::uint32_t range_count(double min, double max, double step) {
@@ -113,233 +94,80 @@ cmfm_value_t value_at(const Setting& s, std::uint32_t k) {
     return v;
 }
 
-bool copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s, std::string& why) {
-    char b[160];
-    const auto fail = [&](const char* what) {
-        std::snprintf(b, sizeof b, "setting %u: %s", in.id, what);
-        why = b;
-        return false;
-    };
+// A setting cmfm_check_setting accepted, copied; `size` is the array's stride.
+void copy_setting(const cmfm_setting_t& in, std::size_t size, Setting& s) {
     s.id = in.id;
     s.type = in.type;
     s.flags = in.flags;
-    if (!text_ok(in.label, kMaxLabel, false, s.label)) {
-        return fail("label missing or longer than 64 bytes");
-    }
-    if (!text_ok(in.help, kMaxHelp, true, s.help)) {
-        return fail("help longer than 200 bytes");
-    }
-    if ((in.flags &
-         ~(CMFM_FLAG_RESTART | CMFM_FLAG_LIST | CMFM_FLAG_ARROWS | CMFM_FLAG_HIDE_LOCKED | CMFM_FLAG_LIVE)) != 0) {
-        return fail("unknown flags");
-    }
-    if ((in.flags & CMFM_FLAG_LIVE) != 0 && in.type != CMFM_TYPE_TEXT) {
-        return fail("LIVE is for TEXT settings");
-    }
-    if ((in.flags & (CMFM_FLAG_LIST | CMFM_FLAG_ARROWS)) != 0 && in.type != CMFM_TYPE_CHOICE) {
-        return fail("LIST and ARROWS are for CHOICE settings");
-    }
-    if ((in.flags & CMFM_FLAG_LIST) != 0 && (in.flags & CMFM_FLAG_ARROWS) != 0) {
-        return fail("LIST and ARROWS together");
-    }
+    s.label = in.label;
+    s.help = in.help != nullptr ? in.help : "";
     s.default_value = in.default_value;
+    s.value_count = 1;
     switch (in.type) {
         case CMFM_TYPE_BOOL:
             s.value_count = 2;
-            if (in.default_value.i != 0 && in.default_value.i != 1) {
-                return fail("default is not 0 or 1");
-            }
-            return true;
+            break;
         case CMFM_TYPE_CHOICE:
-            if (in.choices == nullptr || in.choice_count == 0 || in.choice_count > CMFM_MAX_CHOICES) {
-                return fail("needs 1 to 32 choices");
-            }
-            s.choices.resize(in.choice_count);
-            for (std::uint32_t c = 0; c < in.choice_count; ++c) {
-                if (!text_ok(in.choices[c], kMaxChoice, false, s.choices[c])) {
-                    return fail("a choice name is missing or longer than 32 bytes");
-                }
-            }
+            s.choices.assign(in.choices, in.choices + in.choice_count);
             s.value_count = in.choice_count;
-            if (in.default_value.i < 0 || static_cast<std::uint32_t>(in.default_value.i) >= in.choice_count) {
-                return fail("default is not one of the choices");
-            }
-            return true;
+            break;
         case CMFM_TYPE_INT:
-        case CMFM_TYPE_FLOAT: {
-            const bool is_int = in.type == CMFM_TYPE_INT;
-            if (!std::isfinite(in.min) || !std::isfinite(in.max) || !std::isfinite(in.step) || in.step <= 0 ||
-                in.min > in.max) {
-                return fail("needs min <= max and step > 0");
-            }
-            if (is_int && (!whole(in.min) || !whole(in.max) || !whole(in.step))) {
-                return fail("INT needs whole min, max and step");
-            }
-            if (!is_int && in.decimals > 3) {
-                return fail("decimals above 3");
-            }
-            if ((in.max - in.min) / in.step + 1 > CMFM_MAX_STEPS + 0.5) {
-                return fail("more than 101 values (the slider has positions 0 to 100)");
-            }
-            if (!text_ok(in.unit, kMaxUnit, true, s.unit)) {
-                return fail("unit longer than 8 bytes");
-            }
+        case CMFM_TYPE_FLOAT:
             s.min = in.min;
             s.max = in.max;
             s.step = in.step;
-            s.decimals = is_int ? 0 : in.decimals;
+            s.decimals = in.type == CMFM_TYPE_INT ? 0 : in.decimals;
+            s.unit = in.unit != nullptr ? in.unit : "";
             s.value_count = range_count(in.min, in.max, in.step);
-            const double d = is_int ? in.default_value.i : in.default_value.f;
-            if (!(d >= in.min - 1e-9 && d <= in.max + 1e-9)) {
-                return fail("default outside min..max");
-            }
-            return true;
-        }
-        case CMFM_TYPE_TEXT:
-            s.value_count = 1;
-            return true;
+            break;
         case CMFM_TYPE_SECTION:
-            if ((in.flags & ~CMFM_FLAG_HIDE_LOCKED) != 0) {
-                return fail("a SECTION takes no flags but HIDE_LOCKED");
-            }
-            s.value_count = 1;
             s.help.clear();
-            return true;
-        case CMFM_TYPE_KEY:
-            if ((in.flags & ~(CMFM_FLAG_RESTART | CMFM_FLAG_HIDE_LOCKED)) != 0) {
-                return fail("a KEY takes no flags but RESTART and HIDE_LOCKED");
-            }
-            if (!key_valid(in.default_value.i)) {
-                return fail("default is not a key (a virtual-key code with CMFM_KEY_* modifiers, or 0)");
-            }
-            s.value_count = 1;
-            return true;
+            break;
         case CMFM_TYPE_BUTTON: {
-            if ((in.flags & ~CMFM_FLAG_HIDE_LOCKED) != 0) {
-                return fail("a BUTTON takes no flags but HIDE_LOCKED");
-            }
             const bool sized = size >= offsetof(cmfm_setting_t, confirm) + sizeof in.confirm;
-            if (!text_ok(sized ? in.button : nullptr, kMaxChoice, true, s.button)) {
-                return fail("button text longer than 32 bytes");
-            }
-            if (s.button.empty()) {
-                s.button = kButtonText;
-            }
-            if (!text_ok(sized ? in.confirm : nullptr, kMaxHelp, true, s.confirm)) {
-                return fail("confirm question longer than 200 bytes");
-            }
-            s.value_count = 1;
-            return true;
+            s.button = sized && in.button != nullptr && in.button[0] != '\0' ? in.button : kButtonText;
+            s.confirm = sized && in.confirm != nullptr ? in.confirm : "";
+            break;
         }
-        default:
-            return fail("unknown type");
+        default:  // TEXT, KEY
+            break;
     }
 }
 
 }  // namespace
 
 bool copy_page(const cmfm_page_t* page, Page& out, std::string& why) {
-    if (page == nullptr || page->size < kPageSize10) {
-        why = "no page, or a page smaller than cmfm.menu 1.0's";
+    // The rules are cmfm_check.h's, the header plugins use to check their
+    // pages outside the game, so the two cannot drift apart.
+    char reason[256] = {};
+    if (cmfm_check_page(page, reason, sizeof reason) != CMFM_OK) {
+        why = reason;
         return false;
     }
-    if (!text_ok(page->plugin, kMaxPlugin, false, out.plugin)) {
-        why = "plugin name missing or longer than 64 bytes";
-        return false;
-    }
-    if (!text_ok(page->title, kMaxTitle, false, out.title)) {
-        why = "title missing or longer than 24 bytes";
-        return false;
-    }
-    if (!text_ok(page->help, kMaxHelp, true, out.help)) {
-        why = "page help longer than 200 bytes";
-        return false;
-    }
-    if (page->settings == nullptr || page->setting_count == 0 || page->setting_count > CMFM_MAX_SETTINGS) {
-        why = "needs 1 to 1024 settings";
-        return false;
-    }
+    out.plugin = page->plugin;
+    out.title = page->title;
+    out.help = page->help != nullptr ? page->help : "";
     const std::uint32_t stride = page->settings[0].size;
-    if (stride < kSettingSize10) {
-        why = "settings smaller than cmfm.menu 1.0's";
-        return false;
-    }
     const char* base = reinterpret_cast<const char*>(page->settings);
-    bool any_value = false;
-    bool any_text = false;
-    bool any_button = false;
     out.settings.resize(page->setting_count);
     for (std::uint32_t i = 0; i < page->setting_count; ++i) {
-        const auto* in = reinterpret_cast<const cmfm_setting_t*>(base + std::size_t{i} * stride);
-        if (in->size != stride) {
-            why = "settings of different sizes in one array";
-            return false;
-        }
-        if (!copy_setting(*in, stride, out.settings[i], why)) {
-            return false;
-        }
-        if (in->id >= CMFM_RESERVED_IDS) {
-            why = "setting " + std::to_string(in->id) + ": ids from 0xFFFFFF00 are CMFM's";
-            return false;
-        }
-        for (std::uint32_t j = 0; j < i; ++j) {
-            if (out.settings[j].id == in->id) {
-                why = "setting " + std::to_string(in->id) + ": id used twice";
-                return false;
-            }
-        }
-        if (in->type == CMFM_TYPE_TEXT) {
-            any_text = true;
-        } else if (in->type == CMFM_TYPE_BUTTON) {
-            any_button = true;
-        } else if (in->type != CMFM_TYPE_SECTION) {
-            any_value = true;
-        }
+        copy_setting(*reinterpret_cast<const cmfm_setting_t*>(base + std::size_t{i} * stride), stride, out.settings[i]);
     }
-    if (!any_value && !any_text && !any_button) {
-        why = "needs a setting besides its sections";
-        return false;
-    }
-    if (any_value && (page->get == nullptr || page->set == nullptr)) {
-        why = "get and set callbacks needed";
-        return false;
-    }
-    if (any_text && page->get_text == nullptr) {
-        why = "get_text callback needed for TEXT settings";
-        return false;
-    }
-    const std::uint32_t flags = page->size >= offsetof(cmfm_page_t, flags) + sizeof page->flags ? page->flags : 0;
-    if ((flags & ~CMFM_PAGE_NO_RESET) != 0) {
-        why = "unknown page flags";
-        return false;
-    }
-    out.flags = flags;
-    const char* mod = page->size >= offsetof(cmfm_page_t, mod) + sizeof page->mod ? page->mod : nullptr;
-    if (!text_ok(mod, kMaxTitle, true, out.mod)) {
-        why = "mod name longer than 24 bytes";
-        return false;
-    }
-    const char* version =
-        page->size >= offsetof(cmfm_page_t, version) + sizeof page->version ? page->version : nullptr;
-    if (!text_ok(version, kMaxVersion, true, out.version)) {
-        why = "version longer than 24 bytes";
-        return false;
-    }
-    const cmfm_press_fn press = page->size >= offsetof(cmfm_page_t, press) + sizeof page->press ? page->press : nullptr;
-    const cmfm_locked_fn locked =
-        page->size >= offsetof(cmfm_page_t, locked) + sizeof page->locked ? page->locked : nullptr;
-    if (any_button && press == nullptr) {
-        why = "press callback needed for BUTTON settings";
-        return false;
-    }
+    const auto has = [page](std::size_t offset, std::size_t field_size) { return page->size >= offset + field_size; };
+    out.flags = has(offsetof(cmfm_page_t, flags), sizeof page->flags) ? page->flags : 0;
+    const char* mod = has(offsetof(cmfm_page_t, mod), sizeof page->mod) ? page->mod : nullptr;
+    out.mod = mod != nullptr ? mod : "";
+    const char* version = has(offsetof(cmfm_page_t, version), sizeof page->version) ? page->version : nullptr;
+    out.version = version != nullptr ? version : "";
     out.user = page->user;
     out.get = page->get;
     out.set = page->set;
     out.validate = page->validate;
     out.get_text = page->get_text;
     out.on_event = page->on_event;
-    out.press = press;
-    out.locked = locked;
+    out.press = has(offsetof(cmfm_page_t, press), sizeof page->press) ? page->press : nullptr;
+    out.locked = has(offsetof(cmfm_page_t, locked), sizeof page->locked) ? page->locked : nullptr;
+    out.question = has(offsetof(cmfm_page_t, question), sizeof page->question) ? page->question : nullptr;
     return true;
 }
 
@@ -621,13 +449,35 @@ bool Menu::is_plain_button(std::uint32_t setting_id) const {
     return r != nullptr && pages_[r->page].settings[r->setting].id == kResetId;
 }
 
-const char* Menu::button_question(std::uint32_t setting_id) const {
+const char* Menu::button_question(std::uint32_t setting_id) {
     const Row* r = any_setting_row(setting_id);
     if (r == nullptr) {
         return nullptr;
     }
-    const Setting& s = pages_[r->page].settings[r->setting];
-    return s.type == CMFM_TYPE_BUTTON && !s.confirm.empty() ? s.confirm.c_str() : nullptr;
+    const Page& p = pages_[r->page];
+    const Setting& s = p.settings[r->setting];
+    if (s.type != CMFM_TYPE_BUTTON || s.confirm.empty()) {
+        return nullptr;
+    }
+    // Since 1.3 the page may word the question now.
+    if (p.question != nullptr) {
+        char text[CMFM_MAX_QUESTION + 64] = {};
+        if (p.question(p.user, s.id, text, sizeof text) == CMFM_OK) {
+            text[sizeof text - 1] = '\0';
+            std::size_t n = strnlen(text, sizeof text);
+            if (n > CMFM_MAX_QUESTION) {
+                n = CMFM_MAX_QUESTION;
+                while (n > 0 && (static_cast<unsigned char>(text[n]) & 0xC0) == 0x80) {
+                    --n;  // not inside a UTF-8 character
+                }
+            }
+            if (n > 0) {
+                question_.assign(text, n);
+                return question_.c_str();
+            }
+        }
+    }
+    return s.confirm.c_str();
 }
 
 bool Menu::press(std::uint32_t setting_id) {

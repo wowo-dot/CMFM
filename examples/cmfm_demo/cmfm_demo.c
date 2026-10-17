@@ -17,6 +17,7 @@
  */
 #include "al/al_plugin.h"
 #include "cmfm/cmfm.h"
+#include "cmfm/cmfm_check.h" /* add_page's rules, to check pages first */
 
 #include <stddef.h>
 #include <stdio.h>
@@ -222,6 +223,17 @@ static cmfm_result_t CMFM_CALL demo_press(void* user, uint32_t id) {
     return CMFM_OK;
 }
 
+/* Since cmfm.menu 1.3: the button's question, worded when it is pressed (an
+ * older CMFM ignores this callback and shows the setting's `confirm`). */
+static cmfm_result_t CMFM_CALL demo_question(void* user, uint32_t id, char* text, uint32_t text_size) {
+    (void)user;
+    if (id != ID_PRESET) {
+        return CMFM_ERROR;
+    }
+    snprintf(text, text_size, "Apply the demo's High preset? (Demo percent is %d%% now.)", g_values.percent);
+    return CMFM_OK;
+}
+
 /* Since cmfm.menu 1.1: Demo scale can be changed only while Demo toggle is on
  * (greyed). Since 1.2: each upscaler's setting only with that upscaler (its
  * rows have CMFM_FLAG_HIDE_LOCKED, so they hide instead of greying). */
@@ -363,7 +375,7 @@ static const char* const kXessQualities[] = {"Ultra quality", "Quality", "Balanc
 
 static void add_page(void) {
     const cmfm_menu_t* menu =
-        (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MENU_VERSION);
+        (const cmfm_menu_t*)g_api->get_interface(g_self, CMFM_MENU_INTERFACE, CMFM_MAKE_VERSION(1, 2));
     cmfm_setting_t s[DEMO_SETTINGS];
     cmfm_page_t page;
     char why[200];
@@ -543,6 +555,14 @@ static void add_page(void) {
             page.on_event = demo_event;
             page.press = demo_press;
             page.locked = demo_locked;
+            page.question = demo_question; /* since 1.3 */
+            /* cmfm_check.h: the reason CMFM would give, before asking it. */
+            if (cmfm_check_page(&page, why, sizeof why) != CMFM_OK) {
+                char line[256];
+                snprintf(line, sizeof line, "the page %s does not pass cmfm_check_page: %s", kPages[p].title, why);
+                logline(AL_LOG_WARNING, line);
+                return;
+            }
             /* CMFM copies the page: the local arrays may go away after this. */
             if (menu->add_page(&page, why, sizeof why) == 0) {
                 char line[256];

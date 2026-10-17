@@ -1,4 +1,5 @@
 // Unit tests for cmfm::menu (the cmfm.menu core) with a fake plugin.
+#include "cmfm/cmfm_check.h"
 #include "menu/keys.hpp"
 #include "menu/menu.hpp"
 
@@ -717,6 +718,95 @@ void presses_buttons() {
     check(refused(page_of(bad), "press"), "a 1.0-sized page cannot carry press");
 }
 
+// The question callback (1.3): what the page writes, else `confirm`.
+int g_question_calls = 0;
+const char* g_question_text = "";
+cmfm_result_t g_question_result = CMFM_OK;
+cmfm_result_t CMFM_CALL fake_question(void*, std::uint32_t, char* text, std::uint32_t size) {
+    ++g_question_calls;
+    std::snprintf(text, size, "%s", g_question_text);
+    return g_question_result;
+}
+
+void words_button_questions() {
+    static OptionsModel model;
+    Fake f;
+    Demo d = demo_page(&f);
+    d.settings[4] = setting(kStatus, CMFM_TYPE_BUTTON, "Run");
+    d.settings[4].confirm = "Run for about 4 minutes?";
+    d.settings[5] = setting(kRestart, CMFM_TYPE_BUTTON, "Plain");  // no question
+    d.page.press = fake_press;
+    d.page.question = fake_question;
+    Menu m;
+    check(add(m, page_of(d)), "a 1.3 page with a question callback is valid");
+    std::string why;
+    m.build(model, why);
+    const std::uint32_t run = id(find(model, 1, "Run"));
+    const std::uint32_t plain = id(find(model, 1, "Plain"));
+    g_question_text = "Run for about 7 minutes?";
+    check(same(m.button_question(run), "Run for about 7 minutes?") && g_question_calls == 1,
+          "the page words the question when pressed");
+    g_question_result = CMFM_ERROR;
+    check(same(m.button_question(run), "Run for about 4 minutes?"), "a failed callback: confirm");
+    g_question_result = CMFM_OK;
+    g_question_text = "";
+    check(same(m.button_question(run), "Run for about 4 minutes?"), "an empty text: confirm");
+    const int calls = g_question_calls;
+    check(m.button_question(plain) == nullptr && g_question_calls == calls,
+          "a button without confirm asks nothing and is not passed to the callback");
+    // Cut at CMFM_MAX_QUESTION bytes, not inside a UTF-8 character.
+    std::string longer(CMFM_MAX_QUESTION - 1, 'a');
+    longer += "\xC3\xA9 tail";  // a two-byte character across the limit
+    g_question_text = longer.c_str();
+    const char* q = m.button_question(run);
+    check(q != nullptr && std::strlen(q) == CMFM_MAX_QUESTION - 1, "a long question is cut on a character boundary");
+    g_question_text = "";
+
+    // A 1.2-sized page: the callback field is not read.
+    Demo old = demo_page(&f);
+    old.settings[4] = d.settings[4];
+    old.page.press = fake_press;
+    old.page.question = fake_question;
+    old.page.size = offsetof(cmfm_page_t, question);
+    Menu m2;
+    check(add(m2, page_of(old)), "a 1.2-sized page");
+    m2.build(model, why);
+    const int before = g_question_calls;
+    check(same(m2.button_question(id(find(model, 1, "Run"))), "Run for about 4 minutes?") &&
+              g_question_calls == before,
+          "a 1.2 page's question is its confirm");
+}
+
+// cmfm_check.h on its own: the same verdict and reason as add_page.
+void checks_pages_outside_the_game() {
+    Fake f;
+    Demo d = demo_page(&f);
+    char why[160] = "x";
+    check(cmfm_check_page(&page_of(d), why, sizeof why) == CMFM_OK && why[0] == '\0', "the demo page passes");
+    Demo bad = demo_page(&f);
+    bad.settings[2].max = 1010;  // 102 values
+    Page copy;
+    std::string reason;
+    check(cmfm_check_page(&page_of(bad), why, sizeof why) == CMFM_ERROR && !copy_page(&page_of(bad), copy, reason) &&
+              reason == why && reason.find("setting 12:") == 0 && reason.find("101 values") != std::string::npos,
+          "the check's reason is add_page's");
+    check(cmfm_check_page(nullptr, nullptr, 0) == CMFM_ERROR, "no page, no buffer");
+    check(cmfm_check_page(&page_of(bad), why, 8) == CMFM_ERROR && std::strlen(why) == 7, "a small buffer is cut");
+    std::string label(CMFM_MAX_LABEL, 'L');
+    Demo edge = demo_page(&f);
+    edge.settings[0].label = label.c_str();
+    check(cmfm_check_page(&page_of(edge), why, sizeof why) == CMFM_OK, "a label of exactly CMFM_MAX_LABEL bytes");
+    label += 'L';
+    edge.settings[0].label = label.c_str();
+    check(cmfm_check_page(&page_of(edge), why, sizeof why) == CMFM_ERROR, "one byte more is refused");
+    check(cmfm_check_key(0) && cmfm_check_key(0x75) && cmfm_check_key(CMFM_KEY_CTRL | 'P') &&
+              !cmfm_check_key(0x01) && !cmfm_check_key(0x10) && !cmfm_check_key(0x800 | 'P') &&
+              key_valid(CMFM_KEY_ALT | 0x70) == (cmfm_check_key(CMFM_KEY_ALT | 0x70) != 0),
+          "key values: the check and CMFM's own rule agree");
+    static_assert(CMFM_MAX_HELP == kMaxHelp && CMFM_MAX_TITLE == kMaxTitle && CMFM_MAX_LABEL == kMaxLabel,
+                  "CMFM's limits are the header's");
+}
+
 void locks_rows() {
     static OptionsModel model;
     Fake f;
@@ -1215,6 +1305,8 @@ int main() {
     resets_a_page();
     names_keys();
     binds_keys();
+    words_button_questions();
+    checks_pages_outside_the_game();
     groups_pages_into_mods();
     holds_long_pages();
     coalesces_dragged_values();

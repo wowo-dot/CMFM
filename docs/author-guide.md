@@ -12,7 +12,7 @@ Your config file stays the source of truth. CMFM stores none of your
 values, so a broken or missing CMFM can never touch them, and players can
 keep editing your ini by hand.
 
-The interface is `include/cmfm/cmfm.h` (`cmfm.menu` 1.2, plain C). Its
+The interface is `include/cmfm/cmfm.h` (`cmfm.menu` 1.3, plain C). Its
 comments are the reference; this guide is the walk-through. The example
 plugin `examples/cmfm_demo/cmfm_demo.c` uses every feature. CMFM runs on
 Astera Loader 0.2.0 or newer.
@@ -44,10 +44,14 @@ if (menu == NULL) {
   first CMFM publishes, 1.2 adds the features marked "since 1.2" in the
   header (rows that hide, live lines, key bindings, CMFM's reset row,
   pages of up to 1024 settings, no shared limits between mods, several
-  pages as one mod). 1.1 and 1.2 are frozen (they will not change).
+  pages as one mod), 1.3 a BUTTON question your page words when the button
+  is pressed (`question`). 1.1 and 1.2 are frozen (they will not change).
   Within a major version CMFM only adds: later CMFMs keep accepting your
   pages, and an older CMFM returns NULL when you ask for more than it
-  has.
+  has. Ask for the lowest version you need, not `CMFM_MENU_VERSION`: with
+  the 1.3 header and no 1.3 feature, ask for `CMFM_MAKE_VERSION(1, 2)` and
+  CMFM 0.1.0 still takes your pages. The 1.3 `question` callback may be set
+  anyway: an older CMFM does not read it and asks the setting's `confirm`.
 
 ## 2. Describing your page
 
@@ -143,15 +147,19 @@ at run time goes through the callbacks (values, TEXT lines, locks).
 
 ### Limits (a page beyond them is refused, with the reason)
 
+The text limits are defines in `cmfm.h` since 1.3 (the limits themselves
+are 1.0's), so you can check your texts with `static_assert`s; texts are
+bytes of UTF-8 without the NUL.
+
 | What | Limit |
 |---|---|
-| settings per page | 1 to 1024 (headings count; 24 before 1.2) |
-| plugin name / title / version / mod name | 64 / 24 / 24 / 24 bytes |
-| label / help | 64 / 200 bytes |
-| CHOICE names | 1 to 32, each 32 bytes at most |
-| INT/FLOAT values | (max - min) / step + 1, at most 101; INT needs whole min, max, step |
-| unit | 8 bytes |
-| BUTTON text / question | 32 / 200 bytes |
+| settings per page | 1 to 1024, `CMFM_MAX_SETTINGS` (headings count; 24 before 1.2) |
+| plugin name / title / version / mod name | 64 / 24 / 24 / 24 bytes: `CMFM_MAX_PLUGIN`, `_TITLE`, `_VERSION`, `_MOD` |
+| label / help | 64 / 200 bytes: `CMFM_MAX_LABEL`, `CMFM_MAX_HELP` |
+| CHOICE names | 1 to 32 (`CMFM_MAX_CHOICES`), each 32 bytes at most (`CMFM_MAX_CHOICE_NAME`) |
+| INT/FLOAT values | (max - min) / step + 1, at most 101 (`CMFM_MAX_STEPS`); INT needs whole min, max, step |
+| unit | 8 bytes, `CMFM_MAX_UNIT` |
+| BUTTON text / question | 32 / 200 bytes: `CMFM_MAX_BUTTON`, `CMFM_MAX_QUESTION` |
 | pages shown | 1024 (more are listed on the Overview as not shown; 24 before 1.2) |
 | all pages together | no shared limit since 1.2 (one mod's page never pushes out another's) |
 
@@ -169,6 +177,12 @@ All run on the **game's menu thread** while a Mods page is opening, open or
 closing. They must return quickly, must not block or throw, and must not
 call `add_page`. `get` runs every time a row is drawn.
 
+They **never overlap**: CMFM calls them one after another on that one
+thread, never one inside another, in the order the player's actions happen.
+A BUTTON's `press` (after its Yes/No question) returns before CMFM sends
+that page `CMFM_EVENT_CLOSED`, so state `press` sets is in place when CLOSED
+arrives (the header promises this since 1.3; CMFM has always worked so).
+
 | Callback | Required | When | You do |
 |---|---|---|---|
 | `get(user, id, value)` | unless every row is TEXT | every draw of the row | fill `value` from your current state |
@@ -177,6 +191,7 @@ call `add_page`. `get` runs every time a row is drawn.
 | `get_text(user, id, text, size)` | if a row is TEXT | right after `CMFM_EVENT_OPENED`; for LIVE lines also four times a second while shown | write the line (cut at 128 bytes) |
 | `on_event(user, event)` | no | `CMFM_EVENT_OPENED`, `CMFM_EVENT_CLOSED`; since 1.2 once per distinct `on_event` and `user` (pages of one mod sharing them hear it once) | read fresh status at OPENED; save your config file at CLOSED |
 | `press(user, id)` | if a row is BUTTON | Confirm (after Yes) | run the action; CMFM reads every value and text of the page again afterwards |
+| `question(user, id, text, size)` | no (since 1.3) | a BUTTON with a `confirm` is pressed, before the Yes/No | word the question as it should read now ("about 7 minutes"); `CMFM_ERROR` or an empty text asks `confirm` |
 | `locked(user, id, why, size)` | no | when a page opens and after every change CMFM makes | return nonzero to grey the row and refuse changes; write the reason (help line) |
 
 **Patterns that work well:**
@@ -248,6 +263,11 @@ call `add_page`. `get` runs every time a row is drawn.
 
 ## 5. Testing
 
+- **Outside the game first:** `include/cmfm/cmfm_check.h` (header-only C,
+  copy it next to `cmfm.h`) has `cmfm_check_page(&page, why, sizeof why)`,
+  the rules `add_page` applies (CMFM's own `add_page` calls it), with the
+  same reason CMFM would log. Call it in a unit test, or before `add_page`
+  as the demo does. It also has `cmfm_check_key` for KEY defaults.
 - Install CMFM (`AsteraLoader\plugins\cmfm\cmfm.dll` plus its
   `nativePC\ui\cmfm\mods.gui` layout, one MO2 mod) next to your plugin and
   start the game through Astera Loader.
@@ -264,7 +284,8 @@ call `add_page`. `get` runs every time a row is drawn.
 - [ ] `cmfm.h` copied unchanged; CMFM commit recorded.
 - [ ] CMFM optional: a NULL interface means no menu, nothing else.
 - [ ] `size` set on the page and on every setting; unused fields zero.
-- [ ] Ids unique; defaults in range; texts within the limits.
+- [ ] Ids unique; defaults in range; texts within the limits
+      (`cmfm_check_page` passes).
 - [ ] Callbacks fast, on the menu thread; heavy work moved to your thread.
 - [ ] Your ini written by you (at `set` or CLOSED), comments kept.
 - [ ] RESTART on every setting that needs a restart.

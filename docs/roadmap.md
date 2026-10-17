@@ -14,8 +14,18 @@ each part works go into `docs/research/native-menu.md`.
   own before and after a visit, the page at the end while open, a quest
   ending with Mods open leaves nothing behind. Cost: one slower frame per
   Mods press in game. The layout is requested once (no reference per visit).
-- To do: the "category cursor moved to row 0" warning with a single page
-  (the parked row 2 does not exist; cosmetic, also in 0.1.0).
+- **The panel takes input with a single mod** (a client mod's report: with
+  the Overview and one mod the panel drew but took no click or key; the
+  "category cursor moved to row 0" warning was its symptom, not cosmetic).
+  The off-screen category list keeps at least three rows in split mode, so
+  the panel's row 2 always exists. Run `20261017-onemod-1` pending.
+- **`cmfm.menu` 1.3** (decisions item 15, from a client mod's feedback): the
+  callbacks' order promised in the header, the text limits as defines,
+  `cmfm_check.h` (add_page's rules outside the game; CMFM's add_page uses
+  it), a BUTTON question worded when pressed. Unit-tested; the demo uses all
+  of it (asks for 1.2, sets `question`).
+- Parked: an event or query for "a game menu is open" (needs a study of the
+  game's menu bytes first).
 
 ## Release 0.1.0 (released 2026-10-14; the order agreed with the user, 2026-10-12)
 
