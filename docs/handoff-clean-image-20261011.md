@@ -1,7 +1,7 @@
 # Clean MHW game image: handoff to every project, 2026-10-11
 
 For every project that reads a decoded image of `MonsterHunterWorld.exe`
-(Astera Loader, dlssupdate, cpuopt, ai\glavenus) and for the user-level
+(Astera Loader, dlssupdate, another project of the user's, ai\glavenus) and for the user-level
 `reversing` skill. Written by the CMFM session. Your own project rules come
 first; this file says what changed and what to check.
 
@@ -24,7 +24,7 @@ first; this file says what changed and what to check.
   |---|---|---|
   | Astera Loader | 6 of 7 patterns unique; `kExitPattern` 3 matches (used at a fixed, checked address) | yes |
   | dlssupdate | 182 of 182 code gates match; `Publish` 20+ matches (gated address) | yes |
-  | cpuopt | 2 of 2 patterns unique | yes |
+  | another project | 2 of 2 patterns unique | yes |
   | ai\glavenus | not checked | n/a |
 
   But anything made, read or checked on the old image at one of the 29
