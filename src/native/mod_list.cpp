@@ -40,37 +40,38 @@ std::size_t ModList::shown_row() const {
     return row_of(shown_mod_, -1);
 }
 
+ModList::Result ModList::preview(std::size_t r) {
+    if (r >= rows_.size()) {
+        return {};
+    }
+    const ListRow row = rows_[r];
+    std::size_t page = 0;
+    if (row.page >= 0) {
+        page = static_cast<std::size_t>(row.page);
+    } else if (row.mod == shown_mod_) {
+        return {};  // the shown mod's entry: its shown page stays
+    }
+    if (shown_mod_ == row.mod && shown_page_ == page) {
+        return {};
+    }
+    shown_mod_ = row.mod;
+    shown_page_ = page;
+    return {true, false};
+}
+
 ModList::Result ModList::activate(std::size_t r) {
     if (r >= rows_.size()) {
         return {};
     }
     const ListRow row = rows_[r];
-    if (row.page < 0 && pages_[row.mod] > 1) {
-        if (open_ == row.mod) {
-            open_ = kNone;  // folds; the page stays
-            rebuild();
-            return {};
-        }
-        open_ = row.mod;
-        rebuild();
-        if (shown_mod_ == row.mod) {
-            return {};  // its dropdown again: the shown page stays
-        }
-        shown_mod_ = row.mod;
-        shown_page_ = 0;
-        return {true, false};
-    }
-    const std::size_t page = row.page < 0 ? 0 : static_cast<std::size_t>(row.page);
-    if (open_ != kNone && open_ != row.mod) {
-        open_ = kNone;  // one dropdown at a time: the shown mod's
+    Result result = preview(r);
+    result.enter = true;
+    const std::size_t open = pages_[row.mod] > 1 ? row.mod : kNone;
+    if (open_ != open) {
+        open_ = open;  // one dropdown at a time: the shown mod's
         rebuild();
     }
-    if (shown_mod_ == row.mod && shown_page_ == page) {
-        return {false, true};
-    }
-    shown_mod_ = row.mod;
-    shown_page_ = page;
-    return {true, false};
+    return result;
 }
 
 ModList::Result ModList::step_page(int direction) {

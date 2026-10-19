@@ -130,4 +130,13 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     query for "a game menu is open" (CMFM's hooks do not follow the game's
     own menus; a candidate signal, the menu bytes every game menu sets each
     frame, would need its own study).
+16. **The mod list handles like the game's own Options** (the user's call,
+    2026-10-20: players found it confusing). Supersedes the select
+    philosophy of roadmap item 7 (2026-10-12: the highlight only
+    highlights, a click or Confirm selects). As on the game's page: the
+    pointer and the arrow keys move the highlight and the panel shows the
+    highlighted entry; one click or Confirm goes into the panel (a mod's
+    dropdown opens then); hovering never moves the focus, either way; in the
+    panel, Back or a right click returns. Only a click, Confirm or Q / E
+    opens or folds a dropdown, so no entry moves under the pointer.
 

@@ -24,6 +24,10 @@ each part works go into `docs/research/native-menu.md`.
   `cmfm_check.h` (add_page's rules outside the game; CMFM's add_page uses
   it), a BUTTON question worded when pressed. Unit-tested; the demo uses all
   of it (asks for 1.2, sets `question`).
+- **The mod list handles like the game's Options** (decisions item 16; the
+  user: players found it confusing): the highlight shows its entry in the
+  panel, one click or Confirm goes in, hovering no longer moves the focus.
+  Unit-tested (`ModList::preview`); in-game run pending (mouse, keys, pad).
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 
@@ -184,7 +188,8 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    game's `<SIZE>` tag). The mod list shows one entry per mod (the
    pages of one Astera Loader plugin); a mod with several pages opens a
    dropdown under its entry listing every page, the default (first) one
-   included. A select philosophy: hover and the arrow keys only highlight;
+   included. A select philosophy (superseded in 0.1.1 by decisions item
+   16: the game's own handling): hover and the arrow keys only highlight;
    a click or Confirm selects (a mod: its dropdown opens and its default
    page shows; a page: it shows; the open mod's entry again: the dropdown
    folds, the page stays). One dropdown open at a time; a mod always opens

@@ -47,11 +47,13 @@ own mod.
 
 ## Using the Mods page
 
-- **The mod list** (left): "Overview" first, then one entry per mod.
-  Hovering and the arrow keys only highlight an entry; a click or Confirm
-  selects it. A mod with several pages has a small triangle and opens a
-  list of its pages when selected; Q / E (LB / RB on a gamepad) switch
-  between them, also from the settings side.
+- **The mod list** (left): "Overview" first, then one entry per mod. It
+  works like the game's Options: move over an entry (pointer or arrows) and
+  its settings show on the right; a click or Confirm goes into them, and
+  Back or a right click returns to the list. A mod with several pages
+  has a small triangle and opens a list of its pages when you go into it;
+  Q / E (LB / RB on a gamepad) switch between them, also from the settings
+  side.
 - **The settings** (right): switches and lists change with the arrows (or
   a click), or a list opens the game's pick list; numbers are sliders. A
   greyed row cannot change right now; the help line at the bottom says

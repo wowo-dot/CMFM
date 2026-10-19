@@ -1202,6 +1202,21 @@ each fill, on open and when a restart state changes.
   category list's moves set it, the pointer sets it, the wheel and the
   scrollbar move only the window. Q / E and pad LB / RB are read through
   `al.input` (`key_down`, `pad_state`) in the page's update, as edges.
+- **0.1.1: the game's own handling instead** (decisions item 16, players
+  found the select philosophy and the hover focus confusing). The game's
+  page: with the category list's focus, the pointer moves the cursor and
+  the panel shows the highlighted category; a click on the category (its
+  Confirm) or on the panel's window enters; with the panel's focus the
+  category list takes no input, and Back or a right click returns. CMFM now
+  does the same: the highlight shows its row (`ModList::preview`, which
+  never opens or folds a dropdown, so no row moves under the pointer); a
+  click or Confirm activates (the dropdown opens) and enters in one press;
+  the pointer no longer enters the panel by hovering it (the game's update
+  enters on a click there) nor leaves it by hovering the list. From inside
+  the panel a click on a mod row shows it and the panel keeps the focus (as
+  Q / E); the wheel goes to the panel; a drag on the list's thumb gives the
+  list the focus back. Without CMFM's Confirm (slot 8 not as expected),
+  Confirm only enters; dropdowns then open by a click or Q / E.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

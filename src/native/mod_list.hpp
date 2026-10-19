@@ -1,9 +1,12 @@
 // The Mods page's mod list (roadmap 1.2 item 7): one entry per mod; a mod
 // with several pages opens a dropdown of them under its entry, every page
-// listed, the first the default. A select philosophy: the highlight (the
-// pointer, the arrow keys) never changes what the panel shows; activate (a
-// click, Confirm) does, and step_page (Q / E). One dropdown open at a time,
-// always the shown mod's. Pure logic, tested in tests/test_mod_list.cpp.
+// listed, the first the default. As the game's own category list: the
+// highlight (the pointer, the arrow keys) shows its row in the panel
+// (preview), and activate (a click, Confirm) goes into the panel. Only
+// activate and step_page (Q / E) open or fold a dropdown, so no row moves
+// under the pointer while it only moves; one dropdown open at a time, the one
+// of the mod last activated or stepped. Pure logic, tested in
+// tests/test_mod_list.cpp.
 #pragma once
 
 #include <cstddef>
@@ -40,14 +43,15 @@ public:
 
     struct Result {
         bool changed = false;  // the panel shows another page
-        bool enter = false;    // the row already showed: the panel takes the focus
+        bool enter = false;    // the panel takes the focus
     };
-    // A click or Confirm on row `r`:
-    // - a mod with several pages: its dropdown opens and its default page
-    //   shows (the shown page stays if it is the mod's already); its open
-    //   dropdown again: the dropdown folds, the page stays;
-    // - a mod with one page, or a page: it shows (any open dropdown of
-    //   another mod folds); if it showed already, `enter`.
+    // The highlight on row `r`: the panel shows that row's page (a mod's
+    // entry: its default page, or the page it shows already); no dropdown
+    // opens or folds.
+    Result preview(std::size_t r);
+    // A click or Confirm on row `r`: it shows as in preview, and `enter`. A
+    // mod with several pages gets its dropdown open; any other open dropdown
+    // folds (a page of the open dropdown keeps it).
     Result activate(std::size_t r);
     // Q / E: the shown mod's previous (-1) or next (+1) page, wrapping; its
     // dropdown opens. Nothing for a mod with one page.

@@ -236,12 +236,14 @@ arrives (the header promises this since 1.3; CMFM has always worked so).
   mod's state: Active, Restart needed, Refused with the reason, or Not
   shown), then one entry per mod, in the order their first pages were
   added. It scrolls with a scrollbar when it is long. A mod with several
-  pages is marked with a triangle and opens a dropdown of all its pages
-  under its entry when selected (one dropdown at a time). Hovering and the
-  arrow keys only highlight; a click or Confirm selects (a mod always opens
-  on its default page; Confirm on what already shows enters the panel).
-  Q / E (pad LB / RB) switch between the selected mod's pages, also from
-  inside the panel. What shows is marked in light green.
+  pages is marked with a triangle. As in the game's own Options, the
+  pointer and the arrow keys move the highlight and the panel shows the
+  highlighted entry (a mod: its default page); a click or Confirm goes into
+  the panel and opens a mod's dropdown of all its pages under its entry
+  (one dropdown at a time). Q / E (pad LB / RB) switch between the shown
+  mod's pages, also from inside the panel. What shows is marked in light
+  green. (Before CMFM 0.1.1 the highlight did not change the panel; a click
+  or Confirm selected first.)
 - **The page's header** above the panel: your title (the mod's name and
   the page's title for a mod with several pages), your `version` and
   "Restart needed" while one of your changes waits for a restart.

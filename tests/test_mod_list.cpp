@@ -31,44 +31,58 @@ void lists_one_entry_per_mod() {
     check(l.row_of(1, -1) == 1 && l.row_of(1, 0) == ModList::kNone, "pages of a folded mod are not listed");
 }
 
-void opens_a_dropdown_on_select() {
+void previews_without_moving_rows() {
+    ModList l = sample();
+    ModList::Result r = l.preview(1);  // DLSS highlighted
+    check(r.changed && !r.enter, "DLSS highlighted: its default page shows");
+    check(l.shown_mod() == 1 && l.shown_page() == 0 && l.shown_row() == 1, "marked on its entry");
+    check(l.open() == ModList::kNone && l.rows().size() == 4, "no dropdown opens");
+    r = l.preview(1);
+    check(!r.changed, "the same row again: nothing");
+    r = l.preview(2);  // HUD
+    check(r.changed && l.shown_mod() == 2 && l.rows().size() == 4, "HUD shows; still no row moved");
+    r = l.preview(0);
+    check(r.changed && l.shown_mod() == 0, "back to the Overview");
+    check(!l.preview(99).changed, "a row past the end does nothing");
+}
+
+void opens_a_dropdown_on_activate() {
     ModList l = sample();
     ModList::Result r = l.activate(1);  // DLSS
-    check(r.changed && !r.enter, "DLSS selected: its page shows");
+    check(r.changed && r.enter, "DLSS activated: its page shows, into the panel");
     check(l.open() == 1 && l.rows().size() == 7, "its dropdown: all three pages listed");
     check(l.rows()[2].mod == 1 && l.rows()[2].page == 0 && l.rows()[4].page == 2, "the default page first");
     check(l.shown_mod() == 1 && l.shown_page() == 0 && l.shown_row() == 2, "the default page shows, marked on its row");
-    r = l.activate(4);  // DLSS page 3
-    check(r.changed && l.shown_page() == 2 && l.shown_row() == 4, "a page selected");
+    r = l.preview(4);  // DLSS page 3 highlighted
+    check(r.changed && l.shown_page() == 2 && l.shown_row() == 4 && l.open() == 1, "a page of the open dropdown shows");
     r = l.activate(4);
-    check(!r.changed && r.enter, "the shown page again: into the panel");
-    r = l.activate(1);  // DLSS's entry again
-    check(!r.changed && !r.enter && l.open() == ModList::kNone && l.rows().size() == 4, "folds, the page stays");
-    check(l.shown_mod() == 1 && l.shown_page() == 2 && l.shown_row() == 1, "the folded mod's entry marks it");
+    check(!r.changed && r.enter && l.open() == 1, "activated: into the panel, the dropdown stays");
+    r = l.preview(1);  // DLSS's entry
+    check(!r.changed && l.shown_page() == 2, "the shown mod's entry: its shown page stays");
     r = l.activate(1);
-    check(!r.changed && l.open() == 1 && l.shown_page() == 2, "opened again: still the page it showed");
+    check(!r.changed && r.enter && l.open() == 1 && l.shown_page() == 2, "activated: still that page, never folds");
 }
 
 void keeps_one_dropdown_open() {
     ModList l = sample();
-    l.activate(1);                     // DLSS open
+    l.activate(1);  // DLSS open
     const std::size_t demo = l.row_of(3, -1);
-    ModList::Result r = l.activate(demo);  // Demo
-    check(r.changed && l.open() == 3 && l.shown_mod() == 3 && l.shown_page() == 0, "Demo opens on its default page");
+    ModList::Result r = l.preview(demo);  // Demo highlighted
+    check(r.changed && l.shown_mod() == 3 && l.open() == 1 && l.row_of(3, -1) == demo, "Demo shows; DLSS stays open");
+    check(l.shown_row() == demo, "Demo's entry marks it (its dropdown is folded)");
+    r = l.activate(demo);
+    check(!r.changed && r.enter && l.open() == 3 && l.shown_page() == 0, "Demo activated: its dropdown opens");
     check(l.row_of(1, 0) == ModList::kNone && l.rows().size() == 6, "DLSS folded");
     r = l.activate(l.row_of(2, -1));  // HUD: one page
-    check(r.changed && l.open() == ModList::kNone && l.shown_mod() == 2, "a single page shows; dropdowns fold");
-    r = l.activate(l.row_of(2, -1));
-    check(!r.changed && r.enter, "the shown single page again: into the panel");
+    check(r.changed && r.enter && l.open() == ModList::kNone && l.shown_mod() == 2, "a single page: dropdowns fold");
     r = l.activate(l.row_of(1, -1));
-    check(r.changed && l.shown_mod() == 1 && l.shown_page() == 0, "back to DLSS: its default page");
+    check(r.changed && l.shown_mod() == 1 && l.shown_page() == 0 && l.open() == 1, "back to DLSS: its default page");
 }
 
 void steps_through_pages() {
     ModList l = sample();
     check(!l.step_page(1).changed, "the Overview has one page");
-    l.activate(1);
-    l.activate(1);  // DLSS folded
+    l.preview(1);  // DLSS shows, folded
     ModList::Result r = l.step_page(1);
     check(r.changed && l.shown_page() == 1 && l.open() == 1, "E: the next page, the dropdown opens");
     l.step_page(1);
@@ -90,7 +104,8 @@ void selects_directly() {
 
 int main() {
     lists_one_entry_per_mod();
-    opens_a_dropdown_on_select();
+    previews_without_moving_rows();
+    opens_a_dropdown_on_activate();
     keeps_one_dropdown_open();
     steps_through_pages();
     selects_directly();
