@@ -1379,6 +1379,21 @@ each fill, on open and when a restart state changes.
   checked by the bytes before it. CMFM now asks both families (the pad's
   first); a left click does not count as the keyboard's Confirm (the
   pointer acts on the click itself).
+- **Runs tabs-9 / -10: WASD on the title screen, not in game; the arrows,
+  the D-pad and the stick everywhere.** Measured (a diagnostic build,
+  commit 1b600f8, since removed): in game the keyboard family reports the
+  arrows (right = menu keys 8 and 13) but nothing for WASD; the lock bits
+  that would block it (+3672 / +3704) stay clear. Cause (static): the
+  keyboard builds its menu keys each frame (`sMhKeyboard::move` ->
+  `sub_140485470`). Outside menu mode every binding of a key counts; in
+  menu mode (`sMhGUI +83664` or `+83869`, set while a game menu is open in
+  game, CMFM's page included) the eight direction keys (7-10, 12-15,
+  `sub_140484710`) count only one binding slot, chosen by the system
+  setting `sUserData +286` (0: slot 1; 1 or 2: slot 0; the key icons'
+  lookup `sub_14044A450` reads it alike). So in game the game's own menus
+  and CMFM's page take either WASD or the arrows for the cursor, by that
+  setting; the title screen has no menu mode and takes both. CMFM follows
+  the game; nothing to fix. Which Options row shows +286 is not known.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 
