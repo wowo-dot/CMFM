@@ -56,7 +56,8 @@ own mod.
   than fit, scroll them with the mouse wheel over them or the bar under
   them. With keys or a gamepad, Up from a page's first setting moves to its
   tabs: Left / Right (or the stick) choose a page, Confirm opens it, Down
-  goes back to the settings. Each mod opens on the page you used last.
+  or Back return to the settings (Up to their last row). Each mod opens on
+  the page you used last.
 - **The settings** (right): switches and lists change with the arrows (or
   a click), or a list opens the game's pick list; numbers are sliders. A
   greyed row cannot change right now; the help line at the bottom says

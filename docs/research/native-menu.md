@@ -1347,6 +1347,23 @@ each fill, on open and when a restart state changes.
   on the shown page; Back to the mod list. Mouse activity while the tabs
   have the keys gives them back to the panel first. `EffectCursor` 0 on
   `cmfm_tab_list` (layout).
+- **Run tabs-7** (the user): the bar should show only on hover or with the
+  keys (the shown page's green text marks it otherwise); Down from the tabs
+  skipped the first row (the panel still saw the press); Up should go to
+  the last row; with a hand on the mouse the keys could not stay on the
+  tabs and the pointer over the settings misfired (the rule "mouse activity
+  gives the keys back"); Back (B, the right button) should return to the
+  settings, not the mod list.
+- **Since:** the tabs' cursor is hidden (setPlay on `cmfm_tab_cursor`,
+  always told the wanted state) unless the pointer is on a tab or the tabs
+  have the keys. While they do, the pointer only moves their cursor over
+  them; a click acts as usual (and moves the focus). Down returns to the
+  panel's first row, Up to its last (the original moveCursor, the window
+  at the end), Back (key 1 or a right click, `sub_141FB64A0`, mouse button
+  2) to the panel. The press that moved the keys is ignored by the side it
+  reached until no direction is held (`sub_1418B9D30` mode 4), and the
+  panel's decide for three frames after Confirm. The tab list's own
+  following of the pointer (+641) is off.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

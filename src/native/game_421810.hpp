@@ -230,6 +230,9 @@ inline constexpr std::size_t kListDuplicateNum = 0x298;
 inline constexpr std::size_t kListCursor = 0x274;
 inline constexpr std::size_t kListWrap = 656;  // byte: Down on the last row goes to row 0
 inline constexpr std::size_t kListInactive = 371;  // byte: 1 = takes no input (tab setActive writes it)
+// byte: the cursor follows the pointer (the list's hover, sub_140B76AF0);
+// 0: a click picks the row under the pointer instead.
+inline constexpr std::size_t kListFollowsPointer = 641;
 // The row the cursor goes to when the list's opening animation ends (the
 // list's update, RVA 0xB755C0, state 1: the first enabled row from here).
 inline constexpr std::size_t kListStartRow = 560;
@@ -552,10 +555,16 @@ inline constexpr std::int32_t kMenuSourcesUpDown = 0x1;
 inline constexpr std::int32_t kMenuSourcesLeftRight = 0x2;
 inline constexpr std::int32_t kMenuModePressed = 1;
 inline constexpr std::int32_t kMenuModeRepeat = 3;  // pressed, then repeated while held
+inline constexpr std::int32_t kMenuModeHeld = 4;
+inline constexpr std::int32_t kMenuSourcesAll = 0x3;
 inline constexpr std::uint32_t kMenuLeft = 1;
 inline constexpr std::uint32_t kMenuRight = 2;
 inline constexpr std::uint32_t kMenuUp = 3;
 inline constexpr std::uint32_t kMenuDown = 4;
+// Right click this frame(gui, list) at RVA 0x1FB64A0: left click's twin
+// (mouse button 2 for 1), the list's cancel by pointer (sub_140B76AF0).
+inline constexpr char kRightClickPattern[] =
+    "8B 81 9C 22 00 00 C1 E8 0A A8 01 75 23 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 11 48 8B 0D ?? ?? ?? ?? BA 02 00 00 00 E9 ?? ?? ?? ?? 32 C0 C3";
 // The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
 inline constexpr char kMouseMovedPattern[] =
     "48 85 D2 74 09 80 BA 72 01 00 00 00 74 0D 8B 81 9C 22 00 00 C1 E8 0A A8 01 75 1E 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 0C 48 8B 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? 32 C0";
