@@ -44,6 +44,7 @@ using MenuKeyFn = std::uint8_t (*)(void* gui, std::uint32_t key, void* list);
 using MenuDirectionFn = std::uint32_t (*)(void* gui, std::int32_t* sources, std::int32_t* mode, std::uint32_t* flags);
 using MenuKeyModeFn = std::uint8_t (*)(void* gui, std::uint32_t key, std::int32_t* mode, std::uint32_t* flags);
 using RequestSoundFn = void (*)(void* gui_manager, const char* name, void* unit, std::int32_t a, std::int32_t b);
+using ButtonIconFn = void (*)(void* texture, std::uint32_t icon);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
                                std::uint8_t flag);
@@ -95,6 +96,7 @@ MenuDirectionFn g_menu_direction = nullptr;
 MenuDirectionFn g_menu_direction_kbm = nullptr;
 MenuKeyModeFn g_menu_key_kbm = nullptr;
 RequestSoundFn g_request_sound = nullptr;  // optional: without it the page tabs and Q / E stay quiet
+ButtonIconFn g_button_icon = nullptr;      // optional: without it the tabs' arrows keep the layout's icon
 bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
 // The help line request (optional: without it the help line may keep the
 // previous mod's text).
@@ -277,6 +279,10 @@ void* g_tab_cursor = nullptr;  // the list's cursor instance (setPlay hides it)
 // shown with the tabs; a click steps the page as Q / E do.
 void* g_tab_arrows[2] = {};
 bool g_arrow_hover = false;  // the pointer is over an arrow (the hand shows)
+// The arrows' icon textures (L1 / R1: pad LB / RB, or the player's keys),
+// set again when the icons switch between pad and keyboard.
+void* g_arrow_icons[2] = {};
+std::int32_t g_icons_show_keys = -1;  // sMhGUI's flag when last set; -1 not set
 // Keyboard and pad on the page tabs (tab_keys): Up from the panel's first row
 // asks for them (the panel list's step, acted on in the page's update). While
 // on, the page's focus is on the list side with the category list inactive,
@@ -431,6 +437,8 @@ bool hover_tabs(void* unit, float* position);
 bool click_tab(void* unit, float* position, std::int32_t focus);
 int arrow_at(void* unit, float* position);
 bool click_arrow(void* unit, float* position);
+void* arrow_icon(void* arrow);
+void show_arrow_icons();
 void keep_highlight_in_view();
 void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top);
 void place_tab_cursor();
@@ -735,6 +743,7 @@ std::uint64_t page_update(void* unit) {
         }
         page_keys(unit);
         tab_keys(unit);
+        show_arrow_icons();  // one read unless the device changed
         // The hand pointer over the page tabs and the mod rows, as the game's
         // pages show it over their own clickable parts.
         const std::int32_t pointer_focus = field<std::int32_t>(unit, game::kOptFocus);
@@ -1104,6 +1113,35 @@ bool hover_tabs(void* unit, float* position) {
         }
     }
     return hit >= 0;
+}
+
+// An arrow's icon texture: its button icon's child animation, "tex_button"
+// in it (as the game's tab bars find theirs), or nullptr.
+void* arrow_icon(void* arrow) {
+    void* root = arrow != nullptr ? field<void*>(arrow, game::kInstRoot) : nullptr;
+    void* icon = root != nullptr ? gui_get_object(root, game::kArrowIconObject) : nullptr;
+    void* child = icon != nullptr ? field<void*>(icon, game::kObjChildRoot) : nullptr;
+    return child != nullptr ? gui_get_object(child, game::kArrowIconTexture) : nullptr;
+}
+
+// The arrows' icons, L1 / R1 as the game's tab bars show them: pad LB / RB,
+// or the keys the player bound to them while the icons show keys. Set when
+// the page opens and again when the icons switch between pad and keyboard.
+void show_arrow_icons() {
+    void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+    if (g_button_icon == nullptr || manager == nullptr) {
+        return;
+    }
+    const std::int32_t keys = field<std::int32_t>(manager, game::kGuiIconsShowKeys) != 0 ? 1 : 0;
+    if (keys == g_icons_show_keys) {
+        return;
+    }
+    g_icons_show_keys = keys;
+    for (std::size_t a = 0; a < 2; ++a) {
+        if (g_arrow_icons[a] != nullptr) {
+            g_button_icon(g_arrow_icons[a], game::kTabArrowIcons[a]);
+        }
+    }
 }
 
 // The pointer over one of the tabs' arrows: 0 previous, 1 next, else -1.
@@ -2506,7 +2544,10 @@ bool enter_view(void* unit) {
             if (g_tab_arrows[a] != nullptr) {
                 gui_set_play(g_tab_arrows[a], false);  // shown with the tabs
             }
+            g_arrow_icons[a] = arrow_icon(g_tab_arrows[a]);
         }
+        g_icons_show_keys = -1;  // the bindings may have changed since the last open
+        show_arrow_icons();
         if (g_tab_cursor != nullptr) {
             gui_set_play(g_tab_cursor, false);  // shown only on hover or with the keys
         }
@@ -2686,6 +2727,8 @@ std::uint64_t page_close(void* unit) {
     g_tab_hover = -1;
     g_tab_cursor = nullptr;
     g_tab_arrows[0] = g_tab_arrows[1] = nullptr;
+    g_arrow_icons[0] = g_arrow_icons[1] = nullptr;
+    g_icons_show_keys = -1;
     g_arrow_hover = false;
     g_tab_keys = false;
     g_tab_keys_wanted = false;
@@ -3355,6 +3398,12 @@ bool mods_page_register(const Env& env, std::string& why) {
                             reinterpret_cast<void**>(&g_request_sound), sound_why)) {
         g_request_sound = nullptr;
         logf(AL_LOG_WARNING, "Mods page: %s; page switches stay quiet", sound_why.c_str());
+    }
+    std::string icon_why;
+    if (!find_game_function(env, "button icon", game::kButtonIconPattern, reinterpret_cast<void**>(&g_button_icon),
+                            icon_why)) {
+        g_button_icon = nullptr;
+        logf(AL_LOG_WARNING, "Mods page: %s; the page tabs' arrows keep the layout's icon", icon_why.c_str());
     }
     std::string right_why;
     if (!find_game_function(env, "right click", game::kRightClickPattern, reinterpret_cast<void**>(&g_mouse_right),

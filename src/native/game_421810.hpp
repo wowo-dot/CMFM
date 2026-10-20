@@ -350,6 +350,23 @@ inline constexpr char kTabCursorName[] = "cmfm_tab_cursor";
 // The page tabs' key hints: the game's tab arrows (ui\common\page_tab, with
 // the button guide's small L / R icon) at both ends of the tabs.
 inline constexpr char kTabArrowNames[2][16] = {"cmfm_tab_prev", "cmfm_tab_next"};
+// Their icons, set as the game's tab bars set theirs (the appearance screen's
+// setup, RVA 0x1EE23A0): the arrow's "buttonIcon_Small" object, its child
+// animation's root (object +240), that root's "tex_button" texture; then
+// setButtonIcon(texture, icon) at RVA 0x18BFD30 cuts the icon's 64 x 64 cell
+// from the button sheet: the pad's picture, or, while the icons show keys
+// (sMhGUI +89464, the keyboard in use), the key the player bound to the same
+// menu key (icons below 32: the table at 0x142F78B90 maps menu keys to
+// icons). Icons 12 / 13 are menu keys 2 / 3 (L1 / R1, pad LB / RB), the icons
+// most of the game's tab bars show (14 / 15: L2 / R2). The icon is set once;
+// the game's pages set it again when the device changes.
+inline constexpr char kButtonIconPattern[] =
+    "48 85 C9 0F 84 ?? ?? ?? ?? 48 89 5C 24 08 57 48 83 EC 30 48 8B F9 8B DA 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 0E 83 FB 20";
+inline constexpr char kArrowIconObject[] = "buttonIcon_Small";
+inline constexpr std::size_t kObjChildRoot = 240;  // a child animation object's cGUIObjRoot*
+inline constexpr char kArrowIconTexture[] = "tex_button";
+inline constexpr std::uint32_t kTabArrowIcons[2] = {12, 13};
+inline constexpr std::size_t kGuiIconsShowKeys = 89464;  // sMhGUI, int: button icons show keyboard keys
 // A page's input lists: registerInput(unit, instance name, priority) at RVA
 // 0x1FB44E0 appends {name, priority} to the unit's registry (40-byte entries
 // from +1136, count at +4976, room for 96); the page's constructor registers
