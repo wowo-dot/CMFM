@@ -57,8 +57,8 @@ if (menu == NULL) {
 
 Fill a `cmfm_page_t` and an array of `cmfm_setting_t`, then call
 `menu->add_page`. A plugin may add several pages: since 1.2 they form one mod
-in the mod list, an entry with a dropdown of its pages, the first one the
-default (section 4). Give them a `mod` name ("DLSS" for pages "Upscaling" and
+in the mod list, one entry with its pages as tabs above the panel, the first
+one the default (section 4). Give them a `mod` name ("DLSS" for pages "Upscaling" and
 "Frame generation"), or the first page's title names the mod; pages with
 different `mod` names make separate mods (a debug mod of its own, say).
 

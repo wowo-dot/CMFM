@@ -3,7 +3,7 @@
  *
  * It shows every setting type of cmfm.menu 1.2 (rows that hide, live lines and
  * key bindings since 1.2; its hotkey is a real Astera Loader hotkey) on three
- * pages of one mod, "Demo" (a dropdown in the mod list since 1.2), keeps
+ * pages of one mod, "Demo" (its pages are tabs above the panel), keeps
  * its values in its own file (AsteraLoader\data\cmfm_demo\cmfm_demo.ini, the
  * source of truth), refuses one combination in `validate`, and saves when
  * the Mods page closes.
@@ -12,6 +12,8 @@
  * 1024 rows (the most a page holds), the
  * second holds a key binding that overlaps the demo's hotkey (F5 against
  * Ctrl+F5), so CMFM marks both.
+ * With `tab_pages = N` it adds a mod "Many tabs" of N pages (up to 64; CMFM's
+ * tests of the page tabs: more than fit, short and 24-byte titles).
  *
  * Install: <game>\AsteraLoader\plugins\cmfm_demo\cmfm_demo.dll, next to CMFM.
  */
@@ -63,6 +65,9 @@ static int g_opened;
 #define MAX_EXTRA 1023 /* CMFM shows 1024 pages since cmfm.menu 1.2 */
 static int g_extra_pages; /* from the ini: test pages to add */
 static int g_extra[MAX_EXTRA];
+#define MAX_TAB_PAGES 64
+static int g_tab_pages; /* from the ini: pages of the mod "Many tabs" */
+static int g_tab_values[MAX_TAB_PAGES];
 
 static void logline(al_log_level_t level, const char* line) {
     g_api->log(g_self, level, line);
@@ -92,6 +97,7 @@ static void load(void) {
         else if (sscanf(line, " xess_quality = %d", &i) == 1 && i >= 0 && i <= 3) g_values.xess_quality = i;
         else if (sscanf(line, " hotkey = %d", &i) == 1 && i >= 0 && i <= 0x7FF) g_values.hotkey = i;
         else if (sscanf(line, " extra_pages = %d", &i) == 1 && i >= 0 && i <= MAX_EXTRA) g_extra_pages = i;
+        else if (sscanf(line, " tab_pages = %d", &i) == 1 && i >= 0 && i <= MAX_TAB_PAGES) g_tab_pages = i;
     }
     fclose(f);
     logline(AL_LOG_INFO, "cmfm_demo.ini loaded");
@@ -110,6 +116,7 @@ static void save(void) {
             g_values.dlss_preset, g_values.fsr_sharpness, g_values.xess_quality);
     fprintf(f, "# a virtual-key code plus 256 Ctrl, 512 Shift, 1024 Alt; 0 for none\nhotkey = %d\n", g_values.hotkey);
     fprintf(f, "# test pages for a long list of mods (0 to %d)\nextra_pages = %d\n", MAX_EXTRA, g_extra_pages);
+    fprintf(f, "# pages of the test mod \"Many tabs\" (0 to %d)\ntab_pages = %d\n", MAX_TAB_PAGES, g_tab_pages);
     fclose(f);
     g_dirty = 0;
     logline(AL_LOG_INFO, "cmfm_demo.ini saved");
@@ -363,6 +370,61 @@ static void add_extra_pages(const cmfm_menu_t* menu) {
     }
 }
 
+/* The mod "Many tabs": one toggle per page, the page's number in `user`. */
+static cmfm_result_t CMFM_CALL tab_get(void* user, uint32_t id, cmfm_value_t* value) {
+    (void)id;
+    value->i = g_tab_values[(intptr_t)user];
+    return CMFM_OK;
+}
+
+static cmfm_result_t CMFM_CALL tab_set(void* user, uint32_t id, const cmfm_value_t* value) {
+    (void)id;
+    g_tab_values[(intptr_t)user] = value->i != 0;
+    return CMFM_OK;
+}
+
+static void add_tab_pages(const cmfm_menu_t* menu) {
+    cmfm_setting_t s;
+    cmfm_page_t page;
+    char title[CMFM_MAX_TITLE + 1];
+    char label[CMFM_MAX_LABEL + 1];
+    char why[200];
+    for (int n = 1; n <= g_tab_pages; ++n) {
+        /* Short and long titles in turn; "Page 12 with a long name" is 24
+         * bytes, the most a title holds. */
+        if (n % 3 == 1) {
+            snprintf(title, sizeof title, "Tab %d", n);
+        } else if (n % 3 == 2) {
+            snprintf(title, sizeof title, "Settings %d", n);
+        } else {
+            snprintf(title, sizeof title, "Page %d with a long name", n);
+        }
+        snprintf(label, sizeof label, "Toggle on page %d of %d", n, g_tab_pages);
+        memset(&s, 0, sizeof s);
+        s.size = sizeof s;
+        s.id = 1;
+        s.type = CMFM_TYPE_BOOL;
+        s.label = label;
+        s.help = "A test page for CMFM's page tabs.";
+        memset(&page, 0, sizeof page);
+        page.size = sizeof page;
+        page.plugin = "cmfm_demo";
+        page.mod = "Many tabs";
+        page.title = title;
+        page.settings = &s;
+        page.setting_count = 1;
+        page.user = (void*)(intptr_t)(n - 1);
+        page.get = tab_get;
+        page.set = tab_set;
+        if (menu->add_page(&page, why, sizeof why) == 0) {
+            char line[256];
+            snprintf(line, sizeof line, "CMFM refused tab page %d: %s", n, why);
+            logline(AL_LOG_WARNING, line);
+            return;
+        }
+    }
+}
+
 /* ---- The page ---- */
 
 static const char* const kChoices[] = {"Alpha", "Beta", "Gamma"};
@@ -525,7 +587,7 @@ static void add_page(void) {
     s[20].help = "Counts presses of Demo hotkey.";
 
     /* Three pages of one mod (since 1.2, `mod`): the mod list shows "Demo"
-     * once, its pages in a dropdown, the first the default. The callbacks
+     * once, its pages as tabs above the panel, the first the default. The callbacks
      * serve every page (the ids are unique over the plugin). */
     {
         static const struct {
@@ -574,6 +636,7 @@ static void add_page(void) {
     }
     logline(AL_LOG_INFO, "pages added to CMFM");
     add_extra_pages(menu);
+    add_tab_pages(menu);
 }
 
 /* ---- Astera Loader ---- */
