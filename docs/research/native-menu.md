@@ -1280,19 +1280,34 @@ each fill, on open and when a restart state changes.
   page has the input (+8897/+8898). The default checks a cGUIInstInput gets
   (ctor `sub_140B86A50`): decide `sub_140B86FB0` = key 0, cancel
   `sub_140B86F90` = key 1. Directions: `sub_1418B9D30(gui, int* sources,
-  int* mode, uint* flags out)` returns 1 up, 2 down, 3 left, 4 right; source
-  bit 0 tries keys 9 / 10 (left / right), then the stick 14 / 15; bit 1 keys
-  7 / 8 (up / down), then 12 / 13; mode bits 1 pressed, 2 repeat (lists use
-  3). CMFM finds it through its call in `sub_140B86F30` (+85).
-- **Keyboard and pad on the tabs:** the panel list's step up from the first
+  int* mode, uint* flags out)` returns **1 left, 2 right, 3 up, 4 down**;
+  mode bits 1 pressed, 2 repeat (lists use 3). A button list's init
+  (`sub_140B80D00`) sets the sources it steps by (+264): 0x10 for Type 0
+  (menu keys 9 / 10, up / down), 0x20 for Type 1 (7 / 8, left / right); its
+  step check (`sub_140B81060` via `sub_140B86DD0`) maps 1 / 3 to the previous
+  row and 2 / 4 to the next. CMFM finds the reader through its call in
+  `sub_140B86F30` (+85).
+- **Run tabs-4** (the first keyboard / pad try): CMFM read 1-4 the wrong way
+  round and asked sources 1 and 2 (bits 0 and 1): Up / Down switched pages,
+  Left / Right entered the panel (where the same press then changed the
+  row's value), the keyboard did nothing; the tabs went grey with the
+  list's focus (they were under the panel, `null_audio`).
+- **Keyboard and pad on the tabs** (since): the tabs and their scrollbar sit
+  next to the panels (`null_prog_color1`, the same place), so the panel's
+  focus changes leave them alone. The panel list's step up from the first
   selectable row (CMFM's step hook) asks for the tabs instead of wrapping,
-  for a mod with tabs; the page's update then runs the panel's Back (focus
-  0) and marks the category list inactive too, so no list of the page reads
-  keys, and reads them itself each frame: left / right step the pages (as
-  Q / E), down or decide enter the panel, cancel gives the mod list the keys
-  back (the category list active again; a list reads keys only from the
-  frame after the GUI marked it, so the same press does not reach it). A
-  focus change by the mouse ends it without touching the lists' input.
+  for a mod with tabs; the page's update runs the panel's Back (focus 0),
+  marks the category list inactive and the **tab list active**: the game's
+  own sideways-list input then steps it (Left / Right as in any such list,
+  keyboard and pad, with its sound), and CMFM's step hook turns each step
+  into the previous or next page (wrapping; inside the window the list's
+  cursor moves, at its edge the page's update moves the labels). CMFM reads
+  Down (sources 0x10, as a vertical list, pressed), Confirm (key 0, with the
+  tab list) and Back (key 1): Down / Confirm enter the panel, Back gives the
+  mod list the keys back (the category list active again; a list reads keys
+  only from the frame after the GUI marked it, so the same press does not
+  reach it). A focus change by the mouse ends it; the tab list stops
+  reading keys whenever it ends.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

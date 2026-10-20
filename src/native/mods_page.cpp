@@ -267,11 +267,15 @@ std::int64_t g_tab_hover = -1;
 void* g_tab_cursor = nullptr;  // the list's cursor instance (setPlay hides it)
 bool g_tab_cursor_shown = true;
 // Keyboard and pad on the page tabs (tab_keys): Up from the panel's first row
-// asks for them (the panel list's step, acted on in the page's update); while
-// on, the list has the focus with the category list inactive too, so nothing
-// of the page reads the keys and CMFM reads them through the game's menu input.
+// asks for them (the panel list's step, acted on in the page's update). While
+// on, the page's focus is on the list side with the category list inactive,
+// and the tab list is the one active list: the game's own sideways-list input
+// steps it (Left / Right, its keys and pad), CMFM's step hook turns a step
+// into a page (g_tab_step_to, shown in the page's update), and CMFM reads
+// Down, Confirm and Back through the game's menu input.
 bool g_tab_keys_wanted = false;
 bool g_tab_keys = false;
+std::int64_t g_tab_step_to = -1;  // the page a tab list step asked for
 bool g_mod_hover = false;  // the pointer is over a mod row (the hand shows)
 constexpr std::size_t kMaxTabs = 8;
 char g_tab_labels[kMaxTabs][128];
@@ -1229,6 +1233,22 @@ void scroll_panel(void* unit, std::size_t top, bool refresh) {
 // the row looks, the arrows and the help line for the new setting.
 std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cursor, std::int32_t steps,
                          std::uint8_t wrap, std::uint8_t* wrapped) {
+    if (g_tab_keys && list == g_tab_list.load(std::memory_order_acquire)) {
+        // The tabs (Left / Right while they have the keys): the shown mod's
+        // previous or next page, wrapping over all of them. Inside the window
+        // the list's cursor moves (the game's sound); when the window has to
+        // move, the cursor stays and the page's update moves the labels.
+        const std::size_t pages = g_list.page_count(g_list.shown_mod());
+        const std::size_t count = field<std::uint32_t>(list, game::kListRowCount);
+        if (pages < 2 || count == 0) {
+            return static_cast<std::uint32_t>(cursor);
+        }
+        const std::size_t page = g_list.shown_page();
+        const std::size_t to = down ? (page + 1) % pages : (page + pages - 1) % pages;
+        g_tab_step_to = static_cast<std::int64_t>(to);
+        const std::size_t top = tab_window_top(g_tab_top, to, pages, count);
+        return top == g_tab_top ? static_cast<std::uint32_t>(to - top) : static_cast<std::uint32_t>(cursor);
+    }
     if (split_categories(list)) {
         // The mod list moves the way the key or stick points; the category
         // cursor keeps its row (moveCursor ignores an unchanged row). Its own
@@ -2027,16 +2047,26 @@ void page_keys(void* unit) {
     }
 }
 
-// The page tabs take the keys (Up from the panel's first row): the list takes
-// the focus back (the panel's own Back) and the category list stops reading
-// keys too, so only CMFM reads them (tab_keys); the tabs' cursor shows the
-// shown page.
+// The tab list reads keys (or stops); the GUI marks an active list for input
+// from the next frame on.
+void tab_list_input(bool on) {
+    if (void* tabs = g_tab_list.load(std::memory_order_acquire)) {
+        field<std::uint8_t>(tabs, game::kListInactive) = on ? 0 : 1;
+    }
+}
+
+// The page tabs take the keys (Up from the panel's first row): the page's
+// focus goes to the list side (the panel's own Back: the panel greys as the
+// game does), the category list stops reading keys and the tab list starts;
+// its cursor shows the shown page.
 void enter_tab_keys(void* unit) {
     leave_panel(unit);
     if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
         field<std::uint8_t>(categories, game::kListInactive) = 1;
     }
+    tab_list_input(true);
     g_tab_keys = true;
+    g_tab_step_to = -1;
     g_tab_hover = -1;
     place_tab_cursor();
     request_split_help(unit);
@@ -2048,6 +2078,8 @@ void enter_tab_keys(void* unit) {
 // does not reach it too.
 void leave_tab_keys(void* unit, bool to_panel) {
     g_tab_keys = false;
+    g_tab_step_to = -1;
+    tab_list_input(false);
     if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
         field<std::uint8_t>(categories, game::kListInactive) = 0;
     }
@@ -2058,10 +2090,12 @@ void leave_tab_keys(void* unit, bool to_panel) {
 }
 
 // Every frame while the page shows CMFM's menu: keyboard and pad on the page
-// tabs, through the game's menu input (the player's bindings). Left / Right
-// show the previous or next page (as Q / E), Down or Confirm go into the
-// panel, Back returns to the mod list. Anything else that moves the focus, a
-// mod without tabs, a key wait or a question ends it.
+// tabs. The tab list's own input steps it (Left / Right through the game's
+// sideways-list keys; the step hook asked for a page, shown here); Down or
+// Confirm go into the panel, Back returns to the mod list, read through the
+// game's menu input (the player's bindings; Down as a vertical list reads
+// it). Anything else that moves the focus, a mod without tabs, a key wait or
+// a question ends it.
 void tab_keys(void* unit) {
     if (g_menu_key == nullptr || g_menu_direction == nullptr) {
         return;
@@ -2078,7 +2112,10 @@ void tab_keys(void* unit) {
         return;
     }
     if (focus != 0) {
-        g_tab_keys = false;  // the focus moved (a click): the game set the lists' input for it
+        // The focus moved (a click): the game set the page's lists for it.
+        g_tab_keys = false;
+        g_tab_step_to = -1;
+        tab_list_input(false);
         request_split_help(unit);
         return;
     }
@@ -2086,18 +2123,21 @@ void tab_keys(void* unit) {
         leave_tab_keys(unit, false);
         return;
     }
-    std::int32_t sources = game::kMenuSourcesAll;
-    std::int32_t mode = game::kMenuModeRepeat;
-    const std::uint32_t direction = g_menu_direction(unit, &sources, &mode, nullptr);
-    if (direction == game::kMenuLeft || direction == game::kMenuRight) {
-        if (g_list.step_page(direction == game::kMenuLeft ? -1 : 1).changed) {
-            g_tab_hover = -1;
-            g_highlight = g_list.shown_mod();
-            keep_highlight_in_view();
+    if (g_tab_step_to >= 0) {
+        const auto to = static_cast<std::size_t>(g_tab_step_to);
+        g_tab_step_to = -1;
+        g_tab_hover = -1;
+        if (g_list.show_page(to).changed) {
             show_selected(unit, false);
             request_split_help(unit);
         }
-    } else if (direction == game::kMenuDown || g_menu_key(unit, game::kMenuKeyConfirm, nullptr) != 0) {
+        return;
+    }
+    std::int32_t sources = game::kMenuSourcesVertical;
+    std::int32_t mode = game::kMenuModePressed;
+    void* tabs = g_tab_list.load(std::memory_order_acquire);
+    if (g_menu_direction(unit, &sources, &mode, nullptr) == game::kMenuDown ||
+        g_menu_key(unit, game::kMenuKeyConfirm, tabs) != 0) {
         leave_tab_keys(unit, true);
     } else if (g_menu_key(unit, game::kMenuKeyBack, nullptr) != 0) {
         leave_tab_keys(unit, false);
@@ -2372,18 +2412,20 @@ std::uint64_t page_close(void* unit) {
     page_keep(unit, false);
     const std::uint64_t result = page_next(game::kSlotClose)(unit);
     g_hold_player.store(false, std::memory_order_relaxed);  // slot 81 stops running here too
+    if (g_tab_keys) {
+        // The category list reads keys again on the next opening, the tabs not.
+        if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
+            field<std::uint8_t>(categories, game::kListInactive) = 0;
+        }
+        tab_list_input(false);
+    }
     g_mod_list.store(nullptr, std::memory_order_release);
     g_tab_list.store(nullptr, std::memory_order_release);
     g_tabs_shown = false;
     g_tab_hover = -1;
     g_tab_cursor = nullptr;
-    if (g_tab_keys) {
-        // The category list reads keys again on the next opening.
-        if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
-            field<std::uint8_t>(categories, game::kListInactive) = 0;
-        }
-    }
     g_tab_keys = false;
+    g_tab_step_to = -1;
     g_tab_keys_wanted = false;
     g_mod_hover = false;
     g_slider_count = 0;

@@ -517,10 +517,12 @@ inline constexpr std::size_t kGuiPointerHand = 83845;
 //   Confirm, 1 Back (a list's default decide and cancel checks, RVAs 0xB86FB0
 //   and 0xB86F90); answers only while the page has the input;
 // - direction(gui, int* sources, int* mode, uint32* flags out) at RVA
-//   0x18B9D30, through its call in sub_140B86F30 (+85): sources bit 0 left /
-//   right (menu keys 9 / 10, the stick 14 / 15), bit 1 up / down (7 / 8,
-//   12 / 13); mode bits 1 pressed, 2 repeated while held (lists use 3);
-//   returns 1 up, 2 down, 3 left, 4 right, 0 none.
+//   0x18B9D30, through its call in sub_140B86F30 (+85): returns 1 left, 2
+//   right, 3 up, 4 down, 0 none; mode bits 1 pressed, 2 repeated while held.
+//   A button list's init (sub_140B80D00) gives it the sources it steps by
+//   (+264): 0x10 for a vertical list (menu keys 9 / 10: up / down), 0x20
+//   for a sideways one (7 / 8: left / right). Run tabs-4 read 1-4 the wrong
+//   way round and asked other sources (bits 0 and 1): keys did nothing.
 inline constexpr char kMenuKeyPattern[] =
     "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 49 8B F8 8B F2 48 8B D9 83 FA 15 75 46 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 36 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 8B D0 E8 ?? ?? ?? ?? 84 C0 74 18 8D 4E EF E8 ?? ?? ?? ?? 84 C0 74 0C 8D 4E F0 E8 ?? ?? ?? ?? 84 C0 75 4D";
 inline constexpr char kMenuDirectionCallerPattern[] =
@@ -528,12 +530,10 @@ inline constexpr char kMenuDirectionCallerPattern[] =
 inline constexpr std::size_t kMenuDirectionCall = 85;  // E8 rel32
 inline constexpr std::uint32_t kMenuKeyConfirm = 0;
 inline constexpr std::uint32_t kMenuKeyBack = 1;
-inline constexpr std::int32_t kMenuSourcesAll = 3;
-inline constexpr std::int32_t kMenuModeRepeat = 3;
-inline constexpr std::uint32_t kMenuUp = 1;
-inline constexpr std::uint32_t kMenuDown = 2;
-inline constexpr std::uint32_t kMenuLeft = 3;
-inline constexpr std::uint32_t kMenuRight = 4;
+inline constexpr std::int32_t kMenuSourcesVertical = 0x10;  // as a vertical list's
+inline constexpr std::int32_t kMenuModePressed = 1;
+inline constexpr std::uint32_t kMenuUp = 3;
+inline constexpr std::uint32_t kMenuDown = 4;
 // The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
 inline constexpr char kMouseMovedPattern[] =
     "48 85 D2 74 09 80 BA 72 01 00 00 00 74 0D 8B 81 9C 22 00 00 C1 E8 0A A8 01 75 1E 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 0C 48 8B 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? 32 C0";

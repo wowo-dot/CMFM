@@ -163,7 +163,7 @@ def build(gui):
 # - the panel (parent null_audio, in null_prog_color1 at 576, 262; rows 40 + 12
 #   apart from PosY 33, CMFM shows at most 14): just right of the panel's frame
 #   (56 x 14.4 = 806 px wide);
-# - the page tabs (parent null_audio): horizontal, as the game's own in
+# - the page tabs (parent null_prog_color1, as the tabs): horizontal, as the game's own in
 #   equip\upgrade_tree (ScrollType 0, the same art turned by Rotation -90: the
 #   track runs right from the root, its thickness up from it), 12 px thick
 #   (SclX 0.75), under the four tabs (x 8 to 798), its lower edge 3 px above
@@ -172,7 +172,7 @@ SCROLLBARS = (
     # name, parent, PosX, PosY, track length, horizontal
     ("cmfm_list_scroll", "null_prog_color0", 359.0, -21.0, 650.0, False),
     ("cmfm_panel_scroll", "null_audio", 814.0, 20.0, 716.0, False),
-    ("cmfm_tab_scroll", "null_audio", 8.0, -3.0, 790.0, True),
+    ("cmfm_tab_scroll", "null_prog_color1", 8.0, -3.0, 790.0, True),
 )
 
 
@@ -215,7 +215,11 @@ TITLE_TEXT_SIZE = (600.0, 50.0, 0.0, 0.0)
 # (its row template, the title menu's text row, and its cursor), laid out
 # sideways (Type 1: cGUIInstButtonList::rebuildRows places the copies with
 # SetPosX, i * (DuplicateSpace + DuplicateButtonSize) from the template's x)
-# under the audio panel, above its frame (the frame's top at the panel's y 0).
+# above the audio panel's frame (the frame's top at y 0). Not under the panel
+# (null_audio, at 0, 0 in null_prog_color1, so the same place) but next to
+# it: the page's focus changes dim the panel and switch its lists' input
+# (run tabs-4: the tabs went grey with the list's focus), and the tabs take
+# the keys themselves while they have them.
 # Four tabs of 190 px, 10 apart, from the panel's left (tab i from x 8 + 200 i);
 # their text centred at y -42, so the tabs' scrollbar fits under them; the
 # cursor scaled to a tab (the category list's, 36 x 5, spans its 360 px rows,
@@ -280,9 +284,9 @@ def place_header(g):
 
 def add_tabs(g, options):
     """The page tabs: the game's category list copied from its own layout
-    (options.gui as shipped) under the audio panel, laid out sideways."""
-    print("page tabs: a copy of btnlist_menu under null_audio")
-    graft(g, options, "btnlist_menu", "null_audio", entries_like="btnlist_camera", log=lambda m: print("  " + m),
+    (options.gui as shipped) next to the panels, laid out sideways."""
+    print("page tabs: a copy of btnlist_menu under null_prog_color1")
+    graft(g, options, "btnlist_menu", "null_prog_color1", entries_like="btnlist_camera", log=lambda m: print("  " + m),
           rename=TABS["rename"])
     for name, param, old, new in TABS["params"]:
         set_param(g, name, param, old, new)
