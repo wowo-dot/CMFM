@@ -327,6 +327,7 @@ inline constexpr std::size_t kSplitPanel = 2;
 inline constexpr char kTabListName[] = "cmfm_tab_list";
 inline constexpr char kTabText[] = "msg_1";
 inline constexpr float kTabWidth = 190.0f;  // DuplicateButtonSize in the layout
+inline constexpr int kTabTextSize = 22;     // the <SIZE> of a tab's text (the row's own is about 28)
 // CMFM's restart line: the camera panel's title, moved above the mod list
 // and switched on in CMFM's layout (panel titles are off in the game's).
 inline constexpr char kRestartLineName[] = "a_title_menu_camera";
@@ -348,6 +349,9 @@ inline constexpr char kRowStar[] = "null_star";
 inline constexpr std::size_t kMessageWidth = 248;
 inline constexpr std::size_t kMessageFlags = 328;
 inline constexpr std::uint32_t kMessageRelayout = 0x10000;
+// AutoScale (getter 0x142341950): the layout (sub_1424E0B30 -> sub_1424E10F0)
+// shrinks each line wider than the box to the box's width (never enlarges).
+inline constexpr std::uint32_t kMessageAutoScale = 0x1;
 inline constexpr std::size_t kMessageLayout = 336;
 // The row label in CMFM's layout (menu_config/msg_config: PosX 10, anchored
 // left-middle): left in its 340 px box, or centred in a box to x 796, i.e.

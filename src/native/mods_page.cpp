@@ -253,7 +253,7 @@ std::size_t g_tab_top = 0;
 std::size_t g_tab_mod = 0;  // the mod the window was placed for
 bool g_tabs_shown = false;
 constexpr std::size_t kMaxTabs = 8;
-char g_tab_labels[kMaxTabs][96];
+char g_tab_labels[kMaxTabs][128];
 // The mod list's window: how many rows its layout shows. Read from the list's
 // DuplicateNum once per list, before CMFM first sets its row count: setRowCount
 // stores the count into that field (rebuildRows, RVA 0xB7FEF0 + 0x1F8), so after
@@ -840,8 +840,8 @@ void show_mod_list() {
 }
 
 // A tab's label centred in its tab (the title menu's row text is laid out
-// left in a box of its own width); what it was is logged once, for the
-// layout's sake.
+// left in a box of its own width) and shrunk when it is wider than the tab
+// (AutoScale); what it was is logged once, for the layout's sake.
 void centre_tab_label(void* row) {
     void* root = field<void*>(row, game::kInstRoot);
     void* label = root != nullptr ? gui_get_object(root, game::kTabText) : nullptr;
@@ -856,11 +856,12 @@ void centre_tab_label(void* row) {
         logf(AL_LOG_INFO, "Mods page: a page tab's label was laid out 0x%02X, %.1f wide", static_cast<unsigned>(layout),
              static_cast<double>(width));
     }
+    std::uint32_t& flags = field<std::uint32_t>(label, game::kMessageFlags);
     const auto centred = static_cast<std::uint8_t>((layout & 0xF0) | 0x01);
-    if (layout != centred || width != game::kTabWidth) {
+    if (layout != centred || width != game::kTabWidth || (flags & game::kMessageAutoScale) == 0) {
         layout = centred;
         width = game::kTabWidth;
-        field<std::uint32_t>(label, game::kMessageFlags) |= game::kMessageRelayout;
+        flags |= game::kMessageAutoScale | game::kMessageRelayout;
     }
 }
 
@@ -903,8 +904,9 @@ void show_tabs() {
         const char* before = r == 0 && g_tab_top > 0 ? "\xC2\xAB " : "";
         const char* after = r + 1 == count && p + 1 < pages ? " \xC2\xBB" : "";
         std::snprintf(g_tab_labels[r], sizeof g_tab_labels[r],
-                      p == page ? "<STYL MOJI_LIGHTGREEN_DEFAULT>%s%s%s</STYL>" : "%s%s%s", before,
-                      title != nullptr ? title : "", after);
+                      p == page ? "<STYL MOJI_LIGHTGREEN_DEFAULT><SIZE %d>%s%s%s</SIZE></STYL>"
+                                : "<SIZE %d>%s%s%s</SIZE>",
+                      game::kTabTextSize, before, title != nullptr ? title : "", after);
         set_row_text(row, game::kTabText, nullptr, g_tab_labels[r]);
         centre_tab_label(row);
         field<std::uint32_t>(row, game::kInstFlags) |= game::kInstFlagActive | game::kInstFlagEnabled;
