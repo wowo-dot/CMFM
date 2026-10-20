@@ -7,6 +7,7 @@
 #include "native/game_421810.hpp"
 #include "native/gui.hpp"
 #include "native/measure.hpp"
+#include "native/config_loader.hpp"
 #include "native/mod_list.hpp"
 #include "native/options_model.hpp"
 #include "native/options_view.hpp"
@@ -42,6 +43,7 @@ using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
 using MenuKeyFn = std::uint8_t (*)(void* gui, std::uint32_t key, void* list);
 using MenuDirectionFn = std::uint32_t (*)(void* gui, std::int32_t* sources, std::int32_t* mode, std::uint32_t* flags);
 using MenuKeyModeFn = std::uint8_t (*)(void* gui, std::uint32_t key, std::int32_t* mode, std::uint32_t* flags);
+using RequestSoundFn = void (*)(void* gui_manager, const char* name, void* unit, std::int32_t a, std::int32_t b);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
                                std::uint8_t flag);
@@ -92,6 +94,7 @@ MenuDirectionFn g_menu_direction = nullptr;
 // The keyboard and mouse family of the same (optional: without it the pad).
 MenuDirectionFn g_menu_direction_kbm = nullptr;
 MenuKeyModeFn g_menu_key_kbm = nullptr;
+RequestSoundFn g_request_sound = nullptr;  // optional: without it the page tabs and Q / E stay quiet
 bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
 // The help line request (optional: without it the help line may keep the
 // previous mod's text).
@@ -427,6 +430,8 @@ void place_tab_cursor();
 void tab_keys(void* unit);
 void leave_tab_keys(void* unit, bool to_panel);
 bool menu_held(void* unit);
+void move_cursor(void* list, std::int32_t row);
+void play_sound(void* unit, const char* name);
 bool activate_row(void* unit, std::size_t row, bool keep_focus);
 void enter_panel(void* unit);
 void leave_panel(void* unit);
@@ -659,11 +664,16 @@ void track_mouse(void* unit) {
         g_mouse_position(unit, at, nullptr);
         const std::int64_t hit = tab_at(unit, at);
         g_mod_hover = false;
+        const bool moved_on = hit >= 0 && g_tab_top + static_cast<std::size_t>(hit) != g_tab_mark;
         g_tab_hover = hit;
         if (hit >= 0) {
             g_tab_mark = g_tab_top + static_cast<std::size_t>(hit);
         }
         place_tab_cursor();
+        if (moved_on) {
+            move_cursor(g_tab_list.load(std::memory_order_acquire), static_cast<std::int32_t>(hit));
+            request_split_help(unit);
+        }
         return;
     }
     alignas(16) float position[4] = {};
@@ -764,6 +774,9 @@ std::uint64_t page_update(void* unit) {
             next = next < 0 ? 0 : next > static_cast<std::int64_t>(last_top) ? static_cast<std::int64_t>(last_top) : next;
             scroll_to(unit, static_cast<std::size_t>(next));
         }
+    }
+    if (g_view.load(std::memory_order_acquire)) {
+        config_pages_flush_idle();  // changes quiet for half a second go into their files
     }
     const std::uint64_t result = page_next(game::kSlotUpdate)(unit);
     // A focus change activates or deactivates the panel, and the tab's
@@ -1064,6 +1077,12 @@ bool hover_tabs(void* unit, float* position) {
     if (hit != g_tab_hover) {
         g_tab_hover = hit;
         place_tab_cursor();
+        if (hit >= 0) {
+            move_cursor(g_tab_list.load(std::memory_order_acquire), static_cast<std::int32_t>(hit));
+        }
+        if (field<std::int32_t>(unit, game::kOptFocus) == 0) {
+            request_split_help(unit);  // the page under the pointer (with the panel's focus its row's stays)
+        }
     }
     return hit >= 0;
 }
@@ -1078,6 +1097,7 @@ bool click_tab(void* unit, float* position, std::int32_t focus) {
     }
     g_tab_hover = hit;
     if (g_list.show_page(g_tab_top + static_cast<std::size_t>(hit)).changed) {
+        play_sound(unit, game::kSoundPage);
         show_selected(unit, focus == 1);
         request_split_help(unit);
     }
@@ -1090,6 +1110,36 @@ bool click_tab(void* unit, float* position, std::int32_t focus) {
 std::size_t list_visible() {
     void* list = g_mod_list.load(std::memory_order_acquire);
     return list != nullptr ? g_list_window.load(std::memory_order_relaxed) : 0;
+}
+
+// A list's cursor to `row` the game's way (its moveCursor: the row's looks
+// and the page's cursor sound, as the game's own lists move); a cursor
+// already on the row (a window moved under it) is first told it came from a
+// neighbour, so the move counts.
+void move_cursor(void* list, std::int32_t row) {
+    if (list == nullptr || g_list_move_next == nullptr) {
+        return;
+    }
+    const auto count = static_cast<std::int32_t>(field<std::uint32_t>(list, game::kListRowCount));
+    if (row < 0 || row >= count) {
+        return;
+    }
+    std::int32_t& cursor = field<std::int32_t>(list, game::kListCursor);
+    if (cursor == row) {
+        if (count < 2) {
+            return;
+        }
+        cursor = row + 1 < count ? row + 1 : row - 1;
+    }
+    g_list_move_next(list, row);
+}
+
+// A menu sound by name, for the page.
+void play_sound(void* unit, const char* name) {
+    void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+    if (g_request_sound != nullptr && manager != nullptr && unit != nullptr) {
+        g_request_sound(manager, name, unit, -1, 0);
+    }
 }
 
 // The window follows the highlight (and never runs past the last row).
@@ -1124,6 +1174,7 @@ void set_highlight(void* unit, std::size_t row) {
     }
     g_highlight = row;
     keep_highlight_in_view();
+    move_cursor(g_mod_list.load(std::memory_order_acquire), static_cast<std::int32_t>(g_highlight - g_mod_top));
     show_highlight(unit);
 }
 
@@ -1675,14 +1726,24 @@ void rebuild_panel(void* unit) {
 void request_split_help(void* unit) {
     const OptionsModel& model = menu::service_model();
     const std::vector<menu::Mod>& mods = menu::service_mods();
-    if (g_highlight < g_list.mod_count() && g_highlight < mods.size()) {
-        const menu::Mod& mod = mods[g_highlight];
-        const std::size_t page = g_list.page_of(g_highlight);
+    const std::size_t shown_mod = g_list.shown_mod();
+    const bool on_tabs = g_tabs_shown && (g_tab_hover >= 0 || g_tab_keys) && shown_mod < mods.size() &&
+                         field<std::int32_t>(unit, game::kOptFocus) == 0;
+    if (on_tabs) {
+        // A tab under the pointer or marked by the keys: that page's help.
+        const menu::Mod& mod = mods[shown_mod];
+        const std::size_t page = g_tab_hover >= 0 ? g_tab_top + static_cast<std::size_t>(g_tab_hover) : g_tab_mark;
         const char* help = model.tab_help(mod.tabs[page < mod.tabs.size() ? page : 0]);
         g_highlight_help = help != nullptr ? help : "";
         if (g_tab_keys) {
             g_highlight_help += " Left / Right: choose a page. Confirm: open it. Down or Back: the settings.";
-        } else if (mod.tabs.size() > 1) {
+        }
+    } else if (g_highlight < g_list.mod_count() && g_highlight < mods.size()) {
+        const menu::Mod& mod = mods[g_highlight];
+        const std::size_t page = g_list.page_of(g_highlight);
+        const char* help = model.tab_help(mod.tabs[page < mod.tabs.size() ? page : 0]);
+        g_highlight_help = help != nullptr ? help : "";
+        if (mod.tabs.size() > 1) {
             g_highlight_help += " " + std::to_string(mod.tabs.size()) + " pages: the tabs above, or Q / E.";
         }
     } else {
@@ -2066,6 +2127,7 @@ void page_keys(void* unit) {
         const bool pressed = held[d] && !g_page_keys[d];
         g_page_keys[d] = held[d];
         if (pressed && usable && g_list.step_page(d == 0 ? -1 : 1).changed) {
+            play_sound(unit, game::kSoundPage);
             g_tab_hover = -1;  // the tabs' cursor goes to the shown page until the pointer moves
             g_highlight = g_list.shown_mod();
             keep_highlight_in_view();
@@ -2156,12 +2218,7 @@ void panel_cursor_last(void* unit) {
     if (top != g_panel_top) {
         scroll_panel(unit, top, false);
     }
-    const auto row = static_cast<std::int32_t>(last - g_panel_top);
-    std::int32_t& cursor = field<std::int32_t>(list, game::kListCursor);
-    if (cursor == row) {
-        cursor = row > 0 ? row - 1 : row + 1;
-    }
-    g_list_move_next(list, row);
+    move_cursor(list, static_cast<std::int32_t>(last - g_panel_top));
 }
 
 // The tabs give the keys back: to the panel (Down, Up, Confirm, Back; the
@@ -2203,14 +2260,7 @@ void mark_tab(std::size_t page) {
         scroll_tabs(top);  // the labels; place_tab_cursor puts the cursor on the mark
     }
     place_tab_cursor();
-    const auto row = static_cast<std::int32_t>(page - g_tab_top);
-    if (g_list_move_next != nullptr && count > 1) {
-        std::int32_t& cursor = field<std::int32_t>(list, game::kListCursor);
-        if (cursor == row) {
-            cursor = row + 1 < static_cast<std::int32_t>(count) ? row + 1 : row - 1;
-        }
-        g_list_move_next(list, row);
-    }
+    move_cursor(list, static_cast<std::int32_t>(page - g_tab_top));
 }
 
 // Every frame while the page shows CMFM's menu: keyboard and pad on the page
@@ -2263,11 +2313,13 @@ void tab_keys(void* unit) {
     const std::uint32_t side = menu_direction(unit, game::kMenuSourcesLeftRight, game::kMenuModeRepeat);
     if ((side == game::kMenuLeft || side == game::kMenuRight) && pages > 1) {
         mark_tab(side == game::kMenuLeft ? (g_tab_mark + pages - 1) % pages : (g_tab_mark + 1) % pages);
+        request_split_help(unit);  // the marked page's
         return;
     }
     void* tabs = g_tab_list.load(std::memory_order_acquire);
     if (menu_pressed(unit, game::kMenuKeyConfirm, tabs)) {
         if (g_list.show_page(g_tab_mark).changed) {
+            play_sound(unit, game::kSoundPage);
             show_selected(unit, false);
         }
         g_panel_decide_guard = 3;
@@ -2987,6 +3039,17 @@ void row_decide_detour(void* row) {
     if (entry != nullptr && unit != nullptr && split_view() && unit == g_view_unit.load(std::memory_order_acquire) &&
         is_cmfm_row(entry->kind, static_cast<std::uint32_t>(entry->setting_id))) {
         const auto id = static_cast<std::uint32_t>(entry->setting_id);
+        const std::int32_t mod = menu::service_status_mod(id);
+        if (mod >= 0 && g_mod_list.load(std::memory_order_acquire) != nullptr) {
+            // An Overview row: its mod shows, the panel keeping the focus.
+            g_list.activate(static_cast<std::size_t>(mod));
+            g_highlight = static_cast<std::size_t>(mod);
+            keep_highlight_in_view();
+            play_sound(unit, game::kSoundOpen);
+            show_selected(unit, true);
+            request_split_help(unit);
+            return;
+        }
         if (menu::service_is_button(id)) {
             ask_button(unit, id);
             return;
@@ -3225,6 +3288,12 @@ bool mods_page_register(const Env& env, std::string& why) {
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
+    }
+    std::string sound_why;
+    if (!find_game_function(env, "requestSound", game::kRequestSoundPattern,
+                            reinterpret_cast<void**>(&g_request_sound), sound_why)) {
+        g_request_sound = nullptr;
+        logf(AL_LOG_WARNING, "Mods page: %s; page switches stay quiet", sound_why.c_str());
     }
     std::string right_why;
     if (!find_game_function(env, "right click", game::kRightClickPattern, reinterpret_cast<void**>(&g_mouse_right),

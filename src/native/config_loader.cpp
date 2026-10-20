@@ -153,6 +153,14 @@ std::string config_key(const std::string& file) {
 
 }  // namespace
 
+void config_pages_flush_idle() {
+    for (const auto& pages : g_loaded) {
+        if (pages->idle_changes(std::chrono::milliseconds(500))) {
+            pages->flush();
+        }
+    }
+}
+
 void config_pages_load(const al_api_t* api, al_plugin_t* self, const wchar_t* cmfm_folder, const wchar_t* game_folder) {
     g_api = api;
     g_self = self;

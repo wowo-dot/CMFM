@@ -14,4 +14,9 @@ namespace cmfm::native {
 // listed on the Overview with the reason (and logged).
 void config_pages_load(const al_api_t* api, al_plugin_t* self, const wchar_t* cmfm_folder, const wchar_t* game_folder);
 
+// While the Mods page is open (its update, the game's menu thread): every
+// config page whose changes have been quiet for half a second writes them
+// into its file now, the page staying open (before 0.2.0 only on closing).
+void config_pages_flush_idle();
+
 }  // namespace cmfm::native

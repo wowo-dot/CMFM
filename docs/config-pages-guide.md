@@ -181,9 +181,11 @@ documentation says so, or you checked).
   that is missing or does not parse when the game starts hides the page
   (the Overview says why); one that breaks while the game runs makes the
   page read-only.
-- **Writing:** once, when the Mods page closes, and only the values the
-  player changed. At that moment CMFM reads the file again: if the mod or
-  the player changed a value meanwhile, the file's value is kept.
+- **Writing:** half a second after the player's last change (a slider
+  dragged writes once, when it stops) and when the Mods page closes (before
+  CMFM 0.2.0 only then), only the values the player changed. Each time CMFM
+  reads the file again first: if the mod or the player changed a value
+  meanwhile, the file's value is kept.
 - **Only the value's characters change,** in the form the file already
   uses, so the mod reads the new value as it read the old one:
   - switches keep their words and case: `true`/`false`, `1`/`0`,
@@ -212,7 +214,7 @@ documentation says so, or you checked).
 - `AsteraLoader\logs\plugins\cmfm.log` says
   `pages/<name>.json: N page(s) for <mod> (<config file>)` when the file is
   read, logs every value set, and `N change(s) written to <config file>`
-  when the Mods page closes.
+  each time it writes.
 - Change one value, close the page, and compare the config file with its
   `.cmfm-backup`: only that value should differ.
 - `examples/config_pages/` in CMFM's repository holds working pages for a

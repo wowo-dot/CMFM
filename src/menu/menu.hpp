@@ -125,6 +125,8 @@ public:
     bool set(std::uint32_t setting_id, std::int32_t index);
     void reset_defaults();               // "Set To Default"
 
+    // The mod an Overview row describes (its index in mods()), or -1.
+    std::int32_t status_mod(std::uint32_t setting_id) const;
     // Rows by setting id (false for ids that are not a plugin setting).
     bool is_section(std::uint32_t setting_id) const;
     bool restart_pending(std::uint32_t setting_id) const;

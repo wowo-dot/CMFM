@@ -1051,10 +1051,12 @@ void groups_pages_into_mods() {
     check(mods.size() == 4 && same(mods[0].name.c_str(), "Overview") && mods[0].tabs.size() == 1, "the Overview first");
     check(same(mods[1].name.c_str(), "DLSS") && mods[1].tabs.size() == 2 && mods[1].tabs[0] == 1 && mods[1].tabs[1] == 3,
           "DLSS: its two pages, in order");
-    check(same(mods[2].name.c_str(), "Plain one") && mods[2].tabs.size() == 2 && mods[2].tabs[1] == 4,
+    check(same(mods[2].name.c_str(), "DLSS debug") && mods[2].tabs.size() == 1,
+          "another name of the plugin: a mod (the list by name)");
+    check(same(mods[3].name.c_str(), "Plain one") && mods[3].tabs.size() == 2 && mods[3].tabs[1] == 4,
           "pages without a name: one mod named after its first page");
-    check(same(mods[3].name.c_str(), "DLSS debug") && mods[3].tabs.size() == 1, "another name of the plugin: a mod");
-    check(m.mod_of_tab(3) == 1 && m.mod_of_tab(4) == 2 && m.mod_of_tab(0) == 0, "tabs know their mod");
+    check(m.mod_of_tab(3) == 1 && m.mod_of_tab(4) == 3 && m.mod_of_tab(5) == 2 && m.mod_of_tab(0) == 0,
+          "tabs know their mod");
     check(same(m.tab_header(1), "DLSS \xC2\xB7 v0.15.0") && same(m.tab_header(3), "DLSS") &&
               same(m.tab_header(5), "Debug"),
           "headers: the mod (its page tabs name the page); a single page by its title");
@@ -1068,6 +1070,14 @@ void groups_pages_into_mods() {
     check(rows == 4, "the Overview: CMFM and one row per mod");
     check(dlss != nullptr && std::strstr(help_text(model, dlss), "on 2 pages") != nullptr,
           "a mod's row counts its pages");
+    const native::GameOptionRow* overview = model.table(0);
+    check(same(model.label_text(static_cast<std::uint32_t>(overview[1].label_id)), "DLSS") &&
+              same(model.label_text(static_cast<std::uint32_t>(overview[2].label_id)), "DLSS debug") &&
+              same(model.label_text(static_cast<std::uint32_t>(overview[3].label_id)), "Plain one"),
+          "the Overview's mods in the mod list's order");
+    check(m.status_mod(id(&overview[1])) == 1 && m.status_mod(id(&overview[3])) == 3 &&
+              m.status_mod(id(&overview[0])) == -1 && m.status_mod(id(find(model, 3, "Restart thing"))) == -1,
+          "an Overview row knows its mod; CMFM's row and settings none");
     const native::GameOptionRow* restart = find(model, 3, "Restart thing");
     m.get(id(restart));
     m.set(id(restart), 1);

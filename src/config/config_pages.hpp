@@ -11,6 +11,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <map>
 #include <string>
 #include <vector>
@@ -49,6 +50,12 @@ public:
     // The Mods page opened / closed (the pages' on_event).
     void opened();
     void closed();
+    // While it is open: changes waiting, the last made at least `quiet` ago
+    // (a slider dragged writes once, when it stops).
+    bool idle_changes(std::chrono::milliseconds quiet) const;
+    // Writes the changes now, as closing would, and reads the file again; the
+    // page stays open (a crash then loses nothing written).
+    void flush();
 
 private:
     struct Row {
@@ -67,6 +74,9 @@ private:
     // A condition holds: the named setting's value now equals `want`.
     bool holds(const std::string& id, const JsonValue& want) const;
     bool read_file(Document& out, std::string& why) const;
+    // The changes into the file (verified, merged with the file as it is now);
+    // they are cleared either way (written or logged).
+    void write_changes();
 
     static cmfm_result_t CMFM_CALL get(void* user, std::uint32_t id, cmfm_value_t* value);
     static cmfm_result_t CMFM_CALL set(void* user, std::uint32_t id, const cmfm_value_t* value);
@@ -90,6 +100,7 @@ private:
     bool doc_ok_ = false;
     std::string doc_why_;
     std::map<std::uint32_t, std::string> changes_;
+    std::chrono::steady_clock::time_point last_change_{};
 };
 
 }  // namespace cmfm::config

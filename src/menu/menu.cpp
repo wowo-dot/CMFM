@@ -3,6 +3,8 @@
 #include "cmfm/cmfm_check.h"
 #include "menu/keys.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdarg>
 #include <cstddef>
@@ -243,9 +245,25 @@ void Menu::set_problems(std::string text) {
 }
 
 void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
-    // Status rows: CMFM itself, one per add_page call (at most 23 rows).
+    group_mods(shown);
+    // Status rows: CMFM itself, then one per mod in the mod list's order (by
+    // name), then the refusals and the pages not shown in the order they came
+    // (at most 23 rows in all).
+    struct Item {
+        std::size_t mod = 0;  // an active mod, or 0
+        const Entry* entry = nullptr;
+    };
+    std::vector<Item> items;
+    for (std::size_t mod = 1; mod < mods_.size(); ++mod) {
+        items.push_back({mod, nullptr});
+    }
+    for (const Entry& en : entries_) {
+        if (!en.page || en.index >= shown) {
+            items.push_back({0, &en});
+        }
+    }
     constexpr std::size_t kStatusRows = native::kMaxRowsPerTab;
-    std::size_t entry_rows = entries_.empty() ? 1 : entries_.size();
+    std::size_t entry_rows = items.empty() ? 1 : items.size();
     const bool more = entry_rows > kStatusRows - 1;
     if (more) {
         entry_rows = kStatusRows - 1;  // the last one says how many more
@@ -254,7 +272,6 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     for (std::size_t p = 0; p < shown; ++p) {
         setting_rows += pages_[p].settings.size();
     }
-    group_mods(shown);
     rows_.clear();
     rows_.reserve(1 + entry_rows + setting_rows);  // stable addresses for the model
 
@@ -270,26 +287,23 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
     status("CMFM", version_.empty() ? "-" : version_.c_str(),
            problems_.empty() ? "Configuration Menu For Mods. Each mod that supports it has an entry in this list."
                              : "Configuration Menu For Mods. " + problems_);
-    if (entries_.empty()) {
+    if (items.empty()) {
         status("No mod pages yet", "-", "Mods that support CMFM add their settings here.");
     }
-    for (std::size_t e = 0; e < entries_.size() && e < entry_rows; ++e) {
+    for (std::size_t e = 0; e < items.size() && e < entry_rows; ++e) {
         if (more && e == entry_rows - 1) {
-            status("More", std::to_string(entries_.size() - e).c_str(),
+            status("More", std::to_string(items.size() - e).c_str(),
                    "More mods than this list holds; see cmfm.log.");
             break;
         }
-        const Entry& en = entries_[e];
-        if (!en.page) {
-            const auto& [plugin, why] = refused_[en.index];
+        const Item& item = items[e];
+        if (item.entry != nullptr && !item.entry->page) {
+            const auto& [plugin, why] = refused_[item.entry->index];
             status(plugin.empty() ? std::string("(unnamed)") : plugin, "Refused", "Refused: " + why);
-        } else if (en.index < shown) {
-            // One row per mod, at its first page.
-            const std::size_t m = tab_mod_[1 + en.index];
+        } else if (item.entry == nullptr) {
+            // One row per mod; Confirm on it shows the mod.
+            const std::size_t m = item.mod;
             const Mod& mod = mods_[m];
-            if (mod.tabs.front() != 1 + en.index) {
-                continue;
-            }
             std::size_t count = 0;
             for (const std::size_t t : mod.tabs) {
                 for (const Setting& s : pages_[t - 1].settings) {
@@ -300,11 +314,11 @@ void Menu::compose(std::size_t shown, std::vector<native::RowSpec>& specs) {
             if (mod.tabs.size() > 1) {
                 help += " on " + std::to_string(mod.tabs.size()) + " pages";
             }
-            status(mod.name, "Active", help + ".");
+            status(mod.name, "Active", help + ". Confirm shows its settings.");
             rows_.back().status_mod = static_cast<std::int32_t>(m);
         } else {
-            const Page& p = pages_[en.index];
-            status(p.title, "Not shown", "From " + p.plugin + ". " + not_shown_why_[en.index]);
+            const Page& p = pages_[item.entry->index];
+            status(p.title, "Not shown", "From " + p.plugin + ". " + not_shown_why_[item.entry->index]);
         }
     }
 
@@ -617,6 +631,14 @@ void Menu::update_status_texts() {
     }
 }
 
+std::int32_t Menu::status_mod(std::uint32_t setting_id) const {
+    const std::int32_t src = model_ != nullptr ? model_->source(setting_id) : -1;
+    if (src < 0 || static_cast<std::size_t>(src) >= rows_.size() || !rows_[static_cast<std::size_t>(src)].status) {
+        return -1;
+    }
+    return rows_[static_cast<std::size_t>(src)].status_mod;
+}
+
 bool Menu::is_section(std::uint32_t setting_id) const {
     const Row* r = any_setting_row(setting_id);
     return r != nullptr && pages_[r->page].settings[r->setting].type == CMFM_TYPE_SECTION;
@@ -656,7 +678,24 @@ void Menu::group_mods(std::size_t shown) {
             mods_.push_back({page.mod.empty() ? page.title : page.mod, page.plugin, {}});
         }
         mods_[m].tabs.push_back(1 + p);
-        tab_mod_[1 + p] = m;
+    }
+    // The mod list in name order (the Overview stays first), case not
+    // counted; equal names keep the order they came in.
+    std::stable_sort(mods_.begin() + 1, mods_.end(), [](const Mod& a, const Mod& b) {
+        const std::size_t n = a.name.size() < b.name.size() ? a.name.size() : b.name.size();
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto ca = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(a.name[i])));
+            const auto cb = static_cast<unsigned char>(std::tolower(static_cast<unsigned char>(b.name[i])));
+            if (ca != cb) {
+                return ca < cb;
+            }
+        }
+        return a.name.size() < b.name.size();
+    });
+    for (std::size_t m = 1; m < mods_.size(); ++m) {
+        for (const std::size_t t : mods_[m].tabs) {
+            tab_mod_[t] = m;
+        }
     }
 }
 

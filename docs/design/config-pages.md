@@ -38,7 +38,8 @@ both look like any other mod in the list.
 - **Format:** JSON, with `//` and `/* */` comments allowed (people write
   these by hand). Strict otherwise, so a mistake is reported with its line
   on the Overview.
-- **Writing:** once, when the Mods page closes.
+- **Writing:** once, when the Mods page closes. (Since 0.2.0 also half a
+  second after the last change, the page staying open: `ConfigPages::flush`.)
 - **Syntaxes CMFM edits:** JSON, INI and TOML (TOML since step 7). Plain
   values only (switches, numbers, choices, keys, read-only lines); lists and
   rule tables are not menu material.

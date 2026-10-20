@@ -450,6 +450,22 @@ void ConfigPages::opened() {
 }
 
 void ConfigPages::closed() {
+    write_changes();
+}
+
+bool ConfigPages::idle_changes(std::chrono::milliseconds quiet) const {
+    return !changes_.empty() && std::chrono::steady_clock::now() - last_change_ >= quiet;
+}
+
+void ConfigPages::flush() {
+    if (changes_.empty()) {
+        return;
+    }
+    write_changes();
+    doc_ok_ = read_file(doc_, doc_why_);  // what the page shows and compares with from now on
+}
+
+void ConfigPages::write_changes() {
     if (changes_.empty()) {
         return;
     }
@@ -546,6 +562,7 @@ cmfm_result_t CMFM_CALL ConfigPages::set(void* user, std::uint32_t id, const cmf
     } else {
         self->changes_[id] = text;
     }
+    self->last_change_ = std::chrono::steady_clock::now();
     return CMFM_OK;
 }
 

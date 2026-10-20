@@ -242,6 +242,10 @@ void service_reset() {
     }
 }
 
+std::int32_t service_status_mod(std::uint32_t setting_id) {
+    return g_menu && g_model_ok ? g_menu->status_mod(setting_id) : -1;
+}
+
 bool service_is_section(std::uint32_t setting_id) {
     return g_menu && g_model_ok && g_menu->is_section(setting_id);
 }

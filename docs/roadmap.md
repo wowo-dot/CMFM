@@ -48,6 +48,15 @@ remain.
   the same, except WASD, which in game moves no menu's cursor on the
   user's setting (the game's own Start menu neither; the system setting
   `sUserData +286` picks WASD or the arrows in menu mode).
+- **More usability** (agreed with the user, 2026-10-20): the mod list by
+  name (the Overview's mod rows too); an Overview row opens its mod;
+  config pages write half a second after the last change, not only on
+  closing; the help line follows the tab under the pointer or the keys;
+  menu sounds (the game's cursor sound on mod-list and tab moves, a page
+  sound on tab switches and Q / E, a decide sound on an Overview jump).
+  Unit-tested where pure (order, Overview rows, the flush); in-game run
+  pending. Later: key hints in the bottom bar, a mark on changed settings
+  and a per-setting Default.
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 

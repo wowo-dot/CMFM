@@ -5,6 +5,7 @@
 #include "config/json.hpp"
 #include "menu/menu.hpp"
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -619,6 +620,23 @@ void writes_toml_in_its_form() {
     want = replaced(want, "enabled = false", "enabled = true");
     check(files.writes == 1 && files.files[cfg] == want,
           "closed: the six changes written in the file's own forms, comments and columns kept");
+    // Written while the page stays open (CMFM flushes a change once it has
+    // been quiet a moment): the file at once, the page reading it from then on.
+    pages.opened();
+    check(!pages.idle_changes(std::chrono::milliseconds(0)), "nothing waiting after opening");
+    v = {};
+    v.i = 45;
+    g.set(g.user, by_label(g, "Wait between")->id, &v);
+    check(pages.idle_changes(std::chrono::milliseconds(0)) && !pages.idle_changes(std::chrono::hours(1)),
+          "a change waits; not yet quiet for an hour");
+    pages.flush();
+    check(files.writes == 2 && files.files[cfg].find("trigger_cd = 45 ") != std::string::npos &&
+              !pages.idle_changes(std::chrono::milliseconds(0)),
+          "flush: written while open, nothing waiting");
+    v = {};
+    check(g.get(g.user, by_label(g, "Wait between")->id, &v) == CMFM_OK && v.i == 45, "the page reads the new file");
+    pages.closed();
+    check(files.writes == 2, "closing after a flush writes nothing more");
     if (files.files[cfg] != want) {
         std::printf("%s\n", files.files[cfg].c_str());
     }

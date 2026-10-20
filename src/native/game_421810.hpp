@@ -576,6 +576,14 @@ inline constexpr std::uint32_t kMenuDown = 4;
 // (mouse button 2 for 1), the list's cancel by pointer (sub_140B76AF0).
 inline constexpr char kRightClickPattern[] =
     "8B 81 9C 22 00 00 C1 E8 0A A8 01 75 23 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 11 48 8B 0D ?? ?? ?? ?? BA 02 00 00 00 E9 ?? ?? ?? ?? 32 C0 C3";
+// Menu sounds: sMhGUI::requestSound(sMhGUI, name, unit, -1, 0) at RVA
+// 0x1AE47E0 plays a sound by name for a unit (the game's pages: "snd_cursor",
+// "snd_decide_simple", "snd_tab_1_simple" ...). A list's cursor move
+// (moveCursor, RVA 0xB74060) plays the page's own cursor sound itself.
+inline constexpr char kRequestSoundPattern[] =
+    "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 48 83 EC 30 48 8B 1D ?? ?? ?? ?? 48 8B CA BA FF FF FF FF 41 8B E9 49 8B F0 E8 ?? ?? ?? ?? 48 8D 8B A0 49 01 00 8B D0 E8 ?? ?? ?? ??";
+inline constexpr char kSoundPage[] = "snd_tab_1_simple";   // another page of the shown mod
+inline constexpr char kSoundOpen[] = "snd_decide_simple";  // a mod opened from the Overview
 // The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
 inline constexpr char kMouseMovedPattern[] =
     "48 85 D2 74 09 80 BA 72 01 00 00 00 74 0D 8B 81 9C 22 00 00 C1 E8 0A A8 01 75 1E 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 0C 48 8B 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? 32 C0";

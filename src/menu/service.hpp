@@ -48,6 +48,8 @@ void service_reset();
 
 // For the Mods page's drawing (game thread; false / 0 without a layout).
 bool service_is_section(std::uint32_t setting_id);
+// The mod an Overview row describes (Menu::status_mod), or -1.
+std::int32_t service_status_mod(std::uint32_t setting_id);
 bool service_restart_pending(std::uint32_t setting_id);
 bool service_tab_restart_pending(std::size_t tab);
 std::size_t service_restart_count();

@@ -47,7 +47,8 @@ own mod.
 
 ## Using the Mods page
 
-- **The mod list** (left): "Overview" first, then one entry per mod. It
+- **The mod list** (left): "Overview" first, then one entry per mod, by
+  name. It
   works like the game's Options: move over an entry (pointer or arrows) and
   its settings show on the right; a click or Confirm goes into them, and
   Back or a right click returns to the list. A mod with several pages
@@ -73,14 +74,15 @@ own mod.
   setting on that page back to the mod's default, after a Yes/No question.
 - **The Overview** lists every mod and its state: Active, Restart needed,
   or Refused with the reason (a mod's page with a mistake, a config page
-  whose config file is missing). CMFM's own row says if part of CMFM is
-  off and why.
+  whose config file is missing); Confirm or a click on a mod's row opens
+  its settings. CMFM's own row says if part of CMFM is off and why.
 
 ### Config pages: what CMFM does to a mod's file
 
-- Your changes are written when you close the Mods page, into the mod's
-  own config file, and only the values you changed. The rest of the file
-  (comments, order, spacing) stays exactly as it was.
+- Your changes are written into the mod's own config file half a second
+  after you stop changing (and when you close the Mods page), only the
+  values you changed. The rest of the file (comments, order, spacing) stays
+  exactly as it was.
 - The first time CMFM changes a file, it keeps the original next to it as
   `<file>.cmfm-backup`. To undo everything, put that copy back.
 - If CMFM cannot find a value in the file, that row is read-only and says
