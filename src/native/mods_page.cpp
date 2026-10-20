@@ -41,6 +41,7 @@ using MouseHitFn = std::uint8_t (*)(void* gui, void* instance, const float* posi
 using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
 using MenuKeyFn = std::uint8_t (*)(void* gui, std::uint32_t key, void* list);
 using MenuDirectionFn = std::uint32_t (*)(void* gui, std::int32_t* sources, std::int32_t* mode, std::uint32_t* flags);
+using MenuKeyModeFn = std::uint8_t (*)(void* gui, std::uint32_t key, std::int32_t* mode, std::uint32_t* flags);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
                                std::uint8_t flag);
@@ -88,6 +89,9 @@ bool g_mouse_off = false;       // a focus function was not where expected (logg
 // keyboard and pad on the page tabs. Both or neither.
 MenuKeyFn g_menu_key = nullptr;
 MenuDirectionFn g_menu_direction = nullptr;
+// The keyboard and mouse family of the same (optional: without it the pad).
+MenuDirectionFn g_menu_direction_kbm = nullptr;
+MenuKeyModeFn g_menu_key_kbm = nullptr;
 bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
 // The help line request (optional: without it the help line may keep the
 // previous mod's text).
@@ -2081,14 +2085,38 @@ void tab_list_input(bool on) {
     }
 }
 
-// A direction (keys, D-pad or stick) is held down.
-bool menu_held(void* unit) {
-    if (g_menu_direction == nullptr) {
+// A direction through the game's menu input, the pad's family first, then
+// the keyboard's (lists ask the one their keyboard flag picks).
+std::uint32_t menu_direction(void* unit, std::int32_t sources, std::int32_t mode) {
+    std::int32_t s = sources;
+    std::int32_t m = mode;
+    std::uint32_t direction = g_menu_direction != nullptr ? g_menu_direction(unit, &s, &m, nullptr) : 0;
+    if (direction == 0 && g_menu_direction_kbm != nullptr) {
+        s = sources;
+        m = mode;
+        direction = g_menu_direction_kbm(unit, &s, &m, nullptr);
+    }
+    return direction;
+}
+
+// A menu key pressed this frame, pad or keyboard. The keyboard family also
+// answers for mouse buttons; Confirm by a click is the click's (the pointer
+// acts on it as usual), so it does not count here.
+bool menu_pressed(void* unit, std::uint32_t key, void* list) {
+    if (g_menu_key != nullptr && g_menu_key(unit, key, list) != 0) {
+        return true;
+    }
+    if (g_menu_key_kbm == nullptr || (key == game::kMenuKeyConfirm && g_mouse_click != nullptr &&
+                                      g_mouse_click(unit, nullptr) != 0)) {
         return false;
     }
-    std::int32_t sources = game::kMenuSourcesAll;
-    std::int32_t mode = game::kMenuModeHeld;
-    return g_menu_direction(unit, &sources, &mode, nullptr) != 0;
+    std::int32_t mode = game::kMenuModePressed;
+    return g_menu_key_kbm(unit, key, &mode, nullptr) != 0;
+}
+
+// A direction (keys, D-pad or stick) is held down.
+bool menu_held(void* unit) {
+    return menu_direction(unit, game::kMenuSourcesAll, game::kMenuModeHeld) != 0;
 }
 
 // The page tabs take the keys (Up from the panel's first row): the page's
@@ -2232,15 +2260,13 @@ void tab_keys(void* unit) {
         g_tab_guard = false;
     }
     const std::size_t pages = g_list.page_count(g_list.shown_mod());
-    std::int32_t sides = game::kMenuSourcesLeftRight;
-    std::int32_t repeat = game::kMenuModeRepeat;
-    const std::uint32_t side = g_menu_direction(unit, &sides, &repeat, nullptr);
+    const std::uint32_t side = menu_direction(unit, game::kMenuSourcesLeftRight, game::kMenuModeRepeat);
     if ((side == game::kMenuLeft || side == game::kMenuRight) && pages > 1) {
         mark_tab(side == game::kMenuLeft ? (g_tab_mark + pages - 1) % pages : (g_tab_mark + 1) % pages);
         return;
     }
     void* tabs = g_tab_list.load(std::memory_order_acquire);
-    if (g_menu_key(unit, game::kMenuKeyConfirm, tabs) != 0) {
+    if (menu_pressed(unit, game::kMenuKeyConfirm, tabs)) {
         if (g_list.show_page(g_tab_mark).changed) {
             show_selected(unit, false);
         }
@@ -2248,7 +2274,7 @@ void tab_keys(void* unit) {
         leave_tab_keys(unit, true);
         return;
     }
-    if (g_menu_key(unit, game::kMenuKeyBack, nullptr) != 0 ||
+    if (menu_pressed(unit, game::kMenuKeyBack, nullptr) ||
         (g_mouse_right != nullptr && g_mouse_right(unit, nullptr) != 0)) {
         leave_tab_keys(unit, true);
         return;
@@ -2256,9 +2282,7 @@ void tab_keys(void* unit) {
     if (g_tab_guard) {
         return;  // the Up that came here is still held
     }
-    std::int32_t updown = game::kMenuSourcesUpDown;
-    std::int32_t pressed = game::kMenuModePressed;
-    const std::uint32_t vertical = g_menu_direction(unit, &updown, &pressed, nullptr);
+    const std::uint32_t vertical = menu_direction(unit, game::kMenuSourcesUpDown, game::kMenuModePressed);
     if (vertical == game::kMenuDown) {
         leave_tab_keys(unit, true);
     } else if (vertical == game::kMenuUp) {
@@ -3083,6 +3107,17 @@ bool find_menu_direction(const Env& env, std::string& why) {
     }
     const auto* code = static_cast<const std::uint8_t*>(match);
     g_menu_direction = reinterpret_cast<MenuDirectionFn>(rip_target(code, game::kMenuDirectionCall + 5));
+    // The keyboard twins: the reader from the other call, its key check from
+    // a call inside it, checked by the bytes around that call.
+    const auto* kbm = reinterpret_cast<const std::uint8_t*>(rip_target(code, game::kMenuDirectionKbmCall + 5));
+    const std::size_t at = game::kMenuKeyKbmCall + 1 - sizeof game::kMenuKeyKbmCallContext;
+    if (code[game::kMenuDirectionKbmCall] == 0xE8 &&
+        std::memcmp(kbm + at, game::kMenuKeyKbmCallContext, sizeof game::kMenuKeyKbmCallContext) == 0) {
+        g_menu_direction_kbm = reinterpret_cast<MenuDirectionFn>(kbm);
+        g_menu_key_kbm = reinterpret_cast<MenuKeyModeFn>(rip_target(kbm, game::kMenuKeyKbmCall + 5));
+    } else {
+        logf(AL_LOG_WARNING, "Mods page: the keyboard's menu input is not where expected; on the page tabs the pad only");
+    }
     return true;
 }
 

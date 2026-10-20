@@ -546,6 +546,17 @@ inline constexpr char kMenuKeyPattern[] =
 inline constexpr char kMenuDirectionCallerPattern[] =
     "48 83 EC 28 4C 8B CA 45 84 C0 74 2E 80 B9 7B 01 00 00 00 74 25 48 8D 91 0C 01 00 00 C7 44 24 40 04 00 00 00 48 8B 89 80 00 00 00 4C 8D 44 24 40 E8 ?? ?? ?? ?? 48 83 C4 28 C3 48 8D 91 0C 01 00 00 C7 44 24 40 04 00 00 00 48 8B 89 80 00 00 00 4C 8D 44 24 40 E8 ?? ?? ?? ??";
 inline constexpr std::size_t kMenuDirectionCall = 85;  // E8 rel32
+// The same for the keyboard and mouse: lists with their keyboard flag (+379)
+// read directions through RVA 0x18BA150 (the call at +48 of sub_140B86F30:
+// the same sources, modes and results) and keys through RVA 0x18B9A70
+// (key(gui, key, int* mode, uint32* flags out); the call at +0x7A of the
+// former, after `mov edx, 9; mov rcx, rdi`), which ask the keyboard and the
+// mouse buttons (sub_141FB63F0 pressed, 6340 repeated, 62D0 held, three
+// functions alike but for their calls). Run tabs-8: keyboard A / D only
+// flashed the tabs' cursor (the tab list's own step), CMFM read the pad.
+inline constexpr std::size_t kMenuDirectionKbmCall = 48;  // E8 rel32
+inline constexpr std::size_t kMenuKeyKbmCall = 0x7A;      // E8 rel32 inside the keyboard direction reader
+inline constexpr std::uint8_t kMenuKeyKbmCallContext[] = {0xBA, 0x09, 0x00, 0x00, 0x00, 0x48, 0x8B, 0xCF, 0xE8};
 inline constexpr std::uint32_t kMenuKeyConfirm = 0;
 inline constexpr std::uint32_t kMenuKeyBack = 1;
 // The sources with the left stick too (a list's own, 0x10 / 0x20, leave it

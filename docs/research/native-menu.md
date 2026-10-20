@@ -1364,6 +1364,21 @@ each fill, on open and when a restart state changes.
   reached until no direction is held (`sub_1418B9D30` mode 4), and the
   panel's decide for three frames after Confirm. The tab list's own
   following of the pointer (+641) is off.
+- **Run tabs-8:** all of that worked with the pad; the keyboard did
+  nothing on the tabs (A / D only flashed the cursor: the tab list's own
+  step, which CMFM ignores). **The menu input has two families.** The pad's
+  (`sub_141FB6960` pressed, `6860` repeated, `6760` held; directions
+  `sub_1418B9D30`, keys with a mode `sub_1418B99D0`) and the keyboard and
+  mouse's (`sub_141FB63F0` pressed, `6340` repeated, `62D0` held: keyboard
+  keys or mouse buttons; directions `sub_1418BA150`, keys with a mode
+  `sub_1418B9A70`). A list asks the keyboard's when its flag +379 is set
+  (`sub_140B86DD0` and the others; its decide in `sub_140B87410` too). The
+  three keyboard checks are alike but for their calls (no unique pattern),
+  so CMFM takes the keyboard's direction reader from the other call in
+  `sub_140B86F30` (+48) and its key check from the call at +0x7A inside it,
+  checked by the bytes before it. CMFM now asks both families (the pad's
+  first); a left click does not count as the keyboard's Confirm (the
+  pointer acts on the click itself).
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 
