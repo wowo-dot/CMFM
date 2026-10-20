@@ -30,7 +30,8 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
     py -3.12 -B tools/gui/make_mods_gui.py "<extract>/chunk/ui/title/options.gui"
 
 The scrollbar parts come from <extract>/chunk/ui/pc/graphic_option.gui next
-to it (only read).
+to it, the tabs' arrows from <extract>/chunk/ui/equip/equip_appearance.gui
+(both only read).
 """
 import os
 import struct
@@ -44,6 +45,7 @@ from gui_rebuild import VALUE_POOL, Gui, rd  # noqa: E402
 
 SOURCE_SHA256 = "ce319136a650983d22cfc8684f11e0d72c669f4c307ff40710b7dc03d3c8b066"
 SCROLLBAR_SOURCE_SHA256 = "a0e4092cd4c3acc628c7a634b391232f360effc5cece194e5d8750df902b2b99"
+ARROWS_SOURCE_SHA256 = "d42b9afd22ede25dd9f69c5fdaaa77e20e55bebf6a478c065d4b803e49d53b2a"
 OUTPUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "nativePC", "ui", "cmfm", "mods.gui")
 MOD_LIST_ROWS = 11
 
@@ -285,6 +287,29 @@ def place_header(g):
               TITLE_TEXT_SIZE)
 
 
+# The page tabs' key hints: the game's own tab arrows (ui\common\page_tab's
+# arrowPrev_tab / arrowNext_tab, an arrow and a small button icon from
+# ui\common\buttonGuide, as every tab bar of the game shows them at its ends),
+# copied from equip\equip_appearance.gui, which places them by reference
+# (ResourceId of 'ui\common\page_tab', AnimationId 1 / 2). At both ends of
+# the four tabs (x 8 to 798), level with their text (y -42). CMFM shows them
+# with the tabs.
+ARROWS = (
+    # source instance, CMFM's name, PosX (the source's, CMFM's)
+    ("arrowPrev_tab", "cmfm_tab_prev", -220.0, -14.0),
+    ("arrowNext_tab", "cmfm_tab_next", 220.0, 822.0),
+)
+
+
+def add_arrows(g, source):
+    for src_name, name, x_from, x_to in ARROWS:
+        print("tab hint %s under null_prog_color1" % name)
+        graft(g, source, src_name, "null_prog_color1", entries_like="btnlist_camera", log=lambda m: print("  " + m),
+              rename={src_name: name})
+        set_param(g, name, "PosX", x_from, x_to)
+        set_param(g, name, "PosY", 0.0, -42.0)
+
+
 def add_tabs(g, options):
     """The page tabs: the game's category list copied from its own layout
     (options.gui as shipped) next to the panels, laid out sideways."""
@@ -295,13 +320,14 @@ def add_tabs(g, options):
         set_param(g, name, param, old, new)
 
 
-def add_scrollbars(data, source, options):
+def add_scrollbars(data, source, options, arrows):
     """CMFM's layout with the panels moved, the mod's header placed, the page
-    tabs and the two scrollbars grafted in (the file grows)."""
+    tabs, their arrows and the scrollbars grafted in (the file grows)."""
     g = Gui.parse(data)
     src = Gui.parse(source)
     place_header(g)
     add_tabs(g, Gui.parse(options))
+    add_arrows(g, Gui.parse(arrows))
     for name, parent, x, y, length, horizontal in SCROLLBARS:
         print("scrollbar %s under %s" % (name, parent))
         graft(g, src, "null_scrollbar_root", parent, entries_like="btnlist_camera", log=lambda m: print("  " + m),
@@ -340,10 +366,15 @@ def main():
     if sha256(source) != SCROLLBAR_SOURCE_SHA256:
         print("%s is not the expected graphic_option.gui (SHA-256 %s)" % (source_path, sha256(source)))
         return 1
+    arrows_path = os.path.join(os.path.dirname(sys.argv[1]), "..", "equip", "equip_appearance.gui")
+    arrows = open(arrows_path, "rb").read()
+    if sha256(arrows) != ARROWS_SOURCE_SHA256:
+        print("%s is not the expected equip_appearance.gui (SHA-256 %s)" % (arrows_path, sha256(arrows)))
+        return 1
     gui = GuiFile(data)
     try:
         build(gui)
-        out = add_scrollbars(bytes(gui.d), source, data)
+        out = add_scrollbars(bytes(gui.d), source, data, arrows)
     except (KeyError, ValueError, TypeError, GraftError) as e:
         print("stopped: %s" % e)
         return 1

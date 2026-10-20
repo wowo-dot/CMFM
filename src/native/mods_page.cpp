@@ -273,6 +273,10 @@ bool g_tabs_shown = false;
 // page, or hidden while the wheel or the scrollbar moved that out of view.
 std::int64_t g_tab_hover = -1;
 void* g_tab_cursor = nullptr;  // the list's cursor instance (setPlay hides it)
+// The game's tab arrows at both ends (previous, next): the L / R hints,
+// shown with the tabs; a click steps the page as Q / E do.
+void* g_tab_arrows[2] = {};
+bool g_arrow_hover = false;  // the pointer is over an arrow (the hand shows)
 // Keyboard and pad on the page tabs (tab_keys): Up from the panel's first row
 // asks for them (the panel list's step, acted on in the page's update). While
 // on, the page's focus is on the list side with the category list inactive,
@@ -425,6 +429,9 @@ void scroll_tabs(std::size_t top);
 std::int64_t tab_at(void* unit, float* position);
 bool hover_tabs(void* unit, float* position);
 bool click_tab(void* unit, float* position, std::int32_t focus);
+int arrow_at(void* unit, float* position);
+bool click_arrow(void* unit, float* position);
+void keep_highlight_in_view();
 void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top);
 void place_tab_cursor();
 void tab_keys(void* unit);
@@ -656,6 +663,12 @@ void track_mouse(void* unit) {
     if (!moved && !clicked) {
         return;
     }
+    alignas(16) float at_arrow[4] = {};
+    g_mouse_position(unit, at_arrow, nullptr);
+    g_arrow_hover = arrow_at(unit, at_arrow) >= 0;
+    if (clicked && click_arrow(unit, at_arrow)) {
+        return;
+    }
     if (g_tab_keys && !clicked) {
         // While the tabs have the keys the pointer only moves their cursor
         // over them (the hand with it); over anything else it does nothing
@@ -726,7 +739,8 @@ std::uint64_t page_update(void* unit) {
         // pages show it over their own clickable parts.
         const std::int32_t pointer_focus = field<std::int32_t>(unit, game::kOptFocus);
         void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
-        if (manager != nullptr && (g_tab_hover >= 0 || g_mod_hover) && (pointer_focus == 0 || pointer_focus == 1)) {
+        if (manager != nullptr && (g_tab_hover >= 0 || g_mod_hover || g_arrow_hover) &&
+            (pointer_focus == 0 || pointer_focus == 1)) {
             field<std::uint8_t>(manager, game::kGuiPointerHand) = 1;
         }
         const std::uint32_t revision = menu::service_restart_revision();
@@ -1000,6 +1014,11 @@ void show_tabs(bool follow) {
     const std::size_t visible = g_tab_window < kMaxTabs ? g_tab_window : kMaxTabs;
     g_tabs_shown = pages > 1 && visible > 0;
     gui_set_play(list, g_tabs_shown);  // acts only on a change
+    for (void* arrow : g_tab_arrows) {
+        if (arrow != nullptr) {
+            gui_set_play(arrow, g_tabs_shown);
+        }
+    }
     if (!g_tabs_shown) {
         g_tab_hover = -1;
         show_scroll(g_tab_bar, 0, 0, 0);
@@ -1085,6 +1104,39 @@ bool hover_tabs(void* unit, float* position) {
         }
     }
     return hit >= 0;
+}
+
+// The pointer over one of the tabs' arrows: 0 previous, 1 next, else -1.
+int arrow_at(void* unit, float* position) {
+    if (!g_tabs_shown || g_mouse_hit == nullptr) {
+        return -1;
+    }
+    for (int a = 0; a < 2; ++a) {
+        if (g_tab_arrows[a] != nullptr && g_mouse_hit(unit, g_tab_arrows[a], position, nullptr) != 0) {
+            return a;
+        }
+    }
+    return -1;
+}
+
+// A click on an arrow: the shown mod's previous or next page, as Q / E (the
+// focus stays; with the keys on the tabs, their cursor follows). True if the
+// click was on an arrow.
+bool click_arrow(void* unit, float* position) {
+    const int a = arrow_at(unit, position);
+    if (a < 0) {
+        return false;
+    }
+    if (g_list.step_page(a == 0 ? -1 : 1).changed) {
+        play_sound(unit, game::kSoundPage);
+        g_tab_hover = -1;
+        g_tab_mark = g_list.shown_page();
+        g_highlight = g_list.shown_mod();
+        keep_highlight_in_view();
+        show_selected(unit, field<std::int32_t>(unit, game::kOptFocus) == 1);
+        request_split_help(unit);
+    }
+    return true;
 }
 
 // A click on a page tab: the shown mod's page; with the list's focus the
@@ -1445,8 +1497,9 @@ void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size
     if (b.shown) {
         field<float>(b.bar, game::kScrollTotal) = static_cast<float>(total);
         field<float>(b.bar, game::kScrollVisible) = static_cast<float>(visible);
-        if (field<std::uint8_t>(b.bar, game::kScrollDragging) == 0) {  // a held thumb stays under the mouse
-            field<float>(b.bar, game::kScrollRatio) = static_cast<float>(top) / static_cast<float>(total - visible);
+        const std::size_t range = total - visible;  // > 0 while shown
+        if (field<std::uint8_t>(b.bar, game::kScrollDragging) == 0 && range > 0) {  // a held thumb stays under the mouse
+            field<float>(b.bar, game::kScrollRatio) = static_cast<float>(top) / static_cast<float>(range);
         }
     }
 }
@@ -2448,6 +2501,12 @@ bool enter_view(void* unit) {
         // Its cursor, hidden while the shown page is scrolled out of the
         // window; shown again (setPlay acts only on a change) when placed.
         g_tab_cursor = tab_list != nullptr ? gui_get_instance(unit, game::kTabCursorName) : nullptr;
+        for (std::size_t a = 0; a < 2; ++a) {
+            g_tab_arrows[a] = tab_list != nullptr ? gui_get_instance(unit, game::kTabArrowNames[a]) : nullptr;
+            if (g_tab_arrows[a] != nullptr) {
+                gui_set_play(g_tab_arrows[a], false);  // shown with the tabs
+            }
+        }
         if (g_tab_cursor != nullptr) {
             gui_set_play(g_tab_cursor, false);  // shown only on hover or with the keys
         }
@@ -2626,6 +2685,8 @@ std::uint64_t page_close(void* unit) {
     g_tabs_shown = false;
     g_tab_hover = -1;
     g_tab_cursor = nullptr;
+    g_tab_arrows[0] = g_tab_arrows[1] = nullptr;
+    g_arrow_hover = false;
     g_tab_keys = false;
     g_tab_keys_wanted = false;
     g_tab_guard = false;

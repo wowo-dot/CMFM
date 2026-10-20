@@ -347,6 +347,9 @@ inline constexpr std::size_t kSplitPanel = 2;
 inline constexpr char kTabListName[] = "cmfm_tab_list";
 inline constexpr char kTabText[] = "msg_1";
 inline constexpr char kTabCursorName[] = "cmfm_tab_cursor";
+// The page tabs' key hints: the game's tab arrows (ui\common\page_tab, with
+// the button guide's small L / R icon) at both ends of the tabs.
+inline constexpr char kTabArrowNames[2][16] = {"cmfm_tab_prev", "cmfm_tab_next"};
 // A page's input lists: registerInput(unit, instance name, priority) at RVA
 // 0x1FB44E0 appends {name, priority} to the unit's registry (40-byte entries
 // from +1136, count at +4976, room for 96); the page's constructor registers
