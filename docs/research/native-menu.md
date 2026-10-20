@@ -1330,6 +1330,23 @@ each fill, on open and when a restart state changes.
   have the keys they are then the focused list of that group: the panel
   side stays bright and the mod list side greys, as when the panel has
   the focus.
+- **Run tabs-6:** keys reached the tabs; but Left / Right switched the page
+  at once (the user: move the cursor first, as the pointer does), holding
+  did not repeat, the stick did nothing (a list's own sources, 0x10 / 0x20,
+  leave the stick out), the cursor's green dot (the list's `EffectCursor`
+  1, from the category list) was not wanted, and the pointer on the tabs
+  while they had the keys acted oddly (the active list's own pointer
+  handling against CMFM's).
+- **Since:** CMFM ignores the tab list's own steps and reads the keys
+  itself: Left / Right with sources 0x2 (keys 7 / 8 and the stick 12 / 13)
+  in mode 3 (repeats while held) move the tabs' cursor over all pages
+  (wrapping; the window follows; the game's cursor sound through the
+  original moveCursor, told it came from the next row when the window
+  moved under it); Confirm shows the marked page and enters the panel;
+  Down (sources 0x1: keys 9 / 10, the stick 14 / 15) returns to the panel
+  on the shown page; Back to the mod list. Mouse activity while the tabs
+  have the keys gives them back to the panel first. `EffectCursor` 0 on
+  `cmfm_tab_list` (layout).
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

@@ -269,13 +269,15 @@ bool g_tab_cursor_shown = true;
 // Keyboard and pad on the page tabs (tab_keys): Up from the panel's first row
 // asks for them (the panel list's step, acted on in the page's update). While
 // on, the page's focus is on the list side with the category list inactive,
-// and the tab list is the one active list: the game's own sideways-list input
-// steps it (Left / Right, its keys and pad), CMFM's step hook turns a step
-// into a page (g_tab_step_to, shown in the page's update), and CMFM reads
-// Down, Confirm and Back through the game's menu input.
+// and the tab list is the one active registered list (the GUI then keeps the
+// panels' side bright). CMFM reads the keys through the game's menu input,
+// the stick included: Left / Right move the tabs' cursor (g_tab_mark, as the
+// pointer does), Confirm shows that page and goes into it (as a click), Down
+// goes back into the panel, Back to the mod list. The list's own steps are
+// ignored.
 bool g_tab_keys_wanted = false;
 bool g_tab_keys = false;
-std::int64_t g_tab_step_to = -1;  // the page a tab list step asked for
+std::size_t g_tab_mark = 0;  // the page the tabs' cursor is on while they have the keys
 bool g_mod_hover = false;  // the pointer is over a mod row (the hand shows)
 constexpr std::size_t kMaxTabs = 8;
 char g_tab_labels[kMaxTabs][128];
@@ -412,6 +414,7 @@ bool click_tab(void* unit, float* position, std::int32_t focus);
 void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top);
 void place_tab_cursor();
 void tab_keys(void* unit);
+void leave_tab_keys(void* unit, bool to_panel);
 bool activate_row(void* unit, std::size_t row, bool keep_focus);
 void enter_panel(void* unit);
 void leave_panel(void* unit);
@@ -627,7 +630,7 @@ PanelFocusFn focus_function(void* object, std::size_t slot, std::uintptr_t rva, 
 // page has the input (the helpers answer nothing otherwise).
 void track_mouse(void* unit) {
     void* list = g_mod_list.load(std::memory_order_acquire);
-    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
     if (g_mouse_moved == nullptr || g_mouse_off || list == nullptr || (focus != 0 && focus != 1)) {
         return;
     }
@@ -635,6 +638,16 @@ void track_mouse(void* unit) {
     const bool clicked = g_mouse_click(unit, nullptr) != 0;
     if (!moved && !clicked) {
         return;
+    }
+    if (g_tab_keys) {
+        // The pointer takes over from the keys: the tabs give them back to
+        // the panel (the tabs' own pointer handling as an active list would
+        // fight CMFM's), and the pointer acts as usual from there.
+        leave_tab_keys(unit, true);
+        focus = field<std::int32_t>(unit, game::kOptFocus);
+        if (focus != 0 && focus != 1) {
+            return;
+        }
     }
     alignas(16) float position[4] = {};
     g_mouse_position(unit, position, nullptr);
@@ -923,14 +936,15 @@ void place_tab_cursor(void* list, std::int64_t row) {
 }
 
 // Where the tabs' cursor belongs: the tab under the pointer, else the shown
-// page's tab while it is in the window, else nowhere.
+// page's tab (while the tabs have the keys, the marked one) while it is in the
+// window, else nowhere.
 void place_tab_cursor() {
     void* list = g_tab_list.load(std::memory_order_acquire);
     if (list == nullptr || !g_tabs_shown) {
         return;
     }
     const std::size_t count = field<std::uint32_t>(list, game::kListRowCount);
-    const std::size_t page = g_list.shown_page();
+    const std::size_t page = g_tab_keys ? g_tab_mark : g_list.shown_page();
     if (g_tab_hover >= 0 && static_cast<std::size_t>(g_tab_hover) < count) {
         place_tab_cursor(list, g_tab_hover);
     } else if (page >= g_tab_top && page < g_tab_top + count) {
@@ -1233,21 +1247,10 @@ void scroll_panel(void* unit, std::size_t top, bool refresh) {
 // the row looks, the arrows and the help line for the new setting.
 std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cursor, std::int32_t steps,
                          std::uint8_t wrap, std::uint8_t* wrapped) {
-    if (g_tab_keys && list == g_tab_list.load(std::memory_order_acquire)) {
-        // The tabs (Left / Right while they have the keys): the shown mod's
-        // previous or next page, wrapping over all of them. Inside the window
-        // the list's cursor moves (the game's sound); when the window has to
-        // move, the cursor stays and the page's update moves the labels.
-        const std::size_t pages = g_list.page_count(g_list.shown_mod());
-        const std::size_t count = field<std::uint32_t>(list, game::kListRowCount);
-        if (pages < 2 || count == 0) {
-            return static_cast<std::uint32_t>(cursor);
-        }
-        const std::size_t page = g_list.shown_page();
-        const std::size_t to = down ? (page + 1) % pages : (page + pages - 1) % pages;
-        g_tab_step_to = static_cast<std::int64_t>(to);
-        const std::size_t top = tab_window_top(g_tab_top, to, pages, count);
-        return top == g_tab_top ? static_cast<std::uint32_t>(to - top) : static_cast<std::uint32_t>(cursor);
+    if (list == g_tab_list.load(std::memory_order_acquire)) {
+        // The tabs' own steps (their sideways keys while active): CMFM moves
+        // their cursor itself (tab_keys), with the stick and repeats.
+        return static_cast<std::uint32_t>(cursor);
     }
     if (split_categories(list)) {
         // The mod list moves the way the key or stick points; the category
@@ -1653,7 +1656,7 @@ void request_split_help(void* unit) {
         const char* help = model.tab_help(mod.tabs[page < mod.tabs.size() ? page : 0]);
         g_highlight_help = help != nullptr ? help : "";
         if (g_tab_keys) {
-            g_highlight_help += " Left / Right: the pages. Down: their settings.";
+            g_highlight_help += " Left / Right: choose a page. Confirm: open it. Down: back to the settings.";
         } else if (mod.tabs.size() > 1) {
             g_highlight_help += " " + std::to_string(mod.tabs.size()) + " pages: the tabs above, or Q / E.";
         }
@@ -2056,9 +2059,9 @@ void tab_list_input(bool on) {
 }
 
 // The page tabs take the keys (Up from the panel's first row): the page's
-// focus goes to the list side (the panel's own Back: the panel greys as the
-// game does), the category list stops reading keys and the tab list starts;
-// its cursor shows the shown page.
+// focus goes to the list side (the panel's own Back), the category list stops
+// reading keys and the tab list starts (registered, so the GUI keeps the
+// panels' side bright); the tabs' cursor starts on the shown page.
 void enter_tab_keys(void* unit) {
     leave_panel(unit);
     if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
@@ -2066,19 +2069,19 @@ void enter_tab_keys(void* unit) {
     }
     tab_list_input(true);
     g_tab_keys = true;
-    g_tab_step_to = -1;
+    g_tab_mark = g_list.shown_page();
     g_tab_hover = -1;
     place_tab_cursor();
     request_split_help(unit);
 }
 
-// The tabs give the keys back: to the panel (Down, Confirm) or to the mod
-// list (Back). The category list reads keys again from the next frames on (a
-// list reads only after the GUI marked it for input), so the key that left
-// does not reach it too.
+// The tabs give the keys back: to the panel (Down, Confirm, the mouse) or to
+// the mod list (Back). The category list reads keys again from the next
+// frames on (a list reads only after the GUI marked it for input), so the key
+// that left does not reach it too. The tabs' window and cursor go back to the
+// shown page.
 void leave_tab_keys(void* unit, bool to_panel) {
     g_tab_keys = false;
-    g_tab_step_to = -1;
     tab_list_input(false);
     if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
         field<std::uint8_t>(categories, game::kListInactive) = 0;
@@ -2086,16 +2089,44 @@ void leave_tab_keys(void* unit, bool to_panel) {
     if (to_panel) {
         enter_panel(unit);
     }
+    show_tabs(true);
     request_split_help(unit);
 }
 
+// The tabs' cursor to `page` (the window following), with the game's cursor
+// sound: moveCursor makes a sound only for a real change, so a cursor whose
+// row stays (the window moved under it) is first told it came from the next
+// row.
+void mark_tab(std::size_t page) {
+    void* list = g_tab_list.load(std::memory_order_acquire);
+    const std::size_t pages = g_list.page_count(g_list.shown_mod());
+    if (list == nullptr || page >= pages) {
+        return;
+    }
+    g_tab_mark = page;
+    const std::size_t count = field<std::uint32_t>(list, game::kListRowCount);
+    const std::size_t top = tab_window_top(g_tab_top, page, pages, count);
+    if (top != g_tab_top) {
+        scroll_tabs(top);  // the labels; place_tab_cursor puts the cursor on the mark
+    }
+    const auto row = static_cast<std::int32_t>(page - g_tab_top);
+    if (g_list_move_next != nullptr && count > 1) {
+        std::int32_t& cursor = field<std::int32_t>(list, game::kListCursor);
+        if (cursor == row) {
+            cursor = row + 1 < static_cast<std::int32_t>(count) ? row + 1 : row - 1;
+        }
+        g_list_move_next(list, row);
+    }
+    place_tab_cursor();
+}
+
 // Every frame while the page shows CMFM's menu: keyboard and pad on the page
-// tabs. The tab list's own input steps it (Left / Right through the game's
-// sideways-list keys; the step hook asked for a page, shown here); Down or
-// Confirm go into the panel, Back returns to the mod list, read through the
-// game's menu input (the player's bindings; Down as a vertical list reads
-// it). Anything else that moves the focus, a mod without tabs, a key wait or
-// a question ends it.
+// tabs, read through the game's menu input (the player's bindings; the stick
+// too; Left / Right repeat while held). Left / Right move the tabs' cursor
+// over all pages (wrapping), Confirm shows the marked page and goes into it,
+// Down goes back into the panel on the shown page, Back to the mod list.
+// Anything else that moves the focus, a mod without tabs, a key wait or a
+// question ends it.
 void tab_keys(void* unit) {
     if (g_menu_key == nullptr || g_menu_direction == nullptr) {
         return;
@@ -2114,8 +2145,8 @@ void tab_keys(void* unit) {
     if (focus != 0) {
         // The focus moved (a click): the game set the page's lists for it.
         g_tab_keys = false;
-        g_tab_step_to = -1;
         tab_list_input(false);
+        show_tabs(true);
         request_split_help(unit);
         return;
     }
@@ -2123,21 +2154,23 @@ void tab_keys(void* unit) {
         leave_tab_keys(unit, false);
         return;
     }
-    if (g_tab_step_to >= 0) {
-        const auto to = static_cast<std::size_t>(g_tab_step_to);
-        g_tab_step_to = -1;
-        g_tab_hover = -1;
-        if (g_list.show_page(to).changed) {
-            show_selected(unit, false);
-            request_split_help(unit);
-        }
+    const std::size_t pages = g_list.page_count(g_list.shown_mod());
+    std::int32_t sides = game::kMenuSourcesLeftRight;
+    std::int32_t repeat = game::kMenuModeRepeat;
+    const std::uint32_t side = g_menu_direction(unit, &sides, &repeat, nullptr);
+    if ((side == game::kMenuLeft || side == game::kMenuRight) && pages > 1) {
+        mark_tab(side == game::kMenuLeft ? (g_tab_mark + pages - 1) % pages : (g_tab_mark + 1) % pages);
         return;
     }
-    std::int32_t sources = game::kMenuSourcesVertical;
-    std::int32_t mode = game::kMenuModePressed;
+    std::int32_t updown = game::kMenuSourcesUpDown;
+    std::int32_t pressed = game::kMenuModePressed;
     void* tabs = g_tab_list.load(std::memory_order_acquire);
-    if (g_menu_direction(unit, &sources, &mode, nullptr) == game::kMenuDown ||
-        g_menu_key(unit, game::kMenuKeyConfirm, tabs) != 0) {
+    if (g_menu_key(unit, game::kMenuKeyConfirm, tabs) != 0) {
+        if (g_list.show_page(g_tab_mark).changed) {
+            show_selected(unit, false);
+        }
+        leave_tab_keys(unit, true);
+    } else if (g_menu_direction(unit, &updown, &pressed, nullptr) == game::kMenuDown) {
         leave_tab_keys(unit, true);
     } else if (g_menu_key(unit, game::kMenuKeyBack, nullptr) != 0) {
         leave_tab_keys(unit, false);
@@ -2425,7 +2458,6 @@ std::uint64_t page_close(void* unit) {
     g_tab_hover = -1;
     g_tab_cursor = nullptr;
     g_tab_keys = false;
-    g_tab_step_to = -1;
     g_tab_keys_wanted = false;
     g_mod_hover = false;
     g_slider_count = 0;

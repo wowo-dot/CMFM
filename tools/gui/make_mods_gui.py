@@ -237,6 +237,9 @@ TABS = {
         ("cmfm_tab_list", "PosY", 0.0, -42.0),
         ("cmfm_tab_cursor", "SclX", 36.0, 19.0),
         ("cmfm_tab_cursor", "SclY", 5.0, 4.2),
+        # no cursor effect (the green dot the category list shows by its
+        # focused row; run tabs-6: "not needed")
+        ("cmfm_tab_list", "EffectCursor", 1, 0),
     ),
 }
 

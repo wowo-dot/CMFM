@@ -545,8 +545,15 @@ inline constexpr char kMenuDirectionCallerPattern[] =
 inline constexpr std::size_t kMenuDirectionCall = 85;  // E8 rel32
 inline constexpr std::uint32_t kMenuKeyConfirm = 0;
 inline constexpr std::uint32_t kMenuKeyBack = 1;
-inline constexpr std::int32_t kMenuSourcesVertical = 0x10;  // as a vertical list's
+// The sources with the left stick too (a list's own, 0x10 / 0x20, leave it
+// out): bit 0 up / down (keys 9 / 10, the stick 14 / 15), bit 1 left / right
+// (7 / 8, the stick 12 / 13).
+inline constexpr std::int32_t kMenuSourcesUpDown = 0x1;
+inline constexpr std::int32_t kMenuSourcesLeftRight = 0x2;
 inline constexpr std::int32_t kMenuModePressed = 1;
+inline constexpr std::int32_t kMenuModeRepeat = 3;  // pressed, then repeated while held
+inline constexpr std::uint32_t kMenuLeft = 1;
+inline constexpr std::uint32_t kMenuRight = 2;
 inline constexpr std::uint32_t kMenuUp = 3;
 inline constexpr std::uint32_t kMenuDown = 4;
 // The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
