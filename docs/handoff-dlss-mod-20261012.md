@@ -300,3 +300,28 @@ is public from this release on: https://github.com/wowo-dot/CMFM
   (`AsteraLoader\plugins\mhw_dlss\logs`) makes Astera Loader warn about a
   plugin folder without its DLL.
 
+
+## CMFM 0.2.0 for the DLSS mod (2026-10-20)
+
+CMFM 0.2.0 is the usability release (`docs/release-notes-0.2.0.md`, tag
+`v0.2.0`). Nothing to change in the DLSS mod; what players will see:
+
+- **Pages are tabs** above the settings, not a dropdown under the mod's
+  entry. "Settings" and "Status" become two tabs; the header above the
+  panel shows the mod's name. A tab holds about 14 characters of a page
+  title at full size; longer titles shrink.
+- **The mod list is sorted by name** and works like the game's Options: the
+  highlight shows a mod's settings, a click or Confirm goes in. Q / E (pad
+  LB / RB) switch pages; the tabs' arrows show those keys.
+- **Config writes, sounds:** the game's own menu sounds; config pages (not
+  your plugin) write half a second after a change.
+- **Included fixes:** the GUI unit list (your report, 0.1.1 above) and the
+  panel's input with a single mod.
+- **`cmfm.menu` 1.3** is available and only adds to 1.2 (callback order
+  promised, text limits as defines, `cmfm_check.h`, a worded BUTTON
+  question). Asking for 1.2 keeps working.
+- **For a bundle:** `D:\mh world modding\CMFM\local\release\cmfm-0.2.0\`
+  (the `AsteraLoader` and `nativePC` folders) or `CMFM-0.2.0.zip` beside
+  it; SHA-256 in `CMFM-0.2.0.sha256`: zip `5a6a79b7...a0be`, cmfm.dll
+  `aa616e37...c11c`, mods.gui `48638fc1...584f` (changed: replace both
+  files together). Still needs Astera Loader 0.2.0 or newer.
