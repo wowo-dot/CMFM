@@ -4,7 +4,15 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
-## 0.2.0 (release prepared 2026-10-20)
+## 0.2.0 (released 2026-10-20)
+
+**Released 2026-10-20** on the user's go, after run `20261020-release-1`
+(the exact package; the user: "everything works", "i tested everything"):
+tag `v0.2.0`, the GitHub release "CMFM 0.2.0" with `CMFM-0.2.0.zip`
+(SHA-256 `5a6a79b7...a0be`) and its hash list. Nexus (mod 8856): the
+update is prepared in `local/nexus/` (the upload sheet's "Update to
+0.2.0"); the user uploads. Heads-ups written for the DLSS session
+(`docs/handoff-dlss-mod-20261012.md`) and a client mod's session.
 
 Named 0.2.0 by the user on 2026-10-20 ("a really nice usage overhaul"; until
 then collected as 0.1.1). The user's go for the release on 2026-10-20 after
