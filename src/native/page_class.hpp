@@ -61,6 +61,9 @@ void* page_alive();
 // not kept (see above). nullptr (with `why`) on failure; do not retry then (a
 // page may exist unfollowed).
 void* page_create(std::string& why);
+// True if page_create registered the page tabs (game::kTabListName) as one of
+// `unit`'s input lists, so they can take keys and pad.
+bool page_tab_input(const void* unit);
 // Marks the page kept (no scene change kills it; a kept page that is open is
 // closed by the game at a scene change instead) or not.
 void page_keep(void* unit, bool keep);

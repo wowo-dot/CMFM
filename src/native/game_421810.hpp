@@ -327,6 +327,21 @@ inline constexpr std::size_t kSplitPanel = 2;
 inline constexpr char kTabListName[] = "cmfm_tab_list";
 inline constexpr char kTabText[] = "msg_1";
 inline constexpr char kTabCursorName[] = "cmfm_tab_cursor";
+// A page's input lists: registerInput(unit, instance name, priority) at RVA
+// 0x1FB44E0 appends {name, priority} to the unit's registry (40-byte entries
+// from +1136, count at +4976, room for 96); the page's constructor registers
+// its lists (uGUIOption: btnlist_menu 0, the panels 1) and the unit's setup,
+// vtable slot 6 (RVA 0x1FB4540), resolves the names and links each list to
+// its null_prog_color group. Each frame the GUI gives the keys to the active
+// registered lists of the highest priority and greys every null_prog_color
+// group without one (run tabs-5: the tabs, never registered, showed the
+// active look but took no keys, and the panel side stayed grey). CMFM
+// registers the page tabs between the page's construction and its setup.
+inline constexpr char kRegisterInputPattern[] =
+    "48 83 EC 38 48 FF 81 70 13 00 00 4C 8B C9 48 8B 81 70 13 00 00 0F 57 C0 48 C7 44 24 10 00 00 00 00 48 89 54 24 18 C6 44 24 24 00";
+inline constexpr std::size_t kInputRegistryCount = 4976;  // u64
+inline constexpr std::uint64_t kInputRegistryMax = 96;
+inline constexpr std::uint32_t kTabListPriority = 1;  // the panels' (the tabs sit in their group)
 inline constexpr float kTabWidth = 190.0f;  // DuplicateButtonSize in the layout
 inline constexpr int kTabTextSize = 22;     // the <SIZE> of a tab's text (the row's own is about 28)
 // CMFM's restart line: the camera panel's title, moved above the mod list

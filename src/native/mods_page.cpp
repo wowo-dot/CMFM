@@ -1260,7 +1260,7 @@ std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cu
     }
     void* unit = g_view_unit.load(std::memory_order_acquire);
     const std::size_t visible = panel_visible();
-    if (!down && g_tabs_shown && g_menu_key != nullptr && split_view() && unit != nullptr &&
+    if (!down && g_tabs_shown && g_menu_key != nullptr && split_view() && unit != nullptr && page_tab_input(unit) &&
         list == panel_list(unit) && cursor >= 0 && static_cast<std::size_t>(cursor) < visible) {
         // Up from the first row that takes the cursor: to the page tabs (a mod
         // with one page wraps as before). The cursor stays; the page's update

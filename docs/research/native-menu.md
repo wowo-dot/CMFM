@@ -1308,6 +1308,28 @@ each fill, on open and when a restart state changes.
   only from the frame after the GUI marked it, so the same press does not
   reach it). A focus change by the mouse ends it; the tab list stops
   reading keys whenever it ends.
+- **Run tabs-5:** the tabs showed the active look (the cursor's green dot)
+  but took no keys, and the panel side stayed grey. **A list gets keys only
+  if its page registered it:** `registerInput(unit, name, priority)` (RVA
+  0x1FB44E0, 842 calls in the game) appends `{name, priority}` to the unit's
+  registry (40-byte entries from +1136: +0 the list, +8 the list again if
+  it is an input class, +16 its group, +24 the name, +32 the priority, +36
+  a cached active flag; count at +4976, room for 96). uGUIOption's
+  constructor (`sub_141E88400`) registers `btnlist_menu` with 0 and the
+  panel lists with 1. The unit's setup, vtable slot 6 (`sub_141FB4540`),
+  collects `null_prog_color0..95`, resolves each name with
+  getInstanceFromName and links the list to the `null_prog_color` group
+  above it. Each frame the update (`sub_141FB6A70`) finds the highest
+  priority among active registered lists (+8852) and marks those for input;
+  `sub_141FB4B60` greys every `null_prog_color` group holding none of them:
+  that is the grey of the side without the focus. CMFM's mod list and tabs
+  were never registered (the mod list needs no keys: CMFM moves it).
+- **Since:** `page_create` registers `cmfm_tab_list` (priority 1, the
+  panels') between the page's construction and its first pass, so the
+  setup links it to `null_prog_color1` like the panel lists. While the tabs
+  have the keys they are then the focused list of that group: the panel
+  side stays bright and the mod list side greys, as when the panel has
+  the focus.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

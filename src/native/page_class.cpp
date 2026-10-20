@@ -37,6 +37,7 @@ using SetRefFn = void (*)(void* lock, void* unit, GameRef* slot);
 using ClearRefFn = void (*)(void* lock, GameRef* slot);
 using RequestOpenFn = void (*)(void* unit, void* opener);
 using RequestCloseFn = std::uint32_t (*)(void* unit, std::uint8_t now);
+using RegisterInputFn = void (*)(void* unit, const char* name, std::uint32_t priority);
 
 // The game's class ids: crc32 without the final inversion, 31 bits.
 constexpr std::uint32_t class_id(const char* name) {
@@ -63,6 +64,8 @@ SetRefFn g_set_ref = nullptr;
 ClearRefFn g_clear_ref = nullptr;
 RequestOpenFn g_request_open = nullptr;
 RequestCloseFn g_request_close = nullptr;
+RegisterInputFn g_register_input = nullptr;  // optional: without it the page tabs take no keys
+const void* g_tab_input_unit = nullptr;     // the page whose tabs are registered for input
 void* g_found_update = nullptr;
 void* g_found_open = nullptr;
 void* g_found_close = nullptr;
@@ -178,6 +181,13 @@ bool page_class_register(const Env& env, std::string& why) {
     g_clear_ref = reinterpret_cast<ClearRefFn>(clear_ref);
     g_request_open = reinterpret_cast<RequestOpenFn>(request_open);
     g_request_close = reinterpret_cast<RequestCloseFn>(request_close);
+    void* register_input = nullptr;
+    std::string input_why;
+    if (find("uMhGUI::registerInput", game::kRegisterInputPattern, &register_input, input_why)) {
+        g_register_input = reinterpret_cast<RegisterInputFn>(register_input);
+    } else {
+        logf(AL_LOG_WARNING, "%s; keys and pad reach the page tabs only through Q / E", input_why.c_str());
+    }
     return true;
 }
 
@@ -273,6 +283,15 @@ void* page_create(std::string& why) {
         why = "the game could not allocate the page";
         return nullptr;
     }
+    // The page tabs as one of the page's input lists, after the ones the
+    // constructor registered and before the setup resolves them (slot 6, on
+    // the unit's first pass), the way the game's pages register theirs.
+    g_tab_input_unit = nullptr;
+    const auto count = *reinterpret_cast<const std::uint64_t*>(static_cast<char*>(unit) + game::kInputRegistryCount);
+    if (g_register_input != nullptr && count < game::kInputRegistryMax) {
+        g_register_input(unit, game::kTabListName, game::kTabListPriority);
+        g_tab_input_unit = unit;
+    }
     g_add_bottom(units, game::kGuiMoveLine, unit, game::kGuiGroupBits, 0);
     // Not kept: it dies with its scene (page_class.hpp).
     g_set_ref(g_ref_lock(), unit, &g_ref);
@@ -283,6 +302,10 @@ void* page_create(std::string& why) {
         return nullptr;
     }
     return unit;
+}
+
+bool page_tab_input(const void* unit) {
+    return unit != nullptr && unit == g_tab_input_unit;
 }
 
 void page_keep(void* unit, bool keep) {
