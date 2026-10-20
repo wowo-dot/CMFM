@@ -172,8 +172,9 @@ RowBits g_panel_hidden;
 static_assert(kMaxRowsPerTab <= 65536);  // g_panel_shown's entries
 
 // The scrollbars of CMFM's layout (track and bar, the game's own), found by
-// name on the page: one for the mod list, one for the panel. Shown only while
-// their list scrolls; the thumb can be dragged.
+// name on the page: one for the mod list, one for the panel, a horizontal one
+// for the page tabs. Shown only while their list scrolls; the thumb can be
+// dragged.
 struct ScrollBar {
     void* root = nullptr;
     void* track = nullptr;
@@ -182,6 +183,7 @@ struct ScrollBar {
 };
 ScrollBar g_list_bar;
 ScrollBar g_panel_bar;
+ScrollBar g_tab_bar;
 void* g_bars_unit = nullptr;  // the page the bars were looked up on
 
 Env g_env = {};
@@ -252,6 +254,12 @@ std::size_t g_tab_window = 0;
 std::size_t g_tab_top = 0;
 std::size_t g_tab_mod = 0;  // the mod the window was placed for
 bool g_tabs_shown = false;
+// The tab under the pointer (its row in the window), or -1: the list's cursor
+// shows it (the tab a click would pick); otherwise the cursor is on the shown
+// page, or hidden while the wheel or the scrollbar moved that out of view.
+std::int64_t g_tab_hover = -1;
+void* g_tab_cursor = nullptr;  // the list's cursor instance (setPlay hides it)
+bool g_tab_cursor_shown = true;
 constexpr std::size_t kMaxTabs = 8;
 char g_tab_labels[kMaxTabs][128];
 // The mod list's window: how many rows its layout shows. Read from the list's
@@ -379,8 +387,12 @@ bool split_view();
 void show_selected(void* unit, bool keep_focus);
 void set_highlight(void* unit, std::size_t row);
 void show_highlight(void* unit);
-void show_tabs();
+void show_tabs(bool follow = true);
+void scroll_tabs(std::size_t top);
+std::int64_t tab_at(void* unit, float* position);
+bool hover_tabs(void* unit, float* position);
 bool click_tab(void* unit, float* position, std::int32_t focus);
+void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top);
 bool activate_row(void* unit, std::size_t row, bool keep_focus);
 void enter_panel(void* unit);
 void leave_panel(void* unit);
@@ -591,8 +603,9 @@ PanelFocusFn focus_function(void* object, std::size_t slot, std::uintptr_t rva, 
 // that one). With the panel's focus the pointer over the list does nothing
 // (Back or a right click returns, the game's way); a click on a row shows it
 // and the panel keeps the focus, as Q / E do. A click on a page tab works the
-// same way (click_tab). Only on mouse activity, and only while the page has
-// the input (the helpers answer nothing otherwise).
+// same way (click_tab); over the tabs the tabs' cursor follows the pointer
+// (hover_tabs), with either focus. Only on mouse activity, and only while the
+// page has the input (the helpers answer nothing otherwise).
 void track_mouse(void* unit) {
     void* list = g_mod_list.load(std::memory_order_acquire);
     const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
@@ -606,7 +619,7 @@ void track_mouse(void* unit) {
     }
     alignas(16) float position[4] = {};
     g_mouse_position(unit, position, nullptr);
-    if (clicked && click_tab(unit, position, focus)) {
+    if ((clicked && click_tab(unit, position, focus)) || hover_tabs(unit, position)) {
         return;
     }
     const std::uint32_t rows = field<std::uint32_t>(list, game::kListRowCount);
@@ -865,10 +878,44 @@ void centre_tab_label(void* row) {
     }
 }
 
-// The tabs as the shown mod's pages stand: its pages in the window (the shown
-// one kept in view, a « or » on an edge tab when more lie beyond), the shown
-// page in light green under the cursor; hidden for a mod with one page.
-void show_tabs() {
+// The list's cursor on tab row `row` (shown again if it was hidden), or
+// hidden (row < 0).
+void place_tab_cursor(void* list, std::int64_t row) {
+    const bool show = row >= 0;
+    if (g_tab_cursor != nullptr && show != g_tab_cursor_shown) {
+        g_tab_cursor_shown = show;
+        gui_set_play(g_tab_cursor, show);
+    }
+    if (show) {
+        gui_set_cursor(list, static_cast<std::uint32_t>(row));
+        field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(row);
+    }
+}
+
+// Where the tabs' cursor belongs: the tab under the pointer, else the shown
+// page's tab while it is in the window, else nowhere.
+void place_tab_cursor() {
+    void* list = g_tab_list.load(std::memory_order_acquire);
+    if (list == nullptr || !g_tabs_shown) {
+        return;
+    }
+    const std::size_t count = field<std::uint32_t>(list, game::kListRowCount);
+    const std::size_t page = g_list.shown_page();
+    if (g_tab_hover >= 0 && static_cast<std::size_t>(g_tab_hover) < count) {
+        place_tab_cursor(list, g_tab_hover);
+    } else if (page >= g_tab_top && page < g_tab_top + count) {
+        place_tab_cursor(list, static_cast<std::int64_t>(page - g_tab_top));
+    } else {
+        place_tab_cursor(list, -1);
+    }
+}
+
+// The tabs as the shown mod's pages stand: its pages in the window (with
+// `follow`, the shown one brought into view; the wheel and the scrollbar move
+// the window without it), a « or » on an edge tab when more lie beyond, the
+// shown page in light green, the cursor where place_tab_cursor puts it, the
+// scrollbar under them while they scroll; hidden for a mod with one page.
+void show_tabs(bool follow) {
     void* list = g_tab_list.load(std::memory_order_acquire);
     if (list == nullptr) {
         return;
@@ -881,6 +928,8 @@ void show_tabs() {
     g_tabs_shown = pages > 1 && visible > 0;
     gui_set_play(list, g_tabs_shown);  // acts only on a change
     if (!g_tabs_shown) {
+        g_tab_hover = -1;
+        show_scroll(g_tab_bar, 0, 0, 0);
         return;
     }
     if (m != g_tab_mod) {
@@ -888,8 +937,12 @@ void show_tabs() {
         g_tab_top = 0;
     }
     const std::size_t page = g_list.shown_page();
-    g_tab_top = tab_window_top(g_tab_top, page, pages, visible);
     const std::size_t count = pages < visible ? pages : visible;
+    if (follow) {
+        g_tab_top = tab_window_top(g_tab_top, page, pages, visible);
+    } else if (g_tab_top > pages - count) {
+        g_tab_top = pages - count;
+    }
     if (field<std::uint32_t>(list, game::kListRowCount) != count) {
         cursor_to_top(list);
         gui_set_row_count(list, count);
@@ -912,20 +965,26 @@ void show_tabs() {
         field<std::uint32_t>(row, game::kInstFlags) |= game::kInstFlagActive | game::kInstFlagEnabled;
         gui_set_play(row, true);
     }
-    const auto cursor = static_cast<std::uint32_t>(page - g_tab_top);
-    gui_set_cursor(list, cursor);
-    field<std::int32_t>(list, game::kListStartRow) = static_cast<std::int32_t>(cursor);
+    place_tab_cursor();
+    show_scroll(g_tab_bar, pages, count, g_tab_top);
 }
 
-// A click on a page tab: the shown mod's page; with the list's focus the
-// panel takes it (one click goes in, as on a mod), with the panel's it keeps
-// it (as Q / E). True if the click was on a tab. The tabs' hit areas may be
-// wider than a tab: the last tab hit wins (its label starts right of the
-// earlier one's).
-bool click_tab(void* unit, float* position, std::int32_t focus) {
+// The tabs' window from `top` (the wheel, the scrollbar's thumb): the shown
+// page stays; the cursor stays on the tab under the pointer.
+void scroll_tabs(std::size_t top) {
+    if (top != g_tab_top) {
+        g_tab_top = top;
+        show_tabs(false);
+    }
+}
+
+// The tab row under the pointer, or -1. The tabs' hit areas may be wider
+// than a tab: the last tab hit wins (its label starts right of the earlier
+// one's).
+std::int64_t tab_at(void* unit, float* position) {
     void* list = g_tab_list.load(std::memory_order_acquire);
     if (list == nullptr || !g_tabs_shown) {
-        return false;
+        return -1;
     }
     const std::uint32_t count = field<std::uint32_t>(list, game::kListRowCount);
     std::int64_t hit = -1;
@@ -935,9 +994,29 @@ bool click_tab(void* unit, float* position, std::int32_t focus) {
             hit = r;
         }
     }
+    return hit;
+}
+
+// The pointer moved: the cursor follows it over the tabs and goes back to
+// the shown page when it leaves them. True while it is over a tab.
+bool hover_tabs(void* unit, float* position) {
+    const std::int64_t hit = tab_at(unit, position);
+    if (hit != g_tab_hover) {
+        g_tab_hover = hit;
+        place_tab_cursor();
+    }
+    return hit >= 0;
+}
+
+// A click on a page tab: the shown mod's page; with the list's focus the
+// panel takes it (one click goes in, as on a mod), with the panel's it keeps
+// it (as Q / E). True if the click was on a tab.
+bool click_tab(void* unit, float* position, std::int32_t focus) {
+    const std::int64_t hit = tab_at(unit, position);
     if (hit < 0) {
         return false;
     }
+    g_tab_hover = hit;
     if (g_list.show_page(g_tab_top + static_cast<std::size_t>(hit)).changed) {
         show_selected(unit, focus == 1);
         request_split_help(unit);
@@ -1234,7 +1313,7 @@ void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size
 }
 
 bool scroll_dragging() {
-    for (const ScrollBar* b : {&g_list_bar, &g_panel_bar}) {
+    for (const ScrollBar* b : {&g_list_bar, &g_panel_bar, &g_tab_bar}) {
         if (b->shown && field<std::uint8_t>(b->bar, game::kScrollDragging) != 0) {
             return true;
         }
@@ -1327,17 +1406,45 @@ void drag_scrollbars(void* unit) {
             show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
         }
     }
+    void* tabs = g_tab_list.load(std::memory_order_acquire);
+    if (g_tab_bar.shown && tabs != nullptr) {
+        const std::size_t pages = g_list.page_count(g_list.shown_mod());
+        const std::size_t count = field<std::uint32_t>(tabs, game::kListRowCount);
+        if (g_scroll_mouse(g_tab_bar.bar) != 0) {
+            scroll_tabs(scroll_top(g_tab_bar, pages, count));
+        } else {
+            show_scroll(g_tab_bar, pages, count, g_tab_top);
+        }
+    }
 }
 
 // The wheel in split mode (wheel up, positive, goes towards the top; no
-// wrap): with the panel's focus for the panel (the list takes no input then);
-// with the list's, for the list under the pointer (the panel's window or a
-// mod row), else the list. A long panel scrolls its rows as a drag on its
-// thumb does (a panel that fits has nothing to scroll); the mod list's window
-// scrolls, the highlight staying inside it (the panel shows it).
+// wrap): over the page tabs or their scrollbar, with either focus, for the
+// tabs (their window moves, the page stays); else with the panel's focus for
+// the panel (the list takes no input then); with the list's, for the list
+// under the pointer (the panel's window or a mod row), else the list. A long
+// panel scrolls its rows as a drag on its thumb does (a panel that fits has
+// nothing to scroll); the mod list's window scrolls, the highlight staying
+// inside it (the panel shows it).
 void wheel_split(void* unit, int steps) {
     const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
     void* list = g_mod_list.load(std::memory_order_acquire);
+    void* tabs = g_tab_list.load(std::memory_order_acquire);
+    if (g_tabs_shown && tabs != nullptr && g_mouse_position != nullptr && g_mouse_hit != nullptr) {
+        alignas(16) float position[4] = {};
+        g_mouse_position(unit, position, nullptr);
+        if (tab_at(unit, position) >= 0 ||
+            (g_tab_bar.shown && g_mouse_hit(unit, g_tab_bar.track, position, nullptr) != 0)) {
+            const std::size_t pages = g_list.page_count(g_list.shown_mod());
+            const std::size_t count = field<std::uint32_t>(tabs, game::kListRowCount);
+            const auto last = static_cast<std::int64_t>(pages > count ? pages - count : 0);
+            std::int64_t next = static_cast<std::int64_t>(g_tab_top) - steps;
+            next = next < 0 ? 0 : next > last ? last : next;
+            scroll_tabs(static_cast<std::size_t>(next));
+            hover_tabs(unit, position);  // the tab now under the pointer
+            return;
+        }
+    }
     bool panel = focus == 1;
     if (!panel && g_mouse_position != nullptr && g_mouse_hit != nullptr && list != nullptr) {
         alignas(16) float position[4] = {};
@@ -1393,13 +1500,17 @@ void update_scrollbars() {
         g_bars_unit = unit;
         const bool list_ok = find_scroll(unit, game::kListScrollName, g_list_bar);
         const bool panel_ok = find_scroll(unit, game::kPanelScrollName, g_panel_bar);
-        if (!list_ok || !panel_ok) {
-            logf(AL_LOG_WARNING, "Mods page: scrollbars missing or not loaded (mod list %s, panel %s); lists scroll "
-                 "without them", list_ok ? "ok" : "none", panel_ok ? "ok" : "none");
+        const bool tabs_ok = find_scroll(unit, game::kTabScrollName, g_tab_bar);
+        if (!list_ok || !panel_ok || !tabs_ok) {
+            logf(AL_LOG_WARNING, "Mods page: scrollbars missing or not loaded (mod list %s, panel %s, tabs %s); lists "
+                 "scroll without them", list_ok ? "ok" : "none", panel_ok ? "ok" : "none", tabs_ok ? "ok" : "none");
         }
     }
     show_scroll(g_list_bar, g_list.mod_count(), g_list_window.load(std::memory_order_relaxed), g_mod_top);
     show_scroll(g_panel_bar, g_panel_count, panel_visible(), g_panel_top);
+    void* tabs = g_tab_list.load(std::memory_order_acquire);
+    show_scroll(g_tab_bar, g_tabs_shown ? g_list.page_count(g_list.shown_mod()) : 0,
+                tabs != nullptr ? field<std::uint32_t>(tabs, game::kListRowCount) : 0, g_tab_top);
 }
 
 // The panels show the selected tab again, the game's way (initCategory), and
@@ -1865,6 +1976,7 @@ void page_keys(void* unit) {
         const bool pressed = held[d] && !g_page_keys[d];
         g_page_keys[d] = held[d];
         if (pressed && usable && g_list.step_page(d == 0 ? -1 : 1).changed) {
+            g_tab_hover = -1;  // the tabs' cursor goes to the shown page until the pointer moves
             g_highlight = g_list.shown_mod();
             keep_highlight_in_view();
             show_selected(unit, true);
@@ -1975,6 +2087,11 @@ bool enter_view(void* unit) {
             g_tab_window_of = tab_list;
             g_tab_window = field<std::uint32_t>(tab_list, game::kListDuplicateNum);
         }
+        // Its cursor, hidden while the shown page is scrolled out of the
+        // window; shown again (setPlay acts only on a change) when placed.
+        g_tab_cursor = tab_list != nullptr ? gui_get_instance(unit, game::kTabCursorName) : nullptr;
+        g_tab_cursor_shown = false;
+        g_tab_hover = -1;
         // One entry per mod; the last selection again, if it still exists.
         const std::vector<menu::Mod>& mods = menu::service_mods();
         std::vector<std::size_t> pages;
@@ -2139,6 +2256,8 @@ std::uint64_t page_close(void* unit) {
     g_mod_list.store(nullptr, std::memory_order_release);
     g_tab_list.store(nullptr, std::memory_order_release);
     g_tabs_shown = false;
+    g_tab_hover = -1;
+    g_tab_cursor = nullptr;
     g_slider_count = 0;
     g_pick_count = 0;
     g_pick_filled = -1;
@@ -2148,7 +2267,7 @@ std::uint64_t page_close(void* unit) {
     }
     g_row_help = -1;
     g_bars_unit = nullptr;  // looked up again on the next open
-    for (ScrollBar* b : {&g_list_bar, &g_panel_bar}) {
+    for (ScrollBar* b : {&g_list_bar, &g_panel_bar, &g_tab_bar}) {
         if (b->bar != nullptr) {
             field<std::uint8_t>(b->bar, game::kScrollDragging) = 0;  // a drag does not survive a reopen
         }

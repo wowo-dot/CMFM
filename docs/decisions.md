@@ -150,6 +150,11 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     rule); Q / E (pad LB / RB) step through the pages; more pages than fit
     (four) scroll, the shown tab kept in view, a « or » on an edge tab
     when more lie beyond. Each mod shows the page it showed last. The
-    header names the mod, no longer the page. "We can improve it after"
+    header names the mod, no longer the page. The user's additions after the
+    first look: the tabs' cursor follows the pointer over them (the tab a
+    click would pick; the shown page keeps its green text), the wheel over
+    them scrolls them without changing the page, and a horizontal scrollbar
+    under them (the game's, turned as in its upgrade tree) shows and drags
+    their window; long names shrink to their tab (the text's AutoScale). "We can improve it after"
     (the user): the look is a first version.
 

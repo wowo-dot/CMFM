@@ -1246,8 +1246,22 @@ each fill, on open and when a restart state changes.
   fills it: the shown mod's pages, the shown one light green under the
   cursor, labels centred in 190 px (logged once as found), hidden by
   setPlay for a mod with one page. Clicks are hit-tested per tab row (the
-  last row hit wins, in case a row's art is wider than its tab). Not seen
-  in game yet.
+  last row hit wins, in case a row's art is wider than its tab).
+- **Run tabs-2** (the demo's 12 pages): the window, the « » marks and the
+  cursor worked; the title row's text (about 28, laid out 0x10 in 400 px)
+  ran into the next tabs. Now `<SIZE 22>` and the text part's AutoScale
+  (flags +328 bit 0; the layout, `sub_1424E0B30` -> `sub_1424E10F0`, scales
+  each line wider than the box down to the box, never up).
+- **Hover, wheel, scrollbar** (the user's wish): over a tab the list's
+  cursor follows the pointer (either focus); off the tabs it returns to the
+  shown page, or is hidden (`setPlay` on `cmfm_tab_cursor`) while the shown
+  page is scrolled out of the window. The wheel over a tab or the tab
+  scrollbar moves the window by one per notch. The scrollbar is a third
+  graft of the game's pair, `cmfm_tab_scroll`, made horizontal as in
+  `equip\upgrade_tree` (`ScrollType` 0, `Rotation` -90 on track and bar),
+  12 px thick (`SclX` 0.75), track 790 px from x 8, its lower edge at y -3;
+  the tabs moved up to y -42 and their cursor to 42 px high for it. Not
+  seen in game yet.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

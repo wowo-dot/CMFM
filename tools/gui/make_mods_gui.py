@@ -160,13 +160,19 @@ def build(gui):
 # - the mod list (parent null_prog_color0 at 170, 250; rows 50 + 10 apart, 11
 #   shown, the first centred about 4 px below the list's origin): between the
 #   cursor bar's end (about 518) and the panel's frame (about 557);
-# - the panel (parent null_audio, in null_prog_color1 at 576, 212; rows 40 + 12
+# - the panel (parent null_audio, in null_prog_color1 at 576, 262; rows 40 + 12
 #   apart from PosY 33, CMFM shows at most 14): just right of the panel's frame
-#   (56 x 14.4 = 806 px wide).
+#   (56 x 14.4 = 806 px wide);
+# - the page tabs (parent null_audio): horizontal, as the game's own in
+#   equip\upgrade_tree (ScrollType 0, the same art turned by Rotation -90: the
+#   track runs right from the root, its thickness up from it), 12 px thick
+#   (SclX 0.75), under the four tabs (x 8 to 798), its lower edge 3 px above
+#   the panel's frame.
 SCROLLBARS = (
-    # name, parent, PosX, PosY, track length
-    ("cmfm_list_scroll", "null_prog_color0", 359.0, -21.0, 650.0),
-    ("cmfm_panel_scroll", "null_audio", 814.0, 20.0, 716.0),
+    # name, parent, PosX, PosY, track length, horizontal
+    ("cmfm_list_scroll", "null_prog_color0", 359.0, -21.0, 650.0, False),
+    ("cmfm_panel_scroll", "null_audio", 814.0, 20.0, 716.0, False),
+    ("cmfm_tab_scroll", "null_audio", 8.0, -3.0, 790.0, True),
 )
 
 
@@ -210,9 +216,11 @@ TITLE_TEXT_SIZE = (600.0, 50.0, 0.0, 0.0)
 # sideways (Type 1: cGUIInstButtonList::rebuildRows places the copies with
 # SetPosX, i * (DuplicateSpace + DuplicateButtonSize) from the template's x)
 # under the audio panel, above its frame (the frame's top at the panel's y 0).
-# Four tabs of 190 px, 10 apart, from the panel's left; the cursor scaled to a
-# tab (the category list's, 36 x 5, spans its 360 px rows). CMFM fills it
-# (more pages than tabs scroll), names "cmfm_tab_*".
+# Four tabs of 190 px, 10 apart, from the panel's left (tab i from x 8 + 200 i);
+# their text centred at y -42, so the tabs' scrollbar fits under them; the
+# cursor scaled to a tab (the category list's, 36 x 5, spans its 360 px rows,
+# 50 high) and a little lower (42). CMFM fills it (more pages than tabs
+# scroll), names "cmfm_tab_*".
 TABS = {
     "rename": {"btnlist_menu": "cmfm_tab_list", "cursor_menu": "cmfm_tab_cursor",
                "auto_menu_title": "cmfm_tab_row"},
@@ -222,8 +230,9 @@ TABS = {
         ("cmfm_tab_list", "DuplicateNum", 7, 4),
         ("cmfm_tab_list", "DuplicateButtonSize", 50.0, 190.0),
         ("cmfm_tab_list", "PosX", 0.0, -12.0),
-        ("cmfm_tab_list", "PosY", 0.0, -30.0),
+        ("cmfm_tab_list", "PosY", 0.0, -42.0),
         ("cmfm_tab_cursor", "SclX", 36.0, 19.0),
+        ("cmfm_tab_cursor", "SclY", 5.0, 4.2),
     ),
 }
 
@@ -286,7 +295,7 @@ def add_scrollbars(data, source, options):
     src = Gui.parse(source)
     place_header(g)
     add_tabs(g, Gui.parse(options))
-    for name, parent, x, y, length in SCROLLBARS:
+    for name, parent, x, y, length, horizontal in SCROLLBARS:
         print("scrollbar %s under %s" % (name, parent))
         graft(g, src, "null_scrollbar_root", parent, entries_like="btnlist_camera", log=lambda m: print("  " + m),
               rename={"null_scrollbar_root": name, "scrollbar_auto_base": name + "_base",
@@ -297,6 +306,10 @@ def add_scrollbars(data, source, options):
             set_param(g, name + part, "AnimationId", 4 if part == "_base" else 3, animation)
             set_param(g, name + part, "MaxFixFrame", 590.0, length)
             set_param(g, name + part, "BarMaxPos", 590.0, length)
+            if horizontal:
+                set_param(g, name + part, "ScrollType", 1, 0)
+                set_param(g, name + part, "Rotation", 0.0, -90.0)
+                set_param(g, name + part, "SclX", 1.0, 0.75)
     out = g.build()
     again = Gui.parse(out)
     if again.build() != out:

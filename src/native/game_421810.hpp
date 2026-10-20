@@ -326,6 +326,7 @@ inline constexpr std::size_t kSplitPanel = 2;
 // laid out sideways (Type 1), its rows the title menu's text row ("msg_1").
 inline constexpr char kTabListName[] = "cmfm_tab_list";
 inline constexpr char kTabText[] = "msg_1";
+inline constexpr char kTabCursorName[] = "cmfm_tab_cursor";
 inline constexpr float kTabWidth = 190.0f;  // DuplicateButtonSize in the layout
 inline constexpr int kTabTextSize = 22;     // the <SIZE> of a tab's text (the row's own is about 28)
 // CMFM's restart line: the camera panel's title, moved above the mod list
@@ -561,6 +562,7 @@ inline constexpr std::size_t kRowObjectSize = 96;
 // class is checked through the instance's getDti (vtable slot 4).
 inline constexpr char kListScrollName[] = "cmfm_list_scroll";
 inline constexpr char kPanelScrollName[] = "cmfm_panel_scroll";
+inline constexpr char kTabScrollName[] = "cmfm_tab_scroll";  // horizontal (ScrollType 0), under the page tabs
 inline constexpr std::uint32_t kScrollBarClassId = 0x7F2F0CC3;  // (~crc32(name)) & 0x7FFFFFFF
 inline constexpr std::size_t kInstanceGetDtiSlot = 4;
 inline constexpr std::size_t kDtiClassIdOffset = 0x34;
