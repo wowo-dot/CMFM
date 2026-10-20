@@ -39,6 +39,8 @@ using LoadResourceFn = void* (*)(void* resources, const void* resource_class, co
 using MousePositionFn = void* (*)(void* gui, float* out, void* list);
 using MouseHitFn = std::uint8_t (*)(void* gui, void* instance, const float* position, std::int32_t* index);
 using MouseFlagFn = std::uint8_t (*)(void* gui, void* list);
+using MenuKeyFn = std::uint8_t (*)(void* gui, std::uint32_t key, void* list);
+using MenuDirectionFn = std::uint32_t (*)(void* gui, std::int32_t* sources, std::int32_t* mode, std::uint32_t* flags);
 using PanelFocusFn = std::uint64_t (*)(void* object, std::int32_t index);
 using HelpRequestFn = void (*)(void* manager, void* unit, std::int32_t message, std::int32_t file, float seconds,
                                std::uint8_t flag);
@@ -81,6 +83,10 @@ MouseHitFn g_mouse_hit = nullptr;
 MouseFlagFn g_mouse_click = nullptr;
 MouseFlagFn g_mouse_moved = nullptr;
 bool g_mouse_off = false;       // a focus function was not where expected (logged once)
+// The game's menu input through the player's bindings (game_421810.hpp):
+// keyboard and pad on the page tabs. Both or neither.
+MenuKeyFn g_menu_key = nullptr;
+MenuDirectionFn g_menu_direction = nullptr;
 bool g_cursor_warned = false;   // the category cursor left the panel (logged once per open)
 // The help line request (optional: without it the help line may keep the
 // previous mod's text).
@@ -260,6 +266,13 @@ bool g_tabs_shown = false;
 std::int64_t g_tab_hover = -1;
 void* g_tab_cursor = nullptr;  // the list's cursor instance (setPlay hides it)
 bool g_tab_cursor_shown = true;
+// Keyboard and pad on the page tabs (tab_keys): Up from the panel's first row
+// asks for them (the panel list's step, acted on in the page's update); while
+// on, the list has the focus with the category list inactive too, so nothing
+// of the page reads the keys and CMFM reads them through the game's menu input.
+bool g_tab_keys_wanted = false;
+bool g_tab_keys = false;
+bool g_mod_hover = false;  // the pointer is over a mod row (the hand shows)
 constexpr std::size_t kMaxTabs = 8;
 char g_tab_labels[kMaxTabs][128];
 // The mod list's window: how many rows its layout shows. Read from the list's
@@ -393,6 +406,8 @@ std::int64_t tab_at(void* unit, float* position);
 bool hover_tabs(void* unit, float* position);
 bool click_tab(void* unit, float* position, std::int32_t focus);
 void show_scroll(ScrollBar& b, std::size_t total, std::size_t visible, std::size_t top);
+void place_tab_cursor();
+void tab_keys(void* unit);
 bool activate_row(void* unit, std::size_t row, bool keep_focus);
 void enter_panel(void* unit);
 void leave_panel(void* unit);
@@ -620,6 +635,7 @@ void track_mouse(void* unit) {
     alignas(16) float position[4] = {};
     g_mouse_position(unit, position, nullptr);
     if ((clicked && click_tab(unit, position, focus)) || hover_tabs(unit, position)) {
+        g_mod_hover = false;
         return;
     }
     const std::uint32_t rows = field<std::uint32_t>(list, game::kListRowCount);
@@ -629,6 +645,7 @@ void track_mouse(void* unit) {
             continue;
         }
         const std::size_t at = g_mod_top + r;
+        g_mod_hover = true;
         if (focus == 1) {
             if (clicked) {
                 activate_row(unit, at, true);
@@ -641,6 +658,7 @@ void track_mouse(void* unit) {
         }
         return;
     }
+    g_mod_hover = false;
 }
 
 // CMFM's page, vtable slot 81: every frame while it is open (state 2; the
@@ -659,6 +677,14 @@ std::uint64_t page_update(void* unit) {
             track_mouse(unit);  // the pointer may cross the mod list while it holds a thumb
         }
         page_keys(unit);
+        tab_keys(unit);
+        // The hand pointer over the page tabs and the mod rows, as the game's
+        // pages show it over their own clickable parts.
+        const std::int32_t pointer_focus = field<std::int32_t>(unit, game::kOptFocus);
+        void* manager = g_gui_manager != nullptr ? *g_gui_manager : nullptr;
+        if (manager != nullptr && (g_tab_hover >= 0 || g_mod_hover) && (pointer_focus == 0 || pointer_focus == 1)) {
+            field<std::uint8_t>(manager, game::kGuiPointerHand) = 1;
+        }
         const std::uint32_t revision = menu::service_restart_revision();
         if (revision != g_restart_seen) {
             g_restart_seen = revision;
@@ -1214,6 +1240,20 @@ std::uint32_t panel_step(bool down, ListStepFn next, void* list, std::int32_t cu
     }
     void* unit = g_view_unit.load(std::memory_order_acquire);
     const std::size_t visible = panel_visible();
+    if (!down && g_tabs_shown && g_menu_key != nullptr && split_view() && unit != nullptr &&
+        list == panel_list(unit) && cursor >= 0 && static_cast<std::size_t>(cursor) < visible) {
+        // Up from the first row that takes the cursor: to the page tabs (a mod
+        // with one page wraps as before). The cursor stays; the page's update
+        // moves the focus (tab_keys), not this list's own step.
+        std::size_t first = 0;
+        while (first < g_panel_count && !g_panel_selectable[first]) {
+            ++first;
+        }
+        if (g_panel_top + static_cast<std::size_t>(cursor) <= first) {
+            g_tab_keys_wanted = true;
+            return static_cast<std::uint32_t>(cursor);
+        }
+    }
     if (!split_view() || unit == nullptr || list != panel_list(unit) || g_panel_count <= visible || cursor < 0 ||
         static_cast<std::size_t>(cursor) >= visible) {
         return next(list, cursor, steps, wrap, wrapped);
@@ -1592,7 +1632,9 @@ void request_split_help(void* unit) {
         const std::size_t page = g_list.page_of(g_highlight);
         const char* help = model.tab_help(mod.tabs[page < mod.tabs.size() ? page : 0]);
         g_highlight_help = help != nullptr ? help : "";
-        if (mod.tabs.size() > 1) {
+        if (g_tab_keys) {
+            g_highlight_help += " Left / Right: the pages. Down: their settings.";
+        } else if (mod.tabs.size() > 1) {
             g_highlight_help += " " + std::to_string(mod.tabs.size()) + " pages: the tabs above, or Q / E.";
         }
     } else {
@@ -1985,6 +2027,83 @@ void page_keys(void* unit) {
     }
 }
 
+// The page tabs take the keys (Up from the panel's first row): the list takes
+// the focus back (the panel's own Back) and the category list stops reading
+// keys too, so only CMFM reads them (tab_keys); the tabs' cursor shows the
+// shown page.
+void enter_tab_keys(void* unit) {
+    leave_panel(unit);
+    if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
+        field<std::uint8_t>(categories, game::kListInactive) = 1;
+    }
+    g_tab_keys = true;
+    g_tab_hover = -1;
+    place_tab_cursor();
+    request_split_help(unit);
+}
+
+// The tabs give the keys back: to the panel (Down, Confirm) or to the mod
+// list (Back). The category list reads keys again from the next frames on (a
+// list reads only after the GUI marked it for input), so the key that left
+// does not reach it too.
+void leave_tab_keys(void* unit, bool to_panel) {
+    g_tab_keys = false;
+    if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
+        field<std::uint8_t>(categories, game::kListInactive) = 0;
+    }
+    if (to_panel) {
+        enter_panel(unit);
+    }
+    request_split_help(unit);
+}
+
+// Every frame while the page shows CMFM's menu: keyboard and pad on the page
+// tabs, through the game's menu input (the player's bindings). Left / Right
+// show the previous or next page (as Q / E), Down or Confirm go into the
+// panel, Back returns to the mod list. Anything else that moves the focus, a
+// mod without tabs, a key wait or a question ends it.
+void tab_keys(void* unit) {
+    if (g_menu_key == nullptr || g_menu_direction == nullptr) {
+        return;
+    }
+    const std::int32_t focus = field<std::int32_t>(unit, game::kOptFocus);
+    if (g_tab_keys_wanted) {
+        g_tab_keys_wanted = false;
+        if (!g_tab_keys && focus == 1 && g_tabs_shown && g_key_wait.id < 0 && g_pending_button < 0) {
+            enter_tab_keys(unit);
+        }
+        return;
+    }
+    if (!g_tab_keys) {
+        return;
+    }
+    if (focus != 0) {
+        g_tab_keys = false;  // the focus moved (a click): the game set the lists' input for it
+        request_split_help(unit);
+        return;
+    }
+    if (!g_tabs_shown || g_key_wait.id >= 0 || g_pending_button >= 0) {
+        leave_tab_keys(unit, false);
+        return;
+    }
+    std::int32_t sources = game::kMenuSourcesAll;
+    std::int32_t mode = game::kMenuModeRepeat;
+    const std::uint32_t direction = g_menu_direction(unit, &sources, &mode, nullptr);
+    if (direction == game::kMenuLeft || direction == game::kMenuRight) {
+        if (g_list.step_page(direction == game::kMenuLeft ? -1 : 1).changed) {
+            g_tab_hover = -1;
+            g_highlight = g_list.shown_mod();
+            keep_highlight_in_view();
+            show_selected(unit, false);
+            request_split_help(unit);
+        }
+    } else if (direction == game::kMenuDown || g_menu_key(unit, game::kMenuKeyConfirm, nullptr) != 0) {
+        leave_tab_keys(unit, true);
+    } else if (g_menu_key(unit, game::kMenuKeyBack, nullptr) != 0) {
+        leave_tab_keys(unit, false);
+    }
+}
+
 // The category list's Confirm on CMFM's page (slot 8 of the categories
 // object, CMFM's copy of its vtable): the mod list's highlighted row is
 // activated (a mod's dropdown opens), then the game's Confirm gives the panel
@@ -2258,6 +2377,15 @@ std::uint64_t page_close(void* unit) {
     g_tabs_shown = false;
     g_tab_hover = -1;
     g_tab_cursor = nullptr;
+    if (g_tab_keys) {
+        // The category list reads keys again on the next opening.
+        if (void* categories = field<void*>(unit, game::kOptCategoryList)) {
+            field<std::uint8_t>(categories, game::kListInactive) = 0;
+        }
+    }
+    g_tab_keys = false;
+    g_tab_keys_wanted = false;
+    g_mod_hover = false;
     g_slider_count = 0;
     g_pick_count = 0;
     g_pick_filled = -1;
@@ -2774,6 +2902,17 @@ bool find_sliders(const Env& env, std::string& why) {
     return true;
 }
 
+// The game's direction reader, from its call in a list's direction check.
+bool find_menu_direction(const Env& env, std::string& why) {
+    void* match = nullptr;
+    if (!find_game_function(env, "menu direction", game::kMenuDirectionCallerPattern, &match, why)) {
+        return false;
+    }
+    const auto* code = static_cast<const std::uint8_t*>(match);
+    g_menu_direction = reinterpret_cast<MenuDirectionFn>(rip_target(code, game::kMenuDirectionCall + 5));
+    return true;
+}
+
 // The help line request and the GUI manager, from showCategory's call.
 bool find_help_request(const Env& env, std::string& why) {
     void* match = nullptr;
@@ -2878,6 +3017,13 @@ bool mods_page_register(const Env& env, std::string& why) {
     std::string mouse_why;
     if (!find_mouse(env, mouse_why)) {
         logf(AL_LOG_WARNING, "Mods page: %s; the mod list will not follow the mouse", mouse_why.c_str());
+    }
+    std::string keys_why;
+    if (!find_game_function(env, "menu key", game::kMenuKeyPattern, reinterpret_cast<void**>(&g_menu_key), keys_why) ||
+        !find_menu_direction(env, keys_why)) {
+        g_menu_key = nullptr;
+        g_menu_direction = nullptr;
+        logf(AL_LOG_WARNING, "Mods page: %s; keys and pad reach the page tabs only through Q / E", keys_why.c_str());
     }
     std::string help_why;
     if (!find_help_request(env, help_why)) {

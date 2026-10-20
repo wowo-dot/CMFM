@@ -1260,8 +1260,39 @@ each fill, on open and when a restart state changes.
   graft of the game's pair, `cmfm_tab_scroll`, made horizontal as in
   `equip\upgrade_tree` (`ScrollType` 0, `Rotation` -90 on track and bar),
   12 px thick (`SclX` 0.75), track 790 px from x 8, its lower edge at y -3;
-  the tabs moved up to y -42 and their cursor to 42 px high for it. Not
-  seen in game yet.
+  the tabs moved up to y -42 and their cursor to 42 px high for it. Seen
+  in run tabs-3: in place, the thumb right, hover and wheel as intended.
+- **The hand pointer** (static): the pointer is `ui\pc\cursor_pc` (one
+  animation), driven by `sub_140507200`, which plays sequence 6 or 4 (hand
+  or arrow) by `sMhGUI +83877`. Each frame `sub_141AD9AD0` (from sMhGUI's
+  update, `sub_141AEAF30`) copies the 32-byte block at `+83820` to `+83852`
+  and clears it; pages set `+83845` (so `+83877` the next frame) while the
+  pointer is over something clickable: about 75 places, among them the
+  list hover `sub_140B766D0`, the scroll bar's mouse, the Options page's
+  update and its click check (whose CMFM pattern holds the write
+  `C6 80 85 47 01 00 01`). CMFM's lists take no input (inactive), so the game
+  never sets it for them: CMFM sets `+83845` in the page's update while the
+  pointer is over a tab or a mod row (focus 0 or 1).
+- **Menu input** (static): a list's input (`sub_140B87410`) asks the GUI per
+  menu key: pressed `sub_141FB6960(gui, key, list)`, repeated
+  `sub_141FB6860`, held `sub_141FB6760`, each through the input manager
+  (`qword_1451C4558`), so the player's bindings apply, and only while the
+  page has the input (+8897/+8898). The default checks a cGUIInstInput gets
+  (ctor `sub_140B86A50`): decide `sub_140B86FB0` = key 0, cancel
+  `sub_140B86F90` = key 1. Directions: `sub_1418B9D30(gui, int* sources,
+  int* mode, uint* flags out)` returns 1 up, 2 down, 3 left, 4 right; source
+  bit 0 tries keys 9 / 10 (left / right), then the stick 14 / 15; bit 1 keys
+  7 / 8 (up / down), then 12 / 13; mode bits 1 pressed, 2 repeat (lists use
+  3). CMFM finds it through its call in `sub_140B86F30` (+85).
+- **Keyboard and pad on the tabs:** the panel list's step up from the first
+  selectable row (CMFM's step hook) asks for the tabs instead of wrapping,
+  for a mod with tabs; the page's update then runs the panel's Back (focus
+  0) and marks the category list inactive too, so no list of the page reads
+  keys, and reads them itself each frame: left / right step the pages (as
+  Q / E), down or decide enter the panel, cancel gives the mod list the keys
+  back (the category list active again; a list reads keys only from the
+  frame after the GUI marked it, so the same press does not reach it). A
+  focus change by the mouse ends it without touching the lists' input.
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 

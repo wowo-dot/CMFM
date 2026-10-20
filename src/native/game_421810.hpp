@@ -505,6 +505,35 @@ inline constexpr char kOptionClickPattern[] =
 inline constexpr std::size_t kOptionClickPosCall = 31;    // E8 rel32
 inline constexpr std::size_t kOptionClickHitCall = 53;    // E8 rel32
 inline constexpr std::size_t kOptionClickPressCall = 82;  // E8 rel32
+// The pointer: a page sets sMhGUI +83845 while the pointer is over something
+// clickable (the click check above does too: C6 80 85 47 01 00 01); each
+// frame sMhGUI (sub_141AD9AD0) copies that 32-byte block (+83820) to +83852
+// and clears it, and the pointer (ui\pc\cursor_pc, sub_140507200) shows the
+// hand while the copy's byte (+83877) is set.
+inline constexpr std::size_t kGuiPointerHand = 83845;
+// Menu input through the player's bindings (keyboard and pad), as a list's
+// own checks read it (docs/research/native-menu.md, "Page tabs"):
+// - menu key pressed this frame(gui, key, list) at RVA 0x1FB6960: key 0
+//   Confirm, 1 Back (a list's default decide and cancel checks, RVAs 0xB86FB0
+//   and 0xB86F90); answers only while the page has the input;
+// - direction(gui, int* sources, int* mode, uint32* flags out) at RVA
+//   0x18B9D30, through its call in sub_140B86F30 (+85): sources bit 0 left /
+//   right (menu keys 9 / 10, the stick 14 / 15), bit 1 up / down (7 / 8,
+//   12 / 13); mode bits 1 pressed, 2 repeated while held (lists use 3);
+//   returns 1 up, 2 down, 3 left, 4 right, 0 none.
+inline constexpr char kMenuKeyPattern[] =
+    "48 89 5C 24 08 48 89 74 24 10 57 48 83 EC 20 49 8B F8 8B F2 48 8B D9 83 FA 15 75 46 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 36 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 8B D0 E8 ?? ?? ?? ?? 84 C0 74 18 8D 4E EF E8 ?? ?? ?? ?? 84 C0 74 0C 8D 4E F0 E8 ?? ?? ?? ?? 84 C0 75 4D";
+inline constexpr char kMenuDirectionCallerPattern[] =
+    "48 83 EC 28 4C 8B CA 45 84 C0 74 2E 80 B9 7B 01 00 00 00 74 25 48 8D 91 0C 01 00 00 C7 44 24 40 04 00 00 00 48 8B 89 80 00 00 00 4C 8D 44 24 40 E8 ?? ?? ?? ?? 48 83 C4 28 C3 48 8D 91 0C 01 00 00 C7 44 24 40 04 00 00 00 48 8B 89 80 00 00 00 4C 8D 44 24 40 E8 ?? ?? ?? ??";
+inline constexpr std::size_t kMenuDirectionCall = 85;  // E8 rel32
+inline constexpr std::uint32_t kMenuKeyConfirm = 0;
+inline constexpr std::uint32_t kMenuKeyBack = 1;
+inline constexpr std::int32_t kMenuSourcesAll = 3;
+inline constexpr std::int32_t kMenuModeRepeat = 3;
+inline constexpr std::uint32_t kMenuUp = 1;
+inline constexpr std::uint32_t kMenuDown = 2;
+inline constexpr std::uint32_t kMenuLeft = 3;
+inline constexpr std::uint32_t kMenuRight = 4;
 // The mouse moved this frame(gui, list) at RVA 0x1FB65A0.
 inline constexpr char kMouseMovedPattern[] =
     "48 85 D2 74 09 80 BA 72 01 00 00 00 74 0D 8B 81 9C 22 00 00 C1 E8 0A A8 01 75 1E 80 B9 C2 22 00 00 00 75 09 80 B9 C1 22 00 00 00 74 0C 48 8B 0D ?? ?? ?? ?? E9 ?? ?? ?? ?? 32 C0";

@@ -155,6 +155,12 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     click would pick; the shown page keeps its green text), the wheel over
     them scrolls them without changing the page, and a horizontal scrollbar
     under them (the game's, turned as in its upgrade tree) shows and drags
-    their window; long names shrink to their tab (the text's AutoScale). "We can improve it after"
+    their window; long names shrink to their tab (the text's AutoScale).
+    Then (run tabs-3): the pointer turns into the game's hand over the tabs
+    and the mod rows, and keyboard and pad reach the tabs: Up from a page's
+    first row goes to them (a mod with one page wraps as before), Left /
+    Right switch pages, Down or Confirm go back into the settings, Back to
+    the mod list; read through the game's menu input, so the player's own
+    bindings apply. "We can improve it after"
     (the user): the look is a first version.
 
