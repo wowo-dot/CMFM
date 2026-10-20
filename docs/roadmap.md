@@ -43,8 +43,11 @@ remain.
   first row; Left / Right move the bar with the stick and repeats; Confirm
   opens the page and goes in, chosen with the user; Down / Up / Back back
   into the settings), the tabs registered as one of the page's input lists
-  (no grey panel side). The keyboard on the tabs: run `-9` pending. The
-  title screen only so far; the Start menu path next.
+  (no grey panel side), the keyboard through the game's second input
+  family (run `-9`). In game through the Start menu too (runs `-9`, `-10`):
+  the same, except WASD, which in game moves no menu's cursor on the
+  user's setting (the game's own Start menu neither; the system setting
+  `sUserData +286` picks WASD or the arrows in menu mode).
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 
