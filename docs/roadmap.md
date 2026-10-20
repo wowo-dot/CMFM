@@ -9,9 +9,11 @@ each part works go into `docs/research/native-menu.md`.
 **Released 2026-10-20** on the user's go, after run `20261020-release-1`
 (the exact package; the user: "everything works", "i tested everything"):
 tag `v0.2.0`, the GitHub release "CMFM 0.2.0" with `CMFM-0.2.0.zip`
-(SHA-256 `5a6a79b7...a0be`) and its hash list. Nexus (mod 8856): the
-update is prepared in `local/nexus/` (the upload sheet's "Update to
-0.2.0"); the user uploads. Heads-ups written for the DLSS session
+(SHA-256 `5a6a79b7...a0be`) and its hash list. Nexus (mod 8856): updated
+the same day on the user's go, the same archive as an update of the 0.1.0
+file (0.1.0 archived), the description for 0.2.0. Astera Loader stays
+linked to its GitHub releases (the user: each Astera Loader update on
+Nexus needs an email to Nexus first, so GitHub has the newest version). Heads-ups written for the DLSS session
 (`docs/handoff-dlss-mod-20261012.md`) and a client mod's session.
 
 Named 0.2.0 by the user on 2026-10-20 ("a really nice usage overhaul"; until
