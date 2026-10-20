@@ -117,6 +117,11 @@ Loader's `core.<pid>.log` and the crash report from that launch.
 - **A crash while the game exits, naming a Stracker plugin** (FextyMod,
   auto_food_skill, more_auto_shoutouts and others): those plugins'
   own; the game was closing anyway.
+- **In game, WASD does not move the Mods page's cursor (the arrow keys
+  do):** the game's own setting "Start Menu Keyboard Controls" decides
+  whether WASD or the arrow keys move menu cursors while a menu is open in
+  game; the game's Start menu follows it too. Choose an option with "Menu
+  Selection: Main Key" for WASD. On the title screen both always work.
 - **A mod is missing from the list:** check the Overview. A mod written
   for CMFM may be refused with a reason; a config page may be refused
   (a mistake in it, with its line) or replaced by the mod author's own

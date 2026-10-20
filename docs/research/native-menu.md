@@ -1393,7 +1393,13 @@ each fill, on open and when a restart state changes.
   lookup `sub_14044A450` reads it alike). So in game the game's own menus
   and CMFM's page take either WASD or the arrows for the cursor, by that
   setting; the title screen has no menu mode and takes both. CMFM follows
-  the game; nothing to fix. Which Options row shows +286 is not known.
+  the game; nothing to fix. The row is kind 1 id 30 (kind-1 values sit at
+  sUserData +256 + id), in OptionTabTables[1] and TitleOptionTabTables[5]:
+  label 10590, help 23/649, three values; its text (steam_text_eng.gmd) is
+  "Start Menu Keyboard Controls": Move Character / Menu Selection on Main
+  Key (WASD) or Subkey (the arrows): value 0 menu on Subkey, 1 and 2 on
+  Main Key. The user confirmed the game's Start menu takes no WASD either
+  on their setting (value 0).
 
 ## No caps (static, 2026-10-12; run `caps-1`)
 
