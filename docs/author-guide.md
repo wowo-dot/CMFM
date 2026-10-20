@@ -242,7 +242,7 @@ arrives (the header promises this since 1.3; CMFM has always worked so).
   last, at first its default page); a click or Confirm goes into the panel.
   A click on a tab, or Q / E (pad LB / RB), switches pages, also from
   inside the panel. What shows is marked in light green. (Before CMFM
-  0.1.1 a mod's pages opened as a dropdown under its entry, and the
+  0.2.0 a mod's pages opened as a dropdown under its entry, and the
   highlight did not change the panel.)
 - **The page's header** above the panel: your title (the mod's name for a
   mod with several pages; the tabs name the page), your `version` and

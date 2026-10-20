@@ -4,7 +4,11 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
-## 0.1.1 (collecting; no release date, the user: "keep it coming")
+## 0.2.0 (collecting; no release date)
+
+Named 0.2.0 by the user on 2026-10-20 ("a really nice usage overhaul"; until
+then collected as 0.1.1). The bones are done; a few things to add and check
+remain.
 
 - **The Mods page no longer shifts the game's GUI unit list** (a player's
   report: a speedrun tool indexing slot 46 crashed). Not kept: the title's
@@ -18,7 +22,8 @@ each part works go into `docs/research/native-menu.md`.
   the Overview and one mod the panel drew but took no click or key; the
   "category cursor moved to row 0" warning was its symptom, not cosmetic).
   The off-screen category list keeps at least three rows in split mode, so
-  the panel's row 2 always exists. Run `20261017-onemod-1` pending.
+  the panel's row 2 always exists. Run `20261017-onemod-1`: the warning
+  gone; input with one mod confirmed by the user only.
 - **`cmfm.menu` 1.3** (decisions item 15, from a client mod's feedback): the
   callbacks' order promised in the header, the text limits as defines,
   `cmfm_check.h` (add_page's rules outside the game; CMFM's add_page uses
@@ -27,12 +32,19 @@ each part works go into `docs/research/native-menu.md`.
 - **The mod list handles like the game's Options** (decisions item 16; the
   user: players found it confusing): the highlight shows its entry in the
   panel, one click or Confirm goes in, hovering no longer moves the focus.
-  Unit-tested (`ModList::preview`); in-game run pending (mouse, keys, pad).
+  Tested (run `20261020-vanilla-list-1`: "improved a lot"); a click on a
+  mod from inside the panel stays (the user: "nice, keep it").
 - **A mod's pages as tabs above the panel** (decisions item 17; the user's
   sketch): the mod list flat, the dropdowns gone; a sideways copy of the
   game's category list in CMFM's layout, the panel one row lower; tabs
-  scroll past four. Unit-tested (`ModList`, `tab_window_top`); in-game run
-  pending (the tabs' look, hit areas and cursor are a first guess).
+  scroll past four. Tested over runs `20261020-tabs-1` to `-8`: the look
+  (size 22, long names shrunk), the pointer (the bar on hover, the hand,
+  the wheel, a horizontal scrollbar), pad and keyboard (Up from a page's
+  first row; Left / Right move the bar with the stick and repeats; Confirm
+  opens the page and goes in, chosen with the user; Down / Up / Back back
+  into the settings), the tabs registered as one of the page's input lists
+  (no grey panel side). The keyboard on the tabs: run `-9` pending. The
+  title screen only so far; the Start menu path next.
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 
@@ -193,7 +205,7 @@ feature; the ones MHW mods need. Built in this order, each tested in game:
    game's `<SIZE>` tag). The mod list shows one entry per mod (the
    pages of one Astera Loader plugin); a mod with several pages opens a
    dropdown under its entry listing every page, the default (first) one
-   included. A select philosophy (superseded in 0.1.1 by decisions item
+   included. A select philosophy (superseded in 0.2.0 by decisions item
    16: the game's own handling): hover and the arrow keys only highlight;
    a click or Confirm selects (a mod: its dropdown opens and its default
    page shows; a page: it shows; the open mod's entry again: the dropdown

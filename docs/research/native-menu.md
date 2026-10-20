@@ -1202,7 +1202,7 @@ each fill, on open and when a restart state changes.
   category list's moves set it, the pointer sets it, the wheel and the
   scrollbar move only the window. Q / E and pad LB / RB are read through
   `al.input` (`key_down`, `pad_state`) in the page's update, as edges.
-- **0.1.1: the game's own handling instead** (decisions item 16, players
+- **0.2.0: the game's own handling instead** (decisions item 16, players
   found the select philosophy and the hover focus confusing). The game's
   page: with the category list's focus, the pointer moves the cursor and
   the panel shows the highlighted category; a click on the category (its
@@ -1472,7 +1472,7 @@ Measured (run `20261015-guilist-1`, CMFM 0.1.0):
 So only the page's surviving the change from title to game shifts the list;
 made on open and released on close it would not.
 
-**Fixed in 0.1.1** (commits 4175630, 1807795; run `20261015-unitfix-1`): the
+**Fixed for 0.2.0** (collected as 0.1.1; commits 4175630, 1807795; run `20261015-unitfix-1`): the
 page is not kept. The title's page dies with the title scene; in game, Mods
 in the Start menu makes a page, sets uMhGUI's release-when-closed bit
 (`+8856 & 4`: slot 87, `sub_141FB89B0`, kills the unit when it has closed,
