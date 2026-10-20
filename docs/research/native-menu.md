@@ -1401,6 +1401,26 @@ each fill, on open and when a restart state changes.
   Main Key. The user confirmed the game's Start menu takes no WASD either
   on their setting (value 0).
 
+## The page's sounds (static, 2026-10-20; run usability-1)
+
+- **CMFM's page was silent,** its lists' cursor moves and the named sounds
+  CMFM asked for alike. The unit's setup (slot 6, `sub_141FB4540`) ends with
+  `sub_141FB8300(unit, 1)`, which loads two `rGUISoundParam` resources: by
+  the layout path (slot 71; unit +7496) and by the layout's folder plus the
+  class name (slot 4's DTI name; +7504), for the Options page
+  `ui\title\options` and `ui\title\uGUIOption`. A list's cursor move
+  (`moveCursor`, `sub_140B74060`) asks `sub_141FB5C10(unit)` for the
+  page's cursor sound (+7504, else +7496; -2 without them) and plays it
+  through `sub_141AE4730`; named sounds go through `sMhGUI::requestSound`
+  (`sub_141AE47E0`: the name's hash in the table at sMhGUI +84384, queued
+  for the unit). CMFM's page has its own layout (`ui\cmfm\mods`) and class
+  (`uGUICmfmPage`), so both loads found nothing.
+- **Since:** CMFM's class overrides slot 6: the game's setup, then
+  `sub_141FB8300(unit, 1)` again (it releases what it loaded first) while
+  slots 4 and 71 answer with the Options page's class description and
+  layout path; the page then loads the Options page's own sounds. Logged
+  once: "page sounds: the Options page's (by layout ..., by class ...)".
+
 ## No caps (static, 2026-10-12; run `caps-1`)
 
 Every shared limit CMFM had (200 rows over all mods, about 900 label and

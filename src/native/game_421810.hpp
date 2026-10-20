@@ -303,6 +303,23 @@ inline constexpr std::size_t kSlotUpdate = 81;   // kTitleOptionsUpdatePattern
 inline constexpr std::size_t kSlotOpen = 90;     // kTitleOptionsOpenPattern
 inline constexpr std::size_t kSlotClose = 91;    // kTitleOptionsClosePattern
 inline constexpr std::size_t kSlotGetGuiPath = 71;  // lea rax, [layout path]; ret
+// The unit's setup, vtable slot 6 (RVA 0x1FB4540, uMhGUI's; uGUIOption keeps
+// it): loads the layout from slot 71's path, resolves the input lists and at
+// its end sets up the page's sounds, sub_141FB8300(unit, 1): two
+// rGUISoundParam resources, one by the layout path (unit +7496), one by the
+// layout's folder and the class name (slot 4's DTI name; +7504): for the
+// Options page "ui\title\uGUIOption". A list's cursor sound and the page's
+// named sounds come from them (sub_141FB5C10 reads +7504, +7496). CMFM's page
+// has its own layout path and class name, so both loads found nothing and
+// the page was silent (run usability-1); CMFM runs the sound setup again
+// after the unit's setup with the Options page's path and class answered
+// (the function releases what it loaded before, so it may run again).
+inline constexpr std::size_t kSlotSetup = 6;
+inline constexpr std::uintptr_t kRvaUnitSetup = 0x1FB4540;
+inline constexpr char kSoundSetupPattern[] =
+    "40 55 41 57 48 8D AC 24 48 FB FF FF 48 81 EC B8 05 00 00 48 83 B9 90 02 00 00 00 4C 8B F9 0F 84 ?? ?? ?? ?? 4C 89 A4 24 B0 05 00 00 45 33 E4 84 D2 0F 84 ?? ?? ?? ?? 48 8B 01 FF 90 38 02 00 00";
+inline constexpr std::size_t kUnitSoundParamByPath = 7496;   // rGUISoundParam*
+inline constexpr std::size_t kUnitSoundParamByClass = 7504;  // rGUISoundParam*
 inline constexpr char kOptionPageLayout[] = "ui\\title\\options";
 
 // CMFM's own page layout (decisions.md item 10): assets/nativePC/ui/cmfm/

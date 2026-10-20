@@ -38,6 +38,7 @@ using ClearRefFn = void (*)(void* lock, GameRef* slot);
 using RequestOpenFn = void (*)(void* unit, void* opener);
 using RequestCloseFn = std::uint32_t (*)(void* unit, std::uint8_t now);
 using RegisterInputFn = void (*)(void* unit, const char* name, std::uint32_t priority);
+using SoundSetupFn = void (*)(void* unit, std::uint8_t load);
 
 // The game's class ids: crc32 without the final inversion, 31 bits.
 constexpr std::uint32_t class_id(const char* name) {
@@ -65,6 +66,13 @@ ClearRefFn g_clear_ref = nullptr;
 RequestOpenFn g_request_open = nullptr;
 RequestCloseFn g_request_close = nullptr;
 RegisterInputFn g_register_input = nullptr;  // optional: without it the page tabs take no keys
+SoundSetupFn g_sound_setup = nullptr;        // optional: without it the page is silent
+UnitFn g_next_setup = nullptr;
+// While CMFM runs the page's sound setup: slots 4 and 71 answer as the
+// Options page (its class description, its layout path), so the game loads
+// that page's sounds.
+bool g_options_identity = false;
+bool g_sounds_logged = false;
 const void* g_tab_input_unit = nullptr;     // the page whose tabs are registered for input
 void* g_found_update = nullptr;
 void* g_found_open = nullptr;
@@ -143,11 +151,33 @@ void* dti_ctor_array(const void*, void* memory, std::uint32_t count) {
 }
 
 const void* get_dti(void*) {
-    return &g_dti;
+    return g_options_identity ? static_cast<const void*>(g_option_dti) : &g_dti;
 }
 
 const char* get_gui_path(void*) {
-    return g_layout;
+    return g_options_identity ? game::kOptionPageLayout : g_layout;
+}
+
+// Slot 6, the unit's setup: the game's, then the sound setup once more as
+// the Options page, so CMFM's page sounds like it (its lists' cursor sound,
+// the named sounds CMFM asks for).
+std::uint64_t setup_with_sounds(void* unit) {
+    const std::uint64_t result = g_next_setup(unit);
+    if (g_sound_setup != nullptr) {
+        g_options_identity = true;
+        g_sound_setup(unit, 1);
+        g_options_identity = false;
+        if (!g_sounds_logged) {
+            g_sounds_logged = true;
+            const auto* bytes = static_cast<const char*>(unit);
+            const bool by_path = *reinterpret_cast<void* const*>(bytes + game::kUnitSoundParamByPath) != nullptr;
+            const bool by_class = *reinterpret_cast<void* const*>(bytes + game::kUnitSoundParamByClass) != nullptr;
+            logf(by_path || by_class ? AL_LOG_INFO : AL_LOG_WARNING,
+                 "page sounds: the Options page's (by layout %s, by class %s)", by_path ? "loaded" : "none",
+                 by_class ? "loaded" : "none");
+        }
+    }
+    return result;
 }
 
 }  // namespace
@@ -181,6 +211,13 @@ bool page_class_register(const Env& env, std::string& why) {
     g_clear_ref = reinterpret_cast<ClearRefFn>(clear_ref);
     g_request_open = reinterpret_cast<RequestOpenFn>(request_open);
     g_request_close = reinterpret_cast<RequestCloseFn>(request_close);
+    void* sound_setup = nullptr;
+    std::string sound_why;
+    if (find("uMhGUI::setupSounds", game::kSoundSetupPattern, &sound_setup, sound_why)) {
+        g_sound_setup = reinterpret_cast<SoundSetupFn>(sound_setup);
+    } else {
+        logf(AL_LOG_WARNING, "%s; the Mods page stays silent", sound_why.c_str());
+    }
     void* register_input = nullptr;
     std::string input_why;
     if (find("uMhGUI::registerInput", game::kRegisterInputPattern, &register_input, input_why)) {
@@ -223,11 +260,20 @@ bool page_class_check(const Env& env, const PageHandlers& handlers, std::string&
     }
     g_option_dti = dti;
     std::memcpy(g_vtable, vtable, sizeof g_vtable);
+    if (reinterpret_cast<std::uintptr_t>(vtable[game::kSlotSetup]) == env.base + game::kRvaUnitSetup) {
+        g_next_setup = reinterpret_cast<UnitFn>(vtable[game::kSlotSetup]);
+    } else {
+        g_sound_setup = nullptr;  // not the setup expected: leave the sounds alone
+        logf(AL_LOG_WARNING, "uGUIOption's setup is not where expected; the Mods page stays silent");
+    }
     g_next_update = reinterpret_cast<UnitFn>(vtable[game::kSlotUpdate]);
     g_next_open = reinterpret_cast<UnitFn>(vtable[game::kSlotOpen]);
     g_next_close = reinterpret_cast<UnitFn>(vtable[game::kSlotClose]);
     g_vtable[game::kSlotGetDti] = reinterpret_cast<void*>(&get_dti);
     g_vtable[game::kSlotGetGuiPath] = reinterpret_cast<void*>(&get_gui_path);
+    if (g_next_setup != nullptr && g_sound_setup != nullptr) {
+        g_vtable[game::kSlotSetup] = reinterpret_cast<void*>(&setup_with_sounds);
+    }
     g_vtable[game::kSlotUpdate] = reinterpret_cast<void*>(handlers.update);
     g_vtable[game::kSlotOpen] = reinterpret_cast<void*>(handlers.open);
     g_vtable[game::kSlotClose] = reinterpret_cast<void*>(handlers.close);
