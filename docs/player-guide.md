@@ -48,18 +48,18 @@ own mod.
 ## Using the Mods page
 
 - **The mod list** (left): "Overview" first, then one entry per mod, by
-  name. It
-  works like the game's Options: move over an entry (pointer or arrows) and
-  its settings show on the right; a click or Confirm goes into them, and
-  Back or a right click returns to the list. A mod with several pages
-  shows them as tabs above its settings: click a tab, or use Q / E (LB /
-  RB on a gamepad), also from the settings side. The arrows at both ends
-  of the tabs show these keys and can be clicked too. When there are more tabs
-  than fit, scroll them with the mouse wheel over them or the bar under
-  them. With keys or a gamepad, Up from a page's first setting moves to its
-  tabs: Left / Right (or the stick) choose a page, Confirm opens it, Down
-  or Back return to the settings (Up to their last row). Each mod opens on
-  the page you used last.
+  name. It works like the game's Options: move over an entry (pointer or
+  arrows) and its settings show on the right; a click or Confirm goes into
+  them, and Back or a right click returns to the list.
+- **Pages as tabs:** a mod with several pages shows them as tabs above its
+  settings: click a tab, or use Q / E (LB / RB on a gamepad), also from
+  the settings side. The arrows at both ends of the tabs show these keys
+  and can be clicked too. When there are more tabs than fit, scroll them
+  with the mouse wheel over them or the bar under them. With keys or a
+  gamepad, Up from a page's first setting moves to its tabs: Left / Right
+  (or the stick) choose a page, Confirm opens it, Down or Back return to
+  the settings (Up to their last row). Each mod opens on the page you used
+  last.
 - **The settings** (right): switches and lists change with the arrows (or
   a click), or a list opens the game's pick list; numbers are sliders. A
   greyed row cannot change right now; the help line at the bottom says

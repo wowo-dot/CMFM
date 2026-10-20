@@ -83,7 +83,7 @@ line.
 | `made_by` | no | who wrote the file; community pages show it on the Overview |
 | `config` | yes | the mod's config file, below |
 | `applies` | no | `"restart"` (the default) or `"live"`: when the mod picks up a change |
-| `pages` | yes | 1 or more pages; several pages form one mod with a dropdown |
+| `pages` | yes | 1 or more pages; several pages form one mod, shown as tabs (a dropdown before CMFM 0.2.0) |
 
 `config`:
 

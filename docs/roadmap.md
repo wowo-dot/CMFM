@@ -4,11 +4,17 @@ The plan as agreed with the user; newest state first. Each design step ends
 with an in-game run and an annotated tag (`design-step-N`). Details of how
 each part works go into `docs/research/native-menu.md`.
 
-## 0.2.0 (collecting; no release date)
+## 0.2.0 (release prepared 2026-10-20)
 
 Named 0.2.0 by the user on 2026-10-20 ("a really nice usage overhaul"; until
-then collected as 0.1.1). The bones are done; a few things to add and check
-remain.
+then collected as 0.1.1). The user's go for the release on 2026-10-20 after
+the key hints. Steps: version 0.2.0, the notes
+(`docs/release-notes-0.2.0.md`), the package from a clean release build, one
+short launch of exactly that package (pad LB / RB in game, alt-tab and a
+resize with the page open, the demo's worded question), then the push, the
+tag `v0.2.0` and the GitHub release on the user's word; the user uploads the
+same archive to Nexus (mod 8856). With the release, `cmfm.menu` 1.3 is fixed
+as 1.2 is (decisions item 14): anything new goes into 1.4.
 
 - **The Mods page no longer shifts the game's GUI unit list** (a player's
   report: a speedrun tool indexing slot 46 crashed). Not kept: the title's

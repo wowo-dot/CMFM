@@ -236,9 +236,9 @@ arrives (the header promises this since 1.3; CMFM has always worked so).
   mod's state: Active, Restart needed, Refused with the reason, or Not
   shown), then one entry per mod, by name (before 0.2.0 in the order
   their first pages were added). It scrolls with a scrollbar when it is
-  long. A tab holds about 14 characters at full size; a longer page title
-  is shrunk to fit. A mod with several
-  pages shows them as tabs above the panel (four at a time; more scroll).
+  long. A mod with several pages shows them as tabs above the panel (four
+  at a time; more scroll). A tab holds about 14 characters at full size; a
+  longer page title is shrunk to fit.
   As in the game's own Options, the pointer and the arrow keys move the
   highlight and the panel shows the highlighted mod (on the page it showed
   last, at first its default page); a click or Confirm goes into the panel.

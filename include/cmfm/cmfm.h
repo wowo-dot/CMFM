@@ -50,14 +50,17 @@
  * (Astera Loader never unloads a plugin).
  *
  * What a page looks like: the Mods page lists "Overview" (CMFM's version and
- * every mod's state) and then one entry per mod, in the order their first
- * pages were added (1024 pages at most since 1.2, 24 before; further pages
- * are listed as not shown on the Overview). Since 1.2 a mod is the pages of
- * one plugin (with the same `mod` name, see cmfm_page_t): a mod with several
- * pages opens a dropdown of them under its entry, its first page the
- * default; before 1.2 each page had an entry of its own. The highlighted entry's settings show next to the
- * list, one row each: the label on the left, the value on the right, the
- * help line at the bottom. SECTION rows group the rows below them. Above the
+ * every mod's state) and then one entry per mod, by name (since CMFM 0.2.0;
+ * before, in the order their first pages were added; 1024 pages at most since
+ * 1.2, 24 before; further pages are listed as not shown on the Overview).
+ * Since 1.2 a mod is the pages of one plugin (with the same `mod` name, see
+ * cmfm_page_t): a mod with several pages shows them as tabs above its
+ * settings (since CMFM 0.2.0; before, a dropdown under its entry), its first
+ * page the default; a tab holds about 14 characters of a page's title at
+ * full size, longer titles shrink. Before 1.2 each page had an entry of its
+ * own. The highlighted entry's settings show next to the list, one row
+ * each: the label on the left, the value on the right, the help line at the
+ * bottom. SECTION rows group the rows below them. Above the
  * rows, the page's header: its title, its version (since 1.1) and "Restart
  * needed" while one of its changes waits for a game restart. A page with
  * more rows than fit (14) scrolls; keep the important settings near the top.
