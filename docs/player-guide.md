@@ -53,7 +53,8 @@ own mod.
   its settings show on the right; a click or Confirm goes into them, and
   Back or a right click returns to the list. A mod with several pages
   shows them as tabs above its settings: click a tab, or use Q / E (LB /
-  RB on a gamepad), also from the settings side. When there are more tabs
+  RB on a gamepad), also from the settings side. The arrows at both ends
+  of the tabs show these keys and can be clicked too. When there are more tabs
   than fit, scroll them with the mouse wheel over them or the bar under
   them. With keys or a gamepad, Up from a page's first setting moves to its
   tabs: Left / Right (or the stick) choose a page, Confirm opens it, Down

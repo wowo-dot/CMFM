@@ -1421,6 +1421,43 @@ each fill, on open and when a restart state changes.
   layout path; the page then loads the Options page's own sounds. Logged
   once: "page sounds: the Options page's (by layout ..., by class ...)".
 
+## The tab arrows' icons (static, 2026-10-20; runs hints-1, hints-2)
+
+- **The arrows:** `ui\common\page_tab` animations `arrowPrev_tab` (1) and
+  `arrowNext_tab` (2): an arrow plus `buttonIcon_Small`, a child animation
+  of `ui\common\buttonGuide`. CMFM's layout copies the two instances from
+  `equip\equip_appearance.gui` (`tools/gui/make_mods_gui.py`, `ARROWS`).
+- **The icon is set in code, never by the layout.** Copied alone, the
+  arrows showed the layout's default cell, icon 0 (the pad's B), with the
+  keyboard and the pad alike (run hints-1). The appearance screen's setup
+  (`sub_141EE23A0`) does, per arrow: `getInstanceFromName(unit,
+  "arrowPrev_tab")`, the instance's root (+448) `getObjectFromName(...,
+  "buttonIcon_Small")`, that object's child root (+240)
+  `getObjectFromName(..., "tex_button")`, then `sub_1418BFD30(texture,
+  icon)`.
+- **`sub_1418BFD30` (setButtonIcon):** while sMhGUI +89464 is set (the
+  icons show keys) and the icon is below 32, `sub_14044A1D0` swaps it for
+  the key the player bound to the same menu key: the menu key from the
+  table at `0x142F78B90` (37 entries, menu key -> pad icon), its binding
+  number (pairs at `0x142F78E20`; menu keys 2 / 3 are bindings 3 / 4), the
+  bound key (`sub_14044A450`, which also applies the "Start Menu Keyboard
+  Controls" slot), its key icon (pairs at `0x142F788C0`, icons 257 and up).
+  `sub_14044AE60` adds the pad's icon style to pad icons. Then the icon's
+  64 x 64 cell (8 per row) becomes the texture rect. Set once: the game's
+  pages set it again themselves.
+- **Icon numbers:** by the table, menu key 0 (Confirm) is icon 1, key 1
+  (Back) icon 0, keys 2-5 icons 12-15, keys 7 / 8 icons 22 / 23, keys 9 /
+  10 icons 20 / 21. Of the 32 functions that call it, those passing a
+  constant pair mostly use 12 / 13 (L1 / R1, pad LB / RB; 11 functions);
+  the appearance screen's main tabs 14 / 15 (L2 / R2). The keyboard reader for menu keys (`sub_1418B9A70` ->
+  `sub_141FB62D0`) uses the same numbers; it also answers for mouse
+  bindings, the wheel included (mouse codes 5 / 6).
+- **CMFM:** icons 12 / 13, set when the page opens and again when sMhGUI
+  +89464 changes (one read per frame). The page step still reads Q / E and
+  LB / RB itself; it does not take the game's menu keys 2 / 3 (a binding on
+  the wheel would then switch pages while scrolling). Run hints-2: the
+  icons right on pad and keyboard, following the device.
+
 ## No caps (static, 2026-10-12; run `caps-1`)
 
 Every shared limit CMFM had (200 rows over all mods, about 900 label and

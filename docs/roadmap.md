@@ -54,9 +54,16 @@ remain.
   closing; the help line follows the tab under the pointer or the keys;
   menu sounds (the game's cursor sound on mod-list and tab moves, a page
   sound on tab switches and Q / E, a decide sound on an Overview jump).
-  Unit-tested where pure (order, Overview rows, the flush); in-game run
-  pending. Later: key hints in the bottom bar, a mark on changed settings
-  and a per-setting Default.
+  Unit-tested where pure (order, Overview rows, the flush); tested in game
+  (runs `20261020-usability-1`, `-2`, tag `usability-sounds-1`: the sounds
+  after the page loaded the Options page's sound parameters, "works like a
+  charm"; the first TOML write in game).
+- **Key hints on the page tabs:** the game's tab arrows at both ends of the
+  tabs (copied from the appearance screen's layout), with the game's L1 /
+  R1 icons: pad LB / RB, or the player's keys, following the device; a
+  click on one steps the page. Tested (runs `20261020-hints-1`, `-2`, tag
+  `hints-1`: "works like a charm"). A mark on changed settings and a
+  per-setting Default: dropped (the user, 2026-10-20: not needed).
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 
