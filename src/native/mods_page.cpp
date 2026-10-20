@@ -2213,6 +2213,60 @@ void mark_tab(std::size_t page) {
     }
 }
 
+// Diagnostic for run tabs-10 (the keyboard on the tabs works on the title
+// screen, not in game): while the tabs have the keys, what each family of the
+// game's menu input reports, the input manager's lock bits and the lists'
+// keyboard flags, logged when it changes (at most 300 lines a session).
+// Temporary; remove once the cause is known.
+void diag_tab_input(void* unit) {
+    static int lines = 0;
+    static char last[512] = {};
+    if (lines >= 300 || g_menu_key == nullptr || g_menu_direction == nullptr) {
+        return;
+    }
+    std::int32_t s = game::kMenuSourcesAll;
+    std::int32_t m = 7;
+    const std::uint32_t pad_dir = g_menu_direction(unit, &s, &m, nullptr);
+    std::uint32_t kbm_dir = 0;
+    if (g_menu_direction_kbm != nullptr) {
+        s = game::kMenuSourcesAll;
+        m = 7;
+        kbm_dir = g_menu_direction_kbm(unit, &s, &m, nullptr);
+    }
+    std::uint32_t pad_keys = 0;
+    std::uint32_t kbm_keys = 0;
+    for (std::uint32_t k = 0; k <= 28; ++k) {
+        if (k == 21) {
+            continue;  // the chat key: network checks
+        }
+        if (g_menu_key(unit, k, nullptr) != 0) {
+            pad_keys |= 1u << k;
+        }
+        if (g_menu_key_kbm != nullptr) {
+            std::int32_t mode = 7;
+            if (g_menu_key_kbm(unit, k, &mode, nullptr) != 0) {
+                kbm_keys |= 1u << k;
+            }
+        }
+    }
+    void* input = g_input_manager != nullptr ? *g_input_manager : nullptr;
+    void* tabs = g_tab_list.load(std::memory_order_acquire);
+    void* panel = panel_list(unit);
+    char line[512];
+    std::snprintf(line, sizeof line,
+                  "tabs diag: pad dir %u kbm dir %u pad keys %08x kbm keys %08x | lock 3672=%08x 3688=%08x 3704=%08x | "
+                  "gui 8860=%08x 8897=%u 8898=%u | kbd flag tabs %u panel %u",
+                  pad_dir, kbm_dir, pad_keys, kbm_keys, input ? field<std::uint32_t>(input, 3672) : 0,
+                  input ? field<std::uint32_t>(input, 3688) : 0, input ? field<std::uint32_t>(input, 3704) : 0,
+                  field<std::uint32_t>(unit, 8860), field<std::uint8_t>(unit, 8897), field<std::uint8_t>(unit, 8898),
+                  tabs ? field<std::uint8_t>(tabs, 379) : 0, panel ? field<std::uint8_t>(panel, 379) : 0);
+    if (std::strcmp(line, last) != 0) {
+        std::memcpy(last, line, sizeof last);
+        ++lines;
+        logf(AL_LOG_INFO, "%s", line);
+    }
+}
+
 // Every frame while the page shows CMFM's menu: keyboard and pad on the page
 // tabs, read through the game's menu input (the player's bindings; the stick
 // too; Left / Right repeat while held). Left / Right move the tabs' cursor
@@ -2255,6 +2309,7 @@ void tab_keys(void* unit) {
         leave_tab_keys(unit, false);
         return;
     }
+    diag_tab_input(unit);
     const bool held = menu_held(unit);
     if (g_tab_guard && !held) {
         g_tab_guard = false;
