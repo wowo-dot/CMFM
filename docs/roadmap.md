@@ -28,6 +28,11 @@ each part works go into `docs/research/native-menu.md`.
   user: players found it confusing): the highlight shows its entry in the
   panel, one click or Confirm goes in, hovering no longer moves the focus.
   Unit-tested (`ModList::preview`); in-game run pending (mouse, keys, pad).
+- **A mod's pages as tabs above the panel** (decisions item 17; the user's
+  sketch): the mod list flat, the dropdowns gone; a sideways copy of the
+  game's category list in CMFM's layout, the panel one row lower; tabs
+  scroll past four. Unit-tested (`ModList`, `tab_window_top`); in-game run
+  pending (the tabs' look, hit areas and cursor are a first guess).
 - Parked: an event or query for "a game menu is open" (needs a study of the
   game's menu bytes first).
 

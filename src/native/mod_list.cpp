@@ -5,73 +5,36 @@
 namespace cmfm::native {
 
 void ModList::reset(std::vector<std::size_t> pages) {
+    if (pages != pages_) {
+        last_page_.assign(pages.size(), 0);
+    }
     pages_ = std::move(pages);
-    open_ = kNone;
     shown_mod_ = 0;
-    shown_page_ = 0;
-    rebuild();
 }
 
-void ModList::rebuild() {
-    rows_.clear();
-    for (std::size_t m = 0; m < pages_.size(); ++m) {
-        rows_.push_back({m, -1});
-        if (m == open_ && pages_[m] > 1) {
-            for (std::size_t p = 0; p < pages_[m]; ++p) {
-                rows_.push_back({m, static_cast<std::int32_t>(p)});
-            }
-        }
-    }
-}
-
-std::size_t ModList::row_of(std::size_t mod, std::int32_t page) const {
-    for (std::size_t r = 0; r < rows_.size(); ++r) {
-        if (rows_[r].mod == mod && rows_[r].page == page) {
-            return r;
-        }
-    }
-    return kNone;
-}
-
-std::size_t ModList::shown_row() const {
-    if (open_ == shown_mod_ && page_count(shown_mod_) > 1) {
-        return row_of(shown_mod_, static_cast<std::int32_t>(shown_page_));
-    }
-    return row_of(shown_mod_, -1);
-}
-
-ModList::Result ModList::preview(std::size_t r) {
-    if (r >= rows_.size()) {
+ModList::Result ModList::preview(std::size_t mod) {
+    if (mod >= pages_.size() || mod == shown_mod_) {
         return {};
     }
-    const ListRow row = rows_[r];
-    std::size_t page = 0;
-    if (row.page >= 0) {
-        page = static_cast<std::size_t>(row.page);
-    } else if (row.mod == shown_mod_) {
-        return {};  // the shown mod's entry: its shown page stays
-    }
-    if (shown_mod_ == row.mod && shown_page_ == page) {
-        return {};
-    }
-    shown_mod_ = row.mod;
-    shown_page_ = page;
+    shown_mod_ = mod;
     return {true, false};
 }
 
-ModList::Result ModList::activate(std::size_t r) {
-    if (r >= rows_.size()) {
+ModList::Result ModList::activate(std::size_t mod) {
+    if (mod >= pages_.size()) {
         return {};
     }
-    const ListRow row = rows_[r];
-    Result result = preview(r);
+    Result result = preview(mod);
     result.enter = true;
-    const std::size_t open = pages_[row.mod] > 1 ? row.mod : kNone;
-    if (open_ != open) {
-        open_ = open;  // one dropdown at a time: the shown mod's
-        rebuild();
-    }
     return result;
+}
+
+ModList::Result ModList::show_page(std::size_t page) {
+    if (page >= page_count(shown_mod_) || page == last_page_[shown_mod_]) {
+        return {};
+    }
+    last_page_[shown_mod_] = page;
+    return {true, false};
 }
 
 ModList::Result ModList::step_page(int direction) {
@@ -79,12 +42,8 @@ ModList::Result ModList::step_page(int direction) {
     if (n < 2) {
         return {};
     }
-    shown_page_ = direction < 0 ? (shown_page_ + n - 1) % n : (shown_page_ + 1) % n;
-    if (open_ != shown_mod_) {
-        open_ = shown_mod_;
-        rebuild();
-    }
-    return {true, false};
+    const std::size_t page = last_page_[shown_mod_];
+    return show_page(direction < 0 ? (page + n - 1) % n : (page + 1) % n);
 }
 
 bool ModList::select(std::size_t mod, std::size_t page) {
@@ -92,10 +51,20 @@ bool ModList::select(std::size_t mod, std::size_t page) {
         return false;
     }
     shown_mod_ = mod;
-    shown_page_ = page;
-    open_ = pages_[mod] > 1 ? mod : kNone;
-    rebuild();
+    last_page_[mod] = page;
     return true;
+}
+
+std::size_t tab_window_top(std::size_t top, std::size_t page, std::size_t pages, std::size_t visible) {
+    if (visible == 0 || pages <= visible) {
+        return 0;
+    }
+    if (page < top) {
+        top = page;
+    } else if (page >= top + visible) {
+        top = page - visible + 1;
+    }
+    return top > pages - visible ? pages - visible : top;
 }
 
 }  // namespace cmfm::native

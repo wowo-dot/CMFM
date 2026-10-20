@@ -17,6 +17,10 @@ Layout for CMFM's page (docs/research/native-menu.md, "Layout study"):
 - the audio panel's title (the panel CMFM shows) becomes the mod's header:
   switched on and moved above the panel, level with the restart line; the
   panels' title text is twice as wide (600 px);
+- the panels one tab row (50 px) lower, the header kept level with the
+  restart line, and the page tabs between them: a copy of the game's
+  category list from options.gui itself, laid out sideways (Type 1), under
+  the audio panel (decisions.md item 17);
 - two scrollbars, the game's own (the PC graphics settings' pair, a track
   and a bar drawing ui\\common\\scrollbar, docs/research/scrollbar.md): one
   right of the mod list, one right of the settings panel. Adding parts
@@ -186,14 +190,42 @@ def set_param(g, instance, name, expected, new):
     print("  %s %s: %r -> %r" % (instance, name, expected, new))
 
 
+# The panels move down by one tab row (null_prog_color1 at 576, 212 -> 262), so
+# the page tabs fit between the mod's header and the panel; a 14-row page then
+# ends where the 15th row did (rows 1-15 fit above the help line, run
+# 20261011-longpage-1).
+PANELS = ("null_prog_color1", 212.0, 262.0)
+
 # The mod's header: the audio panel's title, whose text (title_menu/msg_sub_title,
 # shared by every panel title and the restart line) is centred on the instance
 # (top-centre control point) in a 300 x 50 box, its line in the middle. Centred
-# over the panel (null_prog_color1 at 576, 212; the panel 806 px wide from
-# about -19) and level with the restart line (its text centred at y 185): top
-# at 160, i.e. PosY -52.
-HEADER = ("a_title_menu_audio", 403.0, -52.0)
+# over the panel (the panel 806 px wide from about -19) and level with the
+# restart line (its text centred at y 185): top at 160, i.e. PosY -102 under
+# the moved panels.
+HEADER = ("a_title_menu_audio", 403.0, -102.0)
 TITLE_TEXT_SIZE = (600.0, 50.0, 0.0, 0.0)
+
+# The page tabs (a mod with several pages): a copy of the game's category list
+# (its row template, the title menu's text row, and its cursor), laid out
+# sideways (Type 1: cGUIInstButtonList::rebuildRows places the copies with
+# SetPosX, i * (DuplicateSpace + DuplicateButtonSize) from the template's x)
+# under the audio panel, above its frame (the frame's top at the panel's y 0).
+# Four tabs of 190 px, 10 apart, from the panel's left; the cursor scaled to a
+# tab (the category list's, 36 x 5, spans its 360 px rows). CMFM fills it
+# (more pages than tabs scroll), names "cmfm_tab_*".
+TABS = {
+    "rename": {"btnlist_menu": "cmfm_tab_list", "cursor_menu": "cmfm_tab_cursor",
+               "auto_menu_title": "cmfm_tab_row"},
+    "params": (
+        # instance, parameter, the game's value, CMFM's
+        ("cmfm_tab_list", "Type", 0, 1),
+        ("cmfm_tab_list", "DuplicateNum", 7, 4),
+        ("cmfm_tab_list", "DuplicateButtonSize", 50.0, 190.0),
+        ("cmfm_tab_list", "PosX", 0.0, -12.0),
+        ("cmfm_tab_list", "PosY", 0.0, -30.0),
+        ("cmfm_tab_cursor", "SclX", 36.0, 19.0),
+    ),
+}
 
 VALUE_FORMAT = {1: "<i", 2: "<f", 4: "<4f", 0xB: "<i", 0xD: "<i"}
 
@@ -226,6 +258,9 @@ def object_param(g, name, param):
 
 
 def place_header(g):
+    name, y_from, y_to = PANELS
+    print("the panels one tab row lower: %s" % name)
+    own_value(g, init_param(g, name, "PosY"), name + " PosY", y_from, y_to)
     name, x, y = HEADER
     print("the mod's header: %s above the panel" % name)
     own_value(g, init_param(g, name, "PosX"), name + " PosX", 408.0, x)
@@ -234,12 +269,23 @@ def place_header(g):
               TITLE_TEXT_SIZE)
 
 
-def add_scrollbars(data, source):
-    """CMFM's layout with the mod's header placed and the two scrollbars
-    grafted in (the file grows)."""
+def add_tabs(g, options):
+    """The page tabs: the game's category list copied from its own layout
+    (options.gui as shipped) under the audio panel, laid out sideways."""
+    print("page tabs: a copy of btnlist_menu under null_audio")
+    graft(g, options, "btnlist_menu", "null_audio", entries_like="btnlist_camera", log=lambda m: print("  " + m),
+          rename=TABS["rename"])
+    for name, param, old, new in TABS["params"]:
+        set_param(g, name, param, old, new)
+
+
+def add_scrollbars(data, source, options):
+    """CMFM's layout with the panels moved, the mod's header placed, the page
+    tabs and the two scrollbars grafted in (the file grows)."""
     g = Gui.parse(data)
     src = Gui.parse(source)
     place_header(g)
+    add_tabs(g, Gui.parse(options))
     for name, parent, x, y, length in SCROLLBARS:
         print("scrollbar %s under %s" % (name, parent))
         graft(g, src, "null_scrollbar_root", parent, entries_like="btnlist_camera", log=lambda m: print("  " + m),
@@ -277,7 +323,7 @@ def main():
     gui = GuiFile(data)
     try:
         build(gui)
-        out = add_scrollbars(bytes(gui.d), source)
+        out = add_scrollbars(bytes(gui.d), source, data)
     except (KeyError, ValueError, TypeError, GraftError) as e:
         print("stopped: %s" % e)
         return 1

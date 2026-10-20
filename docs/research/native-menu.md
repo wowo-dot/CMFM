@@ -1218,6 +1218,37 @@ each fill, on open and when a restart state changes.
   list the focus back. Without CMFM's Confirm (slot 8 not as expected),
   Confirm only enters; dropdowns then open by a click or Q / E.
 
+## Page tabs (static, 2026-10-20; decisions item 17)
+
+- **The game's tab bars** are fixed sets of drawn tabs: `ui\common\page_tab`
+  (a button list `btnlist_LR`, one tab template `auto_tab00`, arrows
+  `auto_arrowPrev_tab` / `auto_arrowNext_tab` at x -196 / 196, art for 2,
+  3 and 4 tabs: `tab2cover` .. `tab4cover`, `MtabFocus2..4`), referenced by
+  about 20 layouts (chara_make, chat_menu, equip_appearance, item_boxSell,
+  guild_card, expedition, login, ...); menus also carry their own
+  (`btnlist_tab` with `auto_tab00..03` in item_boxSell and chat_menu, two
+  in equip_appearance). No text instance in them: the names are part of the
+  tabs' art. Not usable for page names CMFM writes.
+- **A button list lays its copies out sideways when `Type` (+0x294) is 1**:
+  `cGUIInstButtonList::rebuildRows` (0x140B7FEF0) calls
+  `cGUIInstAnimation::SetPosX` for Type 1, else `SetPosY(i * DuplicateSpace
+  + template y + i * DuplicateButtonSize)`.
+- **CMFM's tabs:** `tools/gui/make_mods_gui.py` grafts a copy of the game's
+  category list (`btnlist_menu` from options.gui as shipped: the title
+  menu's text row, `msg_1`, and its cursor) under the audio panel as
+  `cmfm_tab_list` (`cmfm_tab_row`, `cmfm_tab_cursor`): Type 1, 4 tabs of
+  190 px 10 apart, at the panel's x -12, y -30 (above its frame), the cursor
+  scaled to 19 x 5 (36 x 5 spans the category rows' 360 px). The panels
+  (`null_prog_color1`) move from y 212 to 262 and the mod's header from
+  -52 to -102 under them, so it stays level with the restart line. CMFM
+  finds the list by name (same vtable as the category list), reads its
+  window from DuplicateNum once, keeps it inactive like the mod list and
+  fills it: the shown mod's pages, the shown one light green under the
+  cursor, labels centred in 190 px (logged once as found), hidden by
+  setPlay for a mod with one page. Clicks are hit-tested per tab row (the
+  last row hit wins, in case a row's art is wider than its tab). Not seen
+  in game yet.
+
 ## No caps (static, 2026-10-12; run `caps-1`)
 
 Every shared limit CMFM had (200 rows over all mods, about 900 label and

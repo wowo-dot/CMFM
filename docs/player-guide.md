@@ -51,9 +51,9 @@ own mod.
   works like the game's Options: move over an entry (pointer or arrows) and
   its settings show on the right; a click or Confirm goes into them, and
   Back or a right click returns to the list. A mod with several pages
-  has a small triangle and opens a list of its pages when you go into it;
-  Q / E (LB / RB on a gamepad) switch between them, also from the settings
-  side.
+  shows them as tabs above its settings: click a tab, or use Q / E (LB /
+  RB on a gamepad), also from the settings side. Each mod opens on the
+  page you used last.
 - **The settings** (right): switches and lists change with the arrows (or
   a click), or a list opens the game's pick list; numbers are sliders. A
   greyed row cannot change right now; the help line at the bottom says

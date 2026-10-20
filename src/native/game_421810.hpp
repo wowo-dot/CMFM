@@ -322,6 +322,11 @@ inline constexpr char kGuiResourceClassName[] = "rGUI";
 // rows carry a slider part).
 inline constexpr char kModListName[] = "btnlist_camera";
 inline constexpr std::size_t kSplitPanel = 2;
+// The page tabs: a copy of the category list grafted above the audio panel,
+// laid out sideways (Type 1), its rows the title menu's text row ("msg_1").
+inline constexpr char kTabListName[] = "cmfm_tab_list";
+inline constexpr char kTabText[] = "msg_1";
+inline constexpr float kTabWidth = 190.0f;  // DuplicateButtonSize in the layout
 // CMFM's restart line: the camera panel's title, moved above the mod list
 // and switched on in CMFM's layout (panel titles are off in the game's).
 inline constexpr char kRestartLineName[] = "a_title_menu_camera";

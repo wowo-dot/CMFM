@@ -679,7 +679,7 @@ const char* Menu::tab_header(std::size_t tab) {
     } else if (tab - 1 < shown_) {
         const Page& p = pages_[tab - 1];
         const Mod& mod = mods_[mod_of_tab(tab)];
-        header_ = mod.tabs.size() > 1 ? mod.name + " \xC2\xB7 " + p.title : p.title;
+        header_ = mod.tabs.size() > 1 ? mod.name : p.title;  // several pages: the tabs name the page
         if (!p.version.empty()) {
             header_ += " \xC2\xB7 ";  // middle dot
             if (p.version[0] >= '0' && p.version[0] <= '9') {

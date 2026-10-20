@@ -139,4 +139,17 @@ both. Items 1 to 4 come from Astera Loader's `docs/decisions.md` (items 2,
     dropdown opens then); hovering never moves the focus, either way; in the
     panel, Back or a right click returns. Only a click, Confirm or Q / E
     opens or folds a dropdown, so no entry moves under the pointer.
+17. **A mod's pages are tabs above the panel** (designed with the user,
+    2026-10-20, from their sketch). Supersedes the dropdowns of roadmap item
+    7. The mod list is flat, one entry per mod; a mod with several pages
+    gets a row of tabs between its header and the panel (hidden for one
+    page). The game's own tab bars hold 2 to 4 fixed, drawn tabs, so CMFM's
+    is a copy of the game's category list laid out sideways (its text rows
+    and cursor) in CMFM's layout; the panel moved down one row for it. A
+    click on a tab shows that page (and goes into the panel, the one-click
+    rule); Q / E (pad LB / RB) step through the pages; more pages than fit
+    (four) scroll, the shown tab kept in view, a « or » on an edge tab
+    when more lie beyond. Each mod shows the page it showed last. The
+    header names the mod, no longer the page. "We can improve it after"
+    (the user): the look is a first version.
 

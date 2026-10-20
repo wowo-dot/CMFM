@@ -184,7 +184,7 @@ public:
     std::uint32_t lock_revision() const { return lock_revision_; }
 
     // Tab t's header above its rows: "Overview", or the page's title (the
-    // mod's name and the page's title for a mod with several pages), its
+    // mod's name for a mod with several pages: its page tabs name the page), its
     // version ("v" added before a leading digit) and "Restart needed" while
     // a change waits for a restart; empty for unused tabs. Valid until the
     // next call.

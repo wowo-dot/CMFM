@@ -1055,9 +1055,9 @@ void groups_pages_into_mods() {
           "pages without a name: one mod named after its first page");
     check(same(mods[3].name.c_str(), "DLSS debug") && mods[3].tabs.size() == 1, "another name of the plugin: a mod");
     check(m.mod_of_tab(3) == 1 && m.mod_of_tab(4) == 2 && m.mod_of_tab(0) == 0, "tabs know their mod");
-    check(same(m.tab_header(1), "DLSS \xC2\xB7 Upscaling \xC2\xB7 v0.15.0") &&
-              same(m.tab_header(3), "DLSS \xC2\xB7 Frame gen") && same(m.tab_header(5), "Debug"),
-          "headers: the mod and the page; a single page alone");
+    check(same(m.tab_header(1), "DLSS \xC2\xB7 v0.15.0") && same(m.tab_header(3), "DLSS") &&
+              same(m.tab_header(5), "Debug"),
+          "headers: the mod (its page tabs name the page); a single page by its title");
     std::size_t rows = 0;
     const native::GameOptionRow* dlss = nullptr;
     for (const native::GameOptionRow* r = model.table(0); r->kind != native::kRowTableEnd; ++r, ++rows) {
